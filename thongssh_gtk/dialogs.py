@@ -93,27 +93,33 @@ class MessageDialog(Adw.Window):
         super().__init__(transient_for=parent, modal=True)
         self.set_default_size(400, -1)
 
+        # Use parent directly for Adw.MessageDialog, not self
         self.dialog = Adw.MessageDialog(
-            transient_for=self,
-            heading=heading,
-            body=body
+            transient_for=parent,
+            heading=heading if heading else "",
+            body=body if body else ""
         )
+        
+        # Store mapping of response IDs to use in callback
+        self.response_mapping = {}
         
         if buttons:
             for label, response_id in buttons:
-                self.dialog.add_response(str(response_id), label) # response_id must be string for Adw.MessageDialog
-                if response_id == Gtk.ResponseType.DESTRUCTIVE:
-                    self.dialog.set_response_appearance(str(response_id), Adw.ResponseAppearance.DESTRUCTIVE)
-                elif response_id == Gtk.ResponseType.OK:
-                    self.dialog.set_response_appearance(str(response_id), Adw.ResponseAppearance.SUGGESTED)
+                # Use a simple string ID for Adw.MessageDialog
+                str_id = f"response_{response_id}"
+                self.dialog.add_response(str_id, label)
+                self.response_mapping[str_id] = response_id
+                
+                if response_id == Gtk.ResponseType.OK:
+                    # Use SUGGESTED appearance for OK button (green/blue)
+                    self.dialog.set_response_appearance(str_id, Adw.ResponseAppearance.SUGGESTED)
         else:
-            self.dialog.add_response(str(Gtk.ResponseType.OK), _("OK"))
-            self.dialog.set_response_appearance(str(Gtk.ResponseType.OK), Adw.ResponseAppearance.SUGGESTED)
+            self.dialog.add_response("ok", _("OK"))
+            self.dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+            self.response_mapping["ok"] = Gtk.ResponseType.OK
 
-        self.dialog.set_default_response(str(Gtk.ResponseType.OK))
-        self.dialog.set_close_response(str(Gtk.ResponseType.CANCEL))
-
-        self.set_content(self.dialog)
+        self.dialog.set_default_response(f"response_{Gtk.ResponseType.OK}" if buttons else "ok")
+        self.dialog.set_close_response(f"response_{Gtk.ResponseType.CANCEL}" if buttons else "ok")
 
     def response(self, response_id):
         self.emit("response", response_id)
@@ -122,11 +128,12 @@ class MessageDialog(Adw.Window):
     def run_async(self, callback):
         """Helper to run the dialog and get the result in a callback."""
         def on_response(dialog_widget, response_id_str):
-            response_id = int(response_id_str) # Convert back to int
+            # Map the string response ID back to the original ResponseType
+            response_id = self.response_mapping.get(response_id_str, Gtk.ResponseType.CANCEL)
             callback(self, response_id)
-            self.destroy()
+            # Don't call self.destroy() since self is just a wrapper
         self.dialog.connect("response", on_response)
-        self.present()
+        self.dialog.present() # Present the actual dialog, not the wrapper
 
 class PermissionsDialog(Adw.Window):
     """A dialog for viewing and editing file permissions (chmod)."""

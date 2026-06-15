@@ -32,6 +32,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     open_sessions = {}
     tab_data = {} # ✨ Store config for each tab widget
     force_close_tabs = set() # ✨ Set of tab widgets to force close
+    last_clicked_tab = None # ✨ Store the last right-clicked tab for context menu actions
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -62,7 +63,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
         header_bar.set_show_end_title_buttons(True) # Shows min/max/close
 
-        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.3.11")
+        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.3.12")
         header_bar.set_title_widget(title_widget)
 
         self.setup_global_menu(header_bar)
@@ -166,16 +167,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # --- 3. Tree functionality ---
         self.tree_view.connect("row-activated", self.on_tree_row_activated)
 
-        # RIGHT button gesture
+        # LEFT button gesture — stored on self so the right-click handler can
+        # reset it to avoid a GTK4 gesture deadlock when both buttons are held.
+        self.tree_left_gesture = Gtk.GestureClick.new()
+        self.tree_left_gesture.set_button(Gdk.BUTTON_PRIMARY)
+        self.tree_left_gesture.connect("pressed", self.on_tree_left_click)
+        self.tree_view.add_controller(self.tree_left_gesture)
+        # RIGHT button gesture — claim on press (and cancel left gesture to
+        # prevent deadlock), show menu on release so the button-release event
+        # is never delivered into the open popover.
         right_click_gesture = Gtk.GestureClick.new()
         right_click_gesture.set_button(Gdk.BUTTON_SECONDARY)
+        right_click_gesture.connect("pressed", self._on_tree_right_press)
         right_click_gesture.connect("released", self.on_tree_right_click)
         self.tree_view.add_controller(right_click_gesture)
-        # LEFT button gesture
-        left_click_gesture = Gtk.GestureClick.new()
-        left_click_gesture.set_button(Gdk.BUTTON_PRIMARY)
-        left_click_gesture.connect("pressed", self.on_tree_left_click)
-        self.tree_view.add_controller(left_click_gesture)
 
         key_controller = Gtk.EventControllerKey.new()
         key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
@@ -463,8 +468,33 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             else:
                 self.search_nav_label.set_text("")
 
+    def _on_right_press_guard(self, gesture, n_press, x, y):
+        """Generic right-click press guard for terminal and tab gestures.
+        Denies the sequence when LMB is held to avoid the Wayland implicit-grab
+        freeze that occurs if popup() is called while a button is down."""
+        sequence = gesture.get_last_updated_sequence()
+        event = gesture.get_last_event(sequence)
+        if event and (event.get_modifier_state() & Gdk.ModifierType.BUTTON1_MASK):
+            gesture.set_state(Gtk.EventSequenceState.DENIED)
+            return
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+
+    def _on_tree_right_press(self, gesture, n_press, x, y):
+        """Fired when right button goes DOWN on the tree.
+        If LMB is physically held, DENY immediately — calling popup() while
+        any button is held creates a Wayland implicit-grab conflict that
+        freezes the entire GTK main loop with no recovery path."""
+        sequence = gesture.get_last_updated_sequence()
+        event = gesture.get_last_event(sequence)
+        if event and (event.get_modifier_state() & Gdk.ModifierType.BUTTON1_MASK):
+            gesture.set_state(Gtk.EventSequenceState.DENIED)
+            return
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        self.tree_left_gesture.reset()
+
     def on_tree_left_click(self, gesture, n_press, x, y):
         """LEFT click handler: deselects if clicked in an empty area."""
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         tree_view = gesture.get_widget()
         path_info = tree_view.get_path_at_pos(int(x), int(y))
 
@@ -696,7 +726,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.popover_terminal.set_parent(self) # Attach to the main window
 
     def on_tree_right_click(self, gesture, n_press, x, y):
-        """Right-click handler: Shows PopoverMenu (100% GTK4)."""
+        """Right-click handler: Shows PopoverMenu (100% GTK4).
+        Connected to 'released' so the button is already up when the popover
+        opens — prevents the release event from activating the first menu item."""
         tree_view = gesture.get_widget()
         path_info = tree_view.get_path_at_pos(int(x), int(y))
 
@@ -718,7 +750,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self.lookup_action("edit").set_enabled(True)
             self.lookup_action("clone").set_enabled(True)
 
-            # Show the appropriate popover
             if node_type == "host":
                 self.popover_host.set_pointing_to(rect)
                 self.popover_host.popup()
@@ -773,22 +804,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             GLib.spawn_async(shlex.split(command_to_run), flags=GLib.SpawnFlags.SEARCH_PATH)
 
     def on_terminal_right_click(self, gesture, n_press, x, y):
-        """Right-click handler for Vte.Terminal."""
+        """Right-click handler for Vte.Terminal. Connected to 'released'."""
         terminal = gesture.get_widget()
 
-        # Update action sensitivity
         self.lookup_action("copy-clipboard").set_enabled(terminal.get_has_selection())
-        self.lookup_action("paste-clipboard").set_enabled(True) # Paste is always allowed
+        self.lookup_action("paste-clipboard").set_enabled(True)
 
         translated_x, translated_y = terminal.translate_coordinates(self, x, y)
 
-        # Show the popover
         rect = Gdk.Rectangle()
-        rect.x = translated_x
-        rect.y = translated_y
-        rect.width = rect.height = 1
+        rect.x = int(translated_x)
+        rect.y = int(translated_y)
+        rect.width, rect.height = 1, 1
 
-        self.popover_terminal.set_parent(self) # Make sure the parent is the window
+        self.popover_terminal.set_parent(self)
         self.popover_terminal.set_pointing_to(rect)
         self.popover_terminal.popup()
 
@@ -832,12 +861,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def on_menu_open_sftp(self, action, param):
         """Handles the 'Open sftp connection' action."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
-        if not tree_iter: return
-
-        host_config = model.get_value(tree_iter, COL_DATA)
-        logging.info(f"Opening SFTP stub for: {host_config['name']}")
+        # ✨ Check if we're being called from a tab context menu
+        host_config = None
+        if self.last_clicked_tab and self.last_clicked_tab in self.tab_data:
+            # Get config from the clicked tab
+            host_config = self.tab_data[self.last_clicked_tab]["config"]
+            logging.info(f"Opening SFTP for tab: {host_config['name']}")
+        else:
+            # Get config from tree selection
+            selection = self.tree_view.get_selection()
+            model, tree_iter = selection.get_selected()
+            if not tree_iter: return
+            host_config = model.get_value(tree_iter, COL_DATA)
+            logging.info(f"Opening SFTP stub for: {host_config['name']}")
 
         # Create the new SFTP widget
         sftp_view = SftpWidget(host_config)
@@ -847,6 +883,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         # Add the new widget to the notebook
         page_num = self.notebook.append_page(sftp_view, tab_label_box)
+        self.notebook.set_tab_reorderable(sftp_view, True)
         self.notebook.set_current_page(page_num)
         sftp_view.grab_focus()
 
@@ -896,11 +933,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Shows the 'About' window."""
         dialog = Adw.AboutWindow(transient_for=self)
         dialog.set_application_name("ThongSSH")
-        dialog.set_version("0.3.11")
+        dialog.set_version("0.3.12")
         dialog.set_license_type(Gtk.License.MIT_X11)
         dialog.set_comments(_("SSH client with a tree-like host structure"))
         dialog.set_copyright("© 2025 Mikhael Karpov")
-        dialog.set_developers(["Gemini Code Assist"])
+        dialog.set_developers(["Gemini Code Assist", "Claude Code (Anthropic)"])
         dialog.set_designers(["Mikhael Karpov (lknsfos)"])
         dialog.set_application_icon(APP_ID) # Используем ID для поиска иконки
         dialog.present()
@@ -1324,7 +1361,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
                 right_click_gesture = Gtk.GestureClick.new()
                 right_click_gesture.set_button(Gdk.BUTTON_SECONDARY)
-                right_click_gesture.connect("pressed", self.on_terminal_right_click)
+                right_click_gesture.connect("pressed", self._on_right_press_guard)
+                right_click_gesture.connect("released", self.on_terminal_right_click)
                 terminal.add_controller(right_click_gesture)
 
                 key_controller_terminal = Gtk.EventControllerKey.new()
@@ -1344,6 +1382,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 tab_label_box, close_btn = self._create_tab_label("utilities-terminal-symbolic", config['name'])
 
                 page_num = self.notebook.append_page(scrolled_term, tab_label_box)
+                self.notebook.set_tab_reorderable(scrolled_term, True)
                 self.notebook.set_current_page(page_num)
                 terminal.grab_focus()
 
@@ -1379,15 +1418,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         right_click_gesture = Gtk.GestureClick.new()
         right_click_gesture.set_button(Gdk.BUTTON_SECONDARY)
-        right_click_gesture.connect("pressed", self.on_tab_right_click)
+        right_click_gesture.connect("pressed", self._on_right_press_guard)
+        right_click_gesture.connect("released", self.on_tab_right_click)
         tab_label_box.add_controller(right_click_gesture)
 
         return tab_label_box, close_btn
 
     def on_tab_right_click(self, gesture, n_press, x, y):
-        """Shows the context menu for a notebook tab."""
-        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-
+        """Shows the context menu for a notebook tab. Connected to 'released'."""
         tab_label_box = gesture.get_widget()
 
         page_widget = None
@@ -1396,6 +1434,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             if self.notebook.get_tab_label(child) == tab_label_box:
                 page_widget = child
                 break
+
+        # ✨ Store the clicked tab so the context menu knows which tab to act on.
+        if page_widget:
+            self.last_clicked_tab = page_widget
+            # Do NOT switch to the tab, just show the menu for it.
         
         sftp_action = self.lookup_action("open-sftp")
         ssh_action = self.lookup_action("open-ssh-from-tab") # For sftp -> terminal
@@ -1520,9 +1563,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     # --- Tab Context Menu Handlers ---
     def on_menu_tab_disconnect(self, action, param):
         """Closes the currently active tab."""
-        current_page = self.notebook.get_current_page()
-        if current_page < 0: return
-        page_widget = self.notebook.get_nth_page(current_page)
+        # ✨ Use the last clicked tab if available, otherwise use current
+        page_widget = self.last_clicked_tab if self.last_clicked_tab else self.notebook.get_nth_page(self.notebook.get_current_page())
+        if not page_widget:
+            return
 
         # For terminal, gracefully kill process. For SFTP, just remove.
         if page_widget in self.open_sessions:
@@ -1533,20 +1577,17 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def on_menu_tab_reconnect(self, action, param):
         """Reconnects the current tab without closing it."""
-        current_page = self.notebook.get_current_page()
-        if current_page < 0: return
-        page_widget = self.notebook.get_nth_page(current_page)
+        # ✨ Use the last clicked tab if available, otherwise use current
+        page_widget = self.last_clicked_tab if self.last_clicked_tab else self.notebook.get_nth_page(self.notebook.get_current_page())
+        if not page_widget:
+            return
 
         if page_widget in self.tab_data:
             tab_info = self.tab_data[page_widget]
 
             if tab_info["type"] == "terminal":
                 logging.debug(f"Reconnecting terminal tab in place for config: {tab_info['config']['name']}")
-                # If the terminal was in a "finished" state, enable input again
-                terminal = self.get_active_terminal()
-                if terminal:
-                    terminal.set_input_enabled(True)
-                # Get the existing terminal widget
+                # Get the terminal widget for this specific page_widget
                 if page_widget in self.open_sessions:
                     terminal, old_pid = self.open_sessions[page_widget]
                     # Reset terminal state
@@ -1569,12 +1610,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                     self.on_menu_open_sftp(None, None)
 
     def on_menu_tab_duplicate(self, action, param):
-        """Opens a new tab with the same config as the current one."""
-        # This implementation was flawed. It should not re-read selection.
-        # It should use the config from the current tab.
-        current_page_widget = self.get_active_terminal_widget()
-        if current_page_widget and current_page_widget in self.tab_data:
-            tab_info = self.tab_data[current_page_widget]
+        """Opens a new tab with the same config as the selected tab."""
+        # Use the last right-clicked tab. Fallback to the active tab if needed.
+        target_widget = self.last_clicked_tab if self.last_clicked_tab else self.get_active_terminal_widget()
+        if target_widget and target_widget in self.tab_data:
+            tab_info = self.tab_data[target_widget]
             
             # Re-select the original host in the tree for clarity if cloning SFTP
             if tab_info["type"] == "sftp":
@@ -1582,6 +1622,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 sftp_view = SftpWidget(tab_info["config"])
                 tab_label_box, close_btn = self._create_tab_label("folder-remote-symbolic", tab_info["config"]['name'])
                 page_num = self.notebook.append_page(sftp_view, tab_label_box)
+                self.notebook.set_tab_reorderable(sftp_view, True)
                 self.notebook.set_current_page(page_num)
                 close_btn.connect("clicked", lambda btn: self.notebook.remove_page(self.notebook.page_num(sftp_view)))
                 self.tab_data[sftp_view] = {"type": "sftp", "config": tab_info["config"]}
@@ -1609,9 +1650,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def on_menu_open_ssh_from_tab(self, action, param):
         """Opens a terminal session based on the current SFTP tab's config."""
-        current_page = self.notebook.get_current_page()
-        if current_page < 0: return
-        page_widget = self.notebook.get_nth_page(current_page)
+        # ✨ Use the last clicked tab if available, otherwise use current
+        page_widget = self.last_clicked_tab if self.last_clicked_tab else self.notebook.get_nth_page(self.notebook.get_current_page())
+        if not page_widget:
+            return
 
         if page_widget in self.tab_data:
             tab_info = self.tab_data[page_widget]

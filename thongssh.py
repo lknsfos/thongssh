@@ -8,6 +8,12 @@
 import runpy
 import os
 import sys
+
+# Force Wayland backend when Wayland is available, overriding any parent
+# process (e.g. VSCode running in XWayland) that may have set GDK_BACKEND=x11.
+if os.environ.get('WAYLAND_DISPLAY'):
+    os.environ['GDK_BACKEND'] = 'wayland'
+
 from gi.repository import Gio
 
 # --- Загрузка ресурсов (если они не были загружены приложением) ---

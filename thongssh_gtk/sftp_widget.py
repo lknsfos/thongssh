@@ -8,9 +8,12 @@ import datetime
 import stat
 import logging
 import threading
+import time
 import shutil
 import tempfile
 import queue
+import subprocess
+import json
 
 from .settings import SettingsManager
 from .keyring import KeyringManager
@@ -71,6 +74,7 @@ class SftpWidget(Gtk.Box):
         self.is_reconnecting = False # Flag to prevent multiple reconnect attempts
         self.is_connected = False # Flag to track connection status
         self.ui_queue = queue.Queue() # For thread-safe UI updates
+        self._sftp_lock = threading.RLock() # Serialises all sftp_client calls across threads
         self.connection_check_timer_id = None # To store the ID of the connection check timer
 
         self.temp_dir = tempfile.mkdtemp(prefix="thongssh_sftp_")
@@ -118,6 +122,12 @@ class SftpWidget(Gtk.Box):
         self.log_view = Gtk.TextView(editable=False, cursor_visible=False)
         log_scrolled.set_child(self.log_view)
         log_frame.set_child(log_scrolled)
+        
+        # ✨ Add scroll controller to log view to prevent scroll events from propagating to notebook
+        log_scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
+        log_scroll_controller.connect("scroll", self._on_log_scroll, log_scrolled)
+        self.log_view.add_controller(log_scroll_controller)
+        
         self.append(log_frame)
 
         # Start the connection process
@@ -126,6 +136,11 @@ class SftpWidget(Gtk.Box):
         GLib.timeout_add(100, self._process_ui_queue)
         self.connection_check_timer_id = GLib.timeout_add_seconds(15, self._check_connection_and_reconnect) # Check connection every 15 seconds
         self.connect("unrealize", self.on_widget_destroy)
+        
+        # ✨ Add a global scroll controller to the entire widget to prevent scroll events from propagating to notebook
+        global_scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
+        global_scroll_controller.connect("scroll", self._on_global_scroll)
+        self.add_controller(global_scroll_controller)
 
     def reconnect(self):
         """Public method to trigger a reconnection."""
@@ -148,23 +163,21 @@ class SftpWidget(Gtk.Box):
         self._connect_sftp()
 
     def _check_connection_and_reconnect(self):
-        """Periodically checks if the SFTP connection is active and reconnects if not."""
+        """Periodically checks if the SFTP connection is active and reconnects if not.
+
+        Uses transport.is_active() — a purely in-memory, non-blocking check —
+        instead of sftp_client.stat('.') which made a blocking network call on
+        the GTK main thread and froze the entire window when the server was slow.
+        """
         if self.is_reconnecting or not self.is_connected:
-            return True # Don't check if we are already trying to reconnect or not even connected yet.
+            return True
 
         if self.sftp_client:
-            try:
-                # A more reliable check is to perform a lightweight operation.
-                self.sftp_client.stat('.')
-                # If stat succeeds, the connection is alive. Do nothing.
-            except (OSError, paramiko.SSHException) as e:
-                # These exceptions are expected if the connection is dropped.
+            transport = self.ssh_client.get_transport() if self.ssh_client else None
+            if transport is None or not transport.is_active():
                 self._log_message(_("Connection lost. Attempting to reconnect..."), is_error=True)
-                self.is_reconnecting = True # Set the flag
+                self.is_reconnecting = True
                 self.reconnect()
-            except Exception as e:
-                # Log unexpected errors but don't necessarily trigger a reconnect
-                self._log_message(f"Unexpected error during connection check: {e}", is_error=True)
 
         return True # Keep the timer running
 
@@ -264,6 +277,10 @@ class SftpWidget(Gtk.Box):
         scroll_controller.connect("scroll", self._on_view_scroll, scrolled_window)
         self.local_view.add_controller(scroll_controller)
 
+        # ✨ Setup drag and drop for local view
+        self._setup_drag_source(self.local_view, is_local=True)
+        self._setup_drop_target(self.local_view, is_local=True)
+
         return frame
 
     def _create_remote_panel(self):
@@ -353,6 +370,10 @@ class SftpWidget(Gtk.Box):
         sort_dir = sort_dir_map.get(self.settings.get("sftp.remote_default_sort_direction"), Gtk.SortType.ASCENDING)
         self.remote_sortable_model.set_sort_column_id(sort_col, sort_dir)
 
+        # ✨ Setup drag and drop for remote view
+        self._setup_drag_source(self.remote_view, is_local=False)
+        self._setup_drop_target(self.remote_view, is_local=False)
+
         return frame
 
     def _load_local_directory(self, path):
@@ -365,14 +386,31 @@ class SftpWidget(Gtk.Box):
             for filename in os.listdir(path):
                 full_path = Path(path) / filename
                 try:
-                    st = full_path.stat()
-                    if stat.S_ISDIR(st.st_mode):
+                    # Use lstat to get info about the link itself, not its target
+                    st = full_path.lstat()
+                    is_link = stat.S_ISLNK(st.st_mode)
+                    
+                    # For symlinks, try to determine what they point to
+                    if is_link:
+                        try:
+                            # Use stat() to follow the symlink
+                            target_st = full_path.stat()
+                            is_dir = stat.S_ISDIR(target_st.st_mode)
+                        except (OSError, PermissionError):
+                            # Broken symlink or permission denied
+                            is_dir = False
+                    else:
+                        is_dir = stat.S_ISDIR(st.st_mode)
+                    
+                    if is_dir:
+                        icon = "folder-visiting-symbolic" if is_link else "folder-symbolic"
                         self.local_store.append([ # Icon, Name, Size Str, Size Bytes, Perms Str, Perms Mode, Modified Str, Modified TS, Is Dir, Full Path (10 elements)
-                            "folder-symbolic", filename, "<DIR>", -1, stat.filemode(st.st_mode), st.st_mode, self._format_date(st.st_mtime), int(st.st_mtime), True, str(full_path)
+                            icon, filename, "<DIR>", -1, stat.filemode(st.st_mode), st.st_mode, self._format_date(st.st_mtime), int(st.st_mtime), True, str(full_path)
                         ])
                     else:
+                        icon = "emblem-symbolic-link" if is_link else "document-symbolic"
                         self.local_store.append([ # Icon, Name, Size Str, Size Bytes, Perms Str, Perms Mode, Modified Str, Modified TS, Is Dir, Full Path (10 elements)
-                            "document-symbolic", filename, self._format_size(st.st_size), st.st_size, stat.filemode(st.st_mode), st.st_mode, self._format_date(st.st_mtime), int(st.st_mtime), False, str(full_path)
+                            icon, filename, self._format_size(st.st_size), st.st_size, stat.filemode(st.st_mode), st.st_mode, self._format_date(st.st_mtime), int(st.st_mtime), False, str(full_path)
                         ])
                 except (OSError, PermissionError):
                     continue
@@ -392,48 +430,65 @@ class SftpWidget(Gtk.Box):
 
     def _load_remote_directory(self, path):
         """Populates the remote file view (runs in a thread)."""
-        self._log_message(_("Reading remote directory: {path}...").format(path=path))
+        if not self._sftp_lock.acquire(timeout=30):
+            self._log_message(_("Directory listing skipped: another SFTP operation is still running."), is_error=True)
+            return
         try:
-            items = self.sftp_client.listdir_attr(path)
-            
-            # Prepare data for UI update
-            rows_to_add = []
-            
-            dirs, files = [], []
-            for attr in items:
-                if stat.S_ISDIR(attr.st_mode):
-                    dirs.append(attr)
-                else:
-                    files.append(attr)
-            
-            dirs.sort(key=lambda x: x.filename.lower())
-            files.sort(key=lambda x: x.filename.lower())
+            self._log_message(_("Reading remote directory: {path}...").format(path=path))
+            try:
+                items = self.sftp_client.listdir_attr(path)
 
-            for attr in dirs:
-                rows_to_add.append([ # Icon, Name, Size Str, Size Bytes, Perms Str, Perms Mode, Modified Str, Modified TS, Is Dir, Full Path (10 elements)
-                    "folder-symbolic", attr.filename, "<DIR>", -1, stat.filemode(attr.st_mode), attr.st_mode, self._format_date(attr.st_mtime), int(attr.st_mtime),
-                    True, os.path.join(path, attr.filename)
-                ])
-            for attr in files:
-                rows_to_add.append([ # Icon, Name, Size Str, Size Bytes, Perms Str, Perms Mode, Modified Str, Modified TS, Is Dir, Full Path (10 elements)
-                    "document-symbolic", attr.filename, self._format_size(attr.st_size), attr.st_size, stat.filemode(attr.st_mode), attr.st_mode, self._format_date(attr.st_mtime), int(attr.st_mtime),
-                    False, os.path.join(path, attr.filename)
-                ])
+                rows_to_add = []
+                dirs, files = [], []
+                for attr in items:
+                    is_link = stat.S_ISLNK(attr.st_mode)
+                    is_dir = False
+                    if is_link:
+                        try:
+                            full_path = os.path.join(path, attr.filename).replace('\\', '/')
+                            target_attr = self.sftp_client.stat(full_path)
+                            is_dir = stat.S_ISDIR(target_attr.st_mode)
+                        except (IOError, OSError):
+                            is_dir = False
+                    else:
+                        is_dir = stat.S_ISDIR(attr.st_mode)
+                    if is_dir:
+                        dirs.append((attr, is_link))
+                    else:
+                        files.append((attr, is_link))
 
-            # Send data to the main thread for UI update
-            def update_ui():
-                self.remote_store.clear()
-                for row in rows_to_add:
-                    self.remote_store.append(row)
-                self.current_remote_path = path
-                self.remote_path_entry.set_text(path)
-                self.remote_sortable_model.set_sort_column_id(COL_NAME, Gtk.SortType.ASCENDING)
+                dirs.sort(key=lambda x: x[0].filename.lower())
+                files.sort(key=lambda x: x[0].filename.lower())
 
-            self.ui_queue.put(update_ui)
-            self._log_message(_("Successfully listed remote directory: {path}").format(path=path))
+                for attr, is_link in dirs:
+                    icon = "folder-visiting-symbolic" if is_link else "folder-symbolic"
+                    rows_to_add.append([
+                        icon, attr.filename, "<DIR>", -1, stat.filemode(attr.st_mode), attr.st_mode,
+                        self._format_date(attr.st_mtime), int(attr.st_mtime), True, os.path.join(path, attr.filename)
+                    ])
+                for attr, is_link in files:
+                    icon = "emblem-symbolic-link" if is_link else "document-symbolic"
+                    rows_to_add.append([
+                        icon, attr.filename, self._format_size(attr.st_size), attr.st_size,
+                        stat.filemode(attr.st_mode), attr.st_mode, self._format_date(attr.st_mtime),
+                        int(attr.st_mtime), False, os.path.join(path, attr.filename)
+                    ])
 
-        except Exception as e:
-            self._log_message(_("Error reading remote directory '{path}': {e}").format(path=path, e=e), is_error=True)
+                def update_ui():
+                    self.remote_store.clear()
+                    for row in rows_to_add:
+                        self.remote_store.append(row)
+                    self.current_remote_path = path
+                    self.remote_path_entry.set_text(path)
+                    self.remote_sortable_model.set_sort_column_id(COL_NAME, Gtk.SortType.ASCENDING)
+
+                self.ui_queue.put(update_ui)
+                self._log_message(_("Successfully listed remote directory: {path}").format(path=path))
+
+            except Exception as e:
+                self._log_message(_("Error reading remote directory '{path}': {e}").format(path=path, e=e), is_error=True)
+        finally:
+            self._sftp_lock.release()
 
     def _connect_sftp(self):
         """Connects to the SFTP server in a background thread."""
@@ -490,6 +545,7 @@ class SftpWidget(Gtk.Box):
                 self.ssh_client = paramiko.SSHClient()
                 self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 self.ssh_client.connect(host, port=port, username=user, password=auth_password, timeout=10, allow_agent=False, look_for_keys=False)
+                # NO keepalive - it causes deadlock during file transfers
                 self.sftp_client = self.ssh_client.open_sftp()
                 self._log_message(_("SFTP connection established successfully with provided password."))
                 initial_path = self.sftp_client.normalize('.')
@@ -508,7 +564,15 @@ class SftpWidget(Gtk.Box):
                 self.ssh_client = paramiko.SSHClient()
                 self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 self.ssh_client.connect(host, port=port, username=user, password=key_passphrase, key_filename=key_filename, timeout=10)
+                # Configure transport for large file transfers
+                transport = self.ssh_client.get_transport()
+                if transport:
+                    transport.set_keepalive(30)
+                    transport.window_size = 2147483647
+                    transport.packetizer.REKEY_BYTES = 2**40
+                    transport.packetizer.REKEY_PACKETS = 2**40
                 self.sftp_client = self.ssh_client.open_sftp()
+                self.sftp_client.get_channel().settimeout(None)
                 self._log_message(_("SFTP connection established successfully with key."))
                 self.is_connected = True
                 self.is_reconnecting = False
@@ -540,6 +604,10 @@ class SftpWidget(Gtk.Box):
                     self.ssh_client = paramiko.SSHClient()
                     self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                     self.ssh_client.connect(host, port=port, username=user, password=password_from_keyring, key_filename=None, timeout=10, allow_agent=False, look_for_keys=False)
+                    # Minimal transport configuration
+                    transport = self.ssh_client.get_transport()
+                    if transport:
+                        transport.set_keepalive(30)
                     self.sftp_client = self.ssh_client.open_sftp()
                     self._log_message(_("SFTP connection established successfully with password."))
                     self.is_connected = True
@@ -579,19 +647,28 @@ class SftpWidget(Gtk.Box):
 
     def _make_progress_callback(self, filename, total_size):
         """Creates a callback function for paramiko to track file transfer progress."""
+        import time
         last_percent = -1
+        last_update_time = 0
 
         def progress(bytes_transferred, _total_bytes):
-            nonlocal last_percent
+            nonlocal last_percent, last_update_time
             if total_size == 0:
                 return
 
+            current_time = time.time()
             percent = int((bytes_transferred / total_size) * 100)
 
-            # Log progress in increments of 10% to avoid spamming the log
-            if percent >= last_percent + 10:
+            # Log progress in increments of 25% AND only if 5 seconds passed to avoid UI flooding
+            # This is very conservative to prevent any blocking
+            if percent >= last_percent + 25 and (current_time - last_update_time) >= 5.0:
                 last_percent = percent
-                self._log_message(_("Transferring {filename}: {percent}%").format(filename=filename, percent=percent))
+                last_update_time = current_time
+                # Log without formatting to minimize string operations
+                try:
+                    self._log_message(f"Transferring {filename}: {percent}%")
+                except:
+                    pass # Silently ignore if logging fails
 
         return progress
 
@@ -609,7 +686,7 @@ class SftpWidget(Gtk.Box):
             is_dir = model.get_value(tree_iter, COL_IS_DIR)
             remote_dest_dir = self.current_remote_path
 
-            self._log_message(_("Queueing upload for: {path}").format(path=local_path))
+            # Start worker thread WITHOUT logging to avoid any potential GTK conflicts
             thread = threading.Thread(target=self._upload_worker, args=(local_path, remote_dest_dir, is_dir))
             thread.daemon = True
             thread.start()
@@ -620,42 +697,49 @@ class SftpWidget(Gtk.Box):
         basename = os.path.basename(local_path)
         remote_path = os.path.join(remote_dest_dir, basename).replace('\\', '/')
 
-        try:
-            if not is_dir: # It's a file
-                file_size = os.path.getsize(local_path)
-                progress_callback = self._make_progress_callback(basename, file_size)
-                self._log_message(_("Uploading file {local} to {remote}...").format(local=local_path, remote=remote_path))
-                self.sftp_client.put(local_path, remote_path, callback=progress_callback)
-                self._log_message(_("File upload successful: {basename}").format(basename=basename))
-            else: # It's a directory
-                self._log_message(_("Uploading directory {local} to {remote}...").format(local=local_path, remote=remote_path))
-                self.sftp_client.mkdir(remote_path)
-                for dirpath, subdirs, filenames in os.walk(local_path):
-                    relative_path = os.path.relpath(dirpath, local_path)
-                    if relative_path == '.':
-                        remote_dir = remote_path
-                    else:
-                        remote_dir = os.path.join(remote_path, relative_path).replace('\\', '/')
+        with self._sftp_lock:
+            try:
+                if not is_dir: # It's a file
+                    try:
+                        local_size = os.path.getsize(local_path)
+                        start_time = time.time()
+                        self.sftp_client.put(local_path, remote_path)
+                        elapsed = time.time() - start_time
+                        speed = local_size / elapsed if elapsed > 0 else 0
+                        def log_success():
+                            self._log_message(_("Upload complete: {basename} ({size} in {time:.1f}s, {speed}/s)").format(
+                                basename=basename, size=self._format_size(local_size),
+                                time=elapsed, speed=self._format_size(speed)
+                            ), _from_idle=True)
+                            return False
+                        GLib.idle_add(log_success)
+                    except Exception as e:
+                        def log_error():
+                            self._log_message(_("Upload failed for {basename}: {e}").format(basename=basename, e=e), is_error=True, _from_idle=True)
+                            return False
+                        GLib.idle_add(log_error)
+                        return
+                else: # It's a directory
+                    self._log_message(_("Uploading directory {local} to {remote}...").format(local=local_path, remote=remote_path))
+                    self.sftp_client.mkdir(remote_path)
+                    for dirpath, subdirs, filenames in os.walk(local_path):
+                        relative_path = os.path.relpath(dirpath, local_path)
+                        remote_dir = remote_path if relative_path == '.' else os.path.join(remote_path, relative_path).replace('\\', '/')
+                        for sub_dir in subdirs:
+                            try:
+                                self.sftp_client.mkdir(os.path.join(remote_dir, sub_dir).replace('\\', '/'))
+                            except Exception:
+                                pass
+                        for filename in filenames:
+                            local_file = os.path.join(dirpath, filename)
+                            remote_file = os.path.join(remote_dir, filename).replace('\\', '/')
+                            self.sftp_client.put(local_file, remote_file)
+                    self._log_message(_("Directory upload successful: {basename}").format(basename=basename))
 
-                    for sub_dir in subdirs:
-                        try:
-                            self.sftp_client.mkdir(os.path.join(remote_dir, sub_dir).replace('\\', '/'))
-                        except Exception:
-                            pass # Directory might already exist
+                GLib.idle_add(lambda: self._load_remote_directory_threaded(self.current_remote_path) or False)
 
-                    for filename in filenames:
-                        local_file = os.path.join(dirpath, filename)
-                        remote_file = os.path.join(remote_dir, filename).replace('\\', '/')
-                        file_size = os.path.getsize(local_file)
-                        progress_callback = self._make_progress_callback(filename, file_size)
-                        self.sftp_client.put(local_file, remote_file, callback=progress_callback)
-                self._log_message(_("Directory upload successful: {basename}").format(basename=basename))
-
-            # Refresh remote view on success
-            self.ui_queue.put(lambda: self._load_remote_directory_threaded(self.current_remote_path))
-
-        except Exception as e:
-            self._log_message(_("Upload failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
+            except Exception as e:
+                self._log_message(_("Upload failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
 
     def on_download_clicked(self, button):
         """Handles the click on the Download (<) button."""
@@ -671,36 +755,99 @@ class SftpWidget(Gtk.Box):
             is_dir = model.get_value(tree_iter, COL_IS_DIR)
             local_dest_dir = self.current_local_path
 
-            self._log_message(_("Queueing download for: {path}").format(path=remote_path))
+            # Start worker thread WITHOUT logging to avoid any potential GTK conflicts
             thread = threading.Thread(target=self._download_worker, args=(remote_path, local_dest_dir, is_dir))
             thread.daemon = True
             thread.start()
 
-    def _download_worker(self, remote_path, local_dest_dir, is_dir):
-        """Downloads a file or directory recursively (runs in a thread)."""
+    def _download_worker(self, remote_path, local_dest_dir, is_dir, _visited_paths=None):
+        """Downloads a file or directory recursively (runs in a thread).
+        Uses RLock so recursive directory calls re-enter without deadlocking."""
         if not self.sftp_client: return
+
+        if _visited_paths is None:
+            _visited_paths = set()
+
+        with self._sftp_lock:
+            try:
+                normalized_path = self.sftp_client.normalize(remote_path)
+            except Exception:
+                normalized_path = remote_path
+
+        if normalized_path in _visited_paths:
+            self._log_message(_("Skipping circular symlink: {path}").format(path=remote_path), is_error=True)
+            return
+        _visited_paths.add(normalized_path)
+
         basename = os.path.basename(remote_path)
         local_path = os.path.join(local_dest_dir, basename)
 
-        try:
-            if not is_dir: # It's a file
-                file_attrs = self.sftp_client.stat(remote_path)
-                progress_callback = self._make_progress_callback(basename, file_attrs.st_size)
-                self._log_message(_("Downloading file {remote} to {local}...").format(remote=remote_path, local=local_path))
-                self.sftp_client.get(remote_path, local_path, callback=progress_callback)
-                self._log_message(_("File download successful: {basename}").format(basename=basename))
-            else: # It's a directory
-                self._log_message(_("Downloading directory {remote} to {local}...").format(remote=remote_path, local=local_path))
-                os.makedirs(local_path, exist_ok=True)
-                for item in self.sftp_client.listdir_attr(remote_path):
-                    self._download_worker(os.path.join(remote_path, item.filename).replace('\\', '/'), local_path, stat.S_ISDIR(item.st_mode))
-                self._log_message(_("Directory download successful: {basename}").format(basename=basename))
-
-            # Refresh local view on success
+        if os.path.exists(local_path):
+            self._log_message(_("Warning: File already exists: {path}. Will skip.").format(path=local_path), is_error=True)
             self.ui_queue.put(lambda: self._load_local_directory(self.current_local_path))
+            return
 
-        except Exception as e:
-            self._log_message(_("Download failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
+        with self._sftp_lock:
+            try:
+                if not is_dir:
+                    try:
+                        file_attrs = self.sftp_client.stat(remote_path)
+                        total_size = file_attrs.st_size
+                        start_time = time.time()
+                        self.sftp_client.get(remote_path, local_path)
+                        elapsed = time.time() - start_time
+                        speed = total_size / elapsed if elapsed > 0 else 0
+                        def log_success():
+                            self._log_message(_("Download complete: {basename} ({size} in {time:.1f}s, {speed}/s)").format(
+                                basename=basename, size=self._format_size(total_size),
+                                time=elapsed, speed=self._format_size(speed)
+                            ), _from_idle=True)
+                            return False
+                        GLib.idle_add(log_success)
+                    except Exception as e:
+                        def log_error():
+                            self._log_message(_("Download failed for {basename}: {e}").format(basename=basename, e=e), is_error=True, _from_idle=True)
+                            return False
+                        GLib.idle_add(log_error)
+                        if os.path.exists(local_path):
+                            try:
+                                os.remove(local_path)
+                            except Exception:
+                                pass
+                        return
+                else:
+                    self._log_message(_("Downloading directory {remote} to {local}...").format(remote=remote_path, local=local_path))
+                    os.makedirs(local_path, exist_ok=True)
+                    try:
+                        items = self.sftp_client.listdir_attr(remote_path)
+                    except Exception as e:
+                        self._log_message(_("Cannot list directory {path}: {e}").format(path=remote_path, e=e), is_error=True)
+                        return
+                    item_list = []
+                    for item in items:
+                        item_path = os.path.join(remote_path, item.filename).replace('\\', '/')
+                        is_link = stat.S_ISLNK(item.st_mode)
+                        if is_link:
+                            try:
+                                target_attr = self.sftp_client.stat(item_path)
+                                item_is_dir = stat.S_ISDIR(target_attr.st_mode)
+                            except (IOError, OSError):
+                                self._log_message(_("Skipping broken symlink: {path}").format(path=item_path), is_error=True)
+                                continue
+                        else:
+                            item_is_dir = stat.S_ISDIR(item.st_mode)
+                        item_list.append((item_path, item_is_dir))
+
+                # Recurse outside the lock so child calls can re-acquire (RLock allows it)
+                if is_dir:
+                    for item_path, item_is_dir in item_list:
+                        self._download_worker(item_path, local_path, item_is_dir, _visited_paths)
+                    self._log_message(_("Directory download successful: {basename}").format(basename=basename))
+
+                GLib.idle_add(lambda: self._load_local_directory(self.current_local_path) or False)
+
+            except Exception as e:
+                self._log_message(_("Download failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
 
     def _format_size(self, size_bytes):
         """Formats a size in bytes to a human-readable string."""
@@ -791,9 +938,9 @@ class SftpWidget(Gtk.Box):
         local_temp_path = os.path.join(self.temp_dir, basename)
 
         try:
-            # 1. Download the file
             self._log_message(_("Downloading {basename} to temporary location...").format(basename=basename))
-            self.sftp_client.get(remote_path, local_temp_path)
+            with self._sftp_lock:
+                self.sftp_client.get(remote_path, local_temp_path)
 
             # 2. Open the local temporary file (in the main thread)
             def open_and_monitor():
@@ -830,39 +977,66 @@ class SftpWidget(Gtk.Box):
             thread.start()
 
     def on_local_view_key_pressed(self, controller, keyval, keycode, modifier):
-        """Handles key presses on the local file list, specifically Backspace."""
+        """Handles key presses on the local file list, specifically Backspace and Delete."""
         if keyval == Gdk.KEY_BackSpace:
             self.on_local_up_clicked(None)
+            return True # Event handled
+        elif keyval == Gdk.KEY_Delete:
+            self.last_clicked_view = self.local_view
+            self.on_delete_activated(None, None)
             return True # Event handled
         return False # Event not handled
 
     def on_remote_view_key_pressed(self, controller, keyval, keycode, modifier):
-        """Handles key presses on the remote file list, specifically Backspace."""
+        """Handles key presses on the remote file list, specifically Backspace and Delete."""
         if keyval == Gdk.KEY_BackSpace:
             self.on_remote_up_clicked(None)
             return True # Event handled
+        elif keyval == Gdk.KEY_Delete:
+            self.last_clicked_view = self.remote_view
+            self.on_delete_activated(None, None)
+            return True # Event handled
         return False # Event not handled
 
-    def _log_message(self, message, is_error=False):
+    def _log_message(self, message, is_error=False, _from_idle=False):
         """Appends a message to the log view in a thread-safe way."""
         def append_log():
-            scroll_adj = self.log_view.get_parent().get_vadjustment()
-            is_at_bottom = (scroll_adj.get_value() >= scroll_adj.get_upper() - scroll_adj.get_page_size() - 5) # 5px tolerance
+            try:
+                scroll_adj = self.log_view.get_parent().get_vadjustment()
+                is_at_bottom = (scroll_adj.get_value() >= scroll_adj.get_upper() - scroll_adj.get_page_size() - 5) # 5px tolerance
 
-            buf = self.log_view.get_buffer()
-            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-            log_line = f"[{timestamp}] {message}\n"
-            end_iter = buf.get_end_iter()
-            buf.insert(end_iter, log_line)
+                buf = self.log_view.get_buffer()
+                timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                log_line = f"[{timestamp}] {message}\n"
+                end_iter = buf.get_end_iter()
+                buf.insert(end_iter, log_line)
 
-            if is_at_bottom:
-                def do_scroll():
-                    end_iter = self.log_view.get_buffer().get_end_iter()
+                # Limit buffer size to prevent memory issues
+                line_count = buf.get_line_count()
+                if line_count > 1000:
+                    # Remove old lines, keep last 800
+                    start = buf.get_start_iter()
+                    delete_end = buf.get_iter_at_line(200)
+                    buf.delete(start, delete_end)
+
+                if is_at_bottom:
+                    # Scroll without using idle_add to reduce queue buildup
+                    end_iter = buf.get_end_iter()
                     self.log_view.scroll_to_iter(end_iter, 0.0, True, 0.0, 1.0)
-                GLib.idle_add(do_scroll)
+            except Exception as e:
+                # Silently ignore errors to prevent cascade failures
+                pass
+            return False  # Don't repeat
 
-            # TODO: Add color tags for errors
-        self.ui_queue.put(append_log)
+        # If already called from idle_add, execute directly
+        if _from_idle:
+            append_log()
+        else:
+            # Use GLib.idle_add directly instead of queue - avoids deadlock issues
+            try:
+                GLib.idle_add(append_log)
+            except:
+                pass # Ignore errors
 
     def _process_ui_queue(self):
         """Process UI updates from background threads."""
@@ -979,7 +1153,8 @@ class SftpWidget(Gtk.Box):
                     os.rename(old_path, new_path)
                     self.ui_queue.put(lambda: self._load_local_directory(self.current_local_path))
                 else: # Remote
-                    self.sftp_client.rename(old_path, new_path)
+                    with self._sftp_lock:
+                        self.sftp_client.rename(old_path, new_path)
                     self.ui_queue.put(lambda: self._load_remote_directory_threaded(self.current_remote_path))
                 self._log_message(_("Renamed '{old}' to '{new}'").format(old=os.path.basename(old_path), new=new_name))
             except Exception as e:
@@ -1021,13 +1196,13 @@ class SftpWidget(Gtk.Box):
             self.get_root(),
             heading=heading,
             body=body,
-            buttons=[(_("Cancel"), Gtk.ResponseType.CANCEL), (_("Delete"), Gtk.ResponseType.DESTRUCTIVE)]
+            buttons=[(_("Cancel"), Gtk.ResponseType.CANCEL), (_("Delete"), Gtk.ResponseType.OK)]
         )
 
         def on_response(dialog, response_id):
-            if response_id == Gtk.ResponseType.DESTRUCTIVE:
+            if response_id == Gtk.ResponseType.OK:
                 self._execute_delete(full_path, is_dir, is_local)
-            dialog.destroy()
+            # No need to call dialog.destroy() - handled by MessageDialog
 
         dialog.run_async(on_response)
 
@@ -1042,10 +1217,11 @@ class SftpWidget(Gtk.Box):
                         os.remove(full_path)
                     self.ui_queue.put(lambda: self._load_local_directory(self.current_local_path))
                 else: # Remote
-                    if is_dir:
-                        self._sftp_rm_recursive(full_path) # Recursive delete for remote directories
-                    else:
-                        self.sftp_client.remove(full_path)
+                    with self._sftp_lock:
+                        if is_dir:
+                            self._sftp_rm_recursive(full_path)
+                        else:
+                            self.sftp_client.remove(full_path)
                     self.ui_queue.put(lambda: self._load_remote_directory_threaded(self.current_remote_path))
                 self._log_message(_("Deleted: {path}").format(path=full_path))
             except Exception as e:
@@ -1068,7 +1244,130 @@ class SftpWidget(Gtk.Box):
         self.sftp_client.rmdir(path)
         self._log_message(_("Recursively deleted remote directory: {path}").format(path=path))
 
-
+    # --- Drag and Drop Support ---
+    
+    def _setup_drag_source(self, tree_view, is_local):
+        """Sets up a tree view as a drag source."""
+        drag_source = Gtk.DragSource.new()
+        drag_source.set_actions(Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
+        
+        # Store which view this is
+        drag_source.tree_view = tree_view
+        drag_source.is_local = is_local
+        
+        drag_source.connect("prepare", self._on_drag_prepare)
+        drag_source.connect("drag-begin", self._on_drag_begin)
+        tree_view.add_controller(drag_source)
+    
+    def _setup_drop_target(self, tree_view, is_local):
+        """Sets up a tree view as a drop target."""
+        # Accept text/plain content type which we'll use to transfer path info
+        drop_target = Gtk.DropTarget.new(GObject.TYPE_STRING, Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
+        
+        # Store which view this is
+        drop_target.tree_view = tree_view
+        drop_target.is_local = is_local
+        
+        drop_target.connect("drop", self._on_drop)
+        tree_view.add_controller(drop_target)
+    
+    def _on_drag_prepare(self, source, x, y):
+        """Prepares data for drag operation."""
+        tree_view = source.tree_view
+        
+        # Get the selected row
+        selection = tree_view.get_selection()
+        model, paths = selection.get_selected_rows()
+        
+        if not paths:
+            return None
+        
+        # For now, only support single file drag
+        if len(paths) > 1:
+            self._log_message(_("Multi-file drag not yet supported. Please drag one file at a time."), is_error=True)
+            return None
+        
+        path = paths[0]
+        tree_iter = model.get_iter(path)
+        
+        # Get file info
+        full_path = model.get_value(tree_iter, COL_FULL_PATH)
+        is_dir = model.get_value(tree_iter, COL_IS_DIR)
+        filename = model.get_value(tree_iter, COL_NAME)
+        
+        # Store drag data - encode as a special string format
+        # Format: "local|/path/to/file|1" or "remote|/path/to/file|0"
+        location = "local" if source.is_local else "remote"
+        drag_string = f"{location}|{full_path}|{int(is_dir)}"
+        
+        self._log_message(f"Drag started: {filename}")
+        
+        # Create content provider with our custom string
+        content = Gdk.ContentProvider.new_for_value(drag_string)
+        return content
+    
+    def _on_drag_begin(self, source, drag):
+        """Called when drag operation begins."""
+        tree_view = source.tree_view
+        selection = tree_view.get_selection()
+        model, paths = selection.get_selected_rows()
+        
+        if paths:
+            tree_iter = model.get_iter(paths[0])
+            is_dir = model.get_value(tree_iter, COL_IS_DIR)
+            icon_name = "folder-symbolic" if is_dir else "document-symbolic"
+            
+            # Create drag icon
+            paintable = Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).lookup_icon(
+                icon_name, None, 48, 1, Gtk.TextDirection.NONE, Gtk.IconLookupFlags.FORCE_SYMBOLIC
+            )
+            if paintable:
+                source.set_icon(paintable, 24, 24)
+    
+    def _on_drop(self, target, value, x, y):
+        """Handles drop operation."""
+        if not isinstance(value, str):
+            self._log_message("Invalid drop data", is_error=True)
+            return False
+        
+        # Parse the drag data string
+        # Format: "local|/path/to/file|1" or "remote|/path/to/file|0"
+        try:
+            parts = value.split('|')
+            if len(parts) != 3:
+                return False
+            
+            source_location, source_path, is_dir_str = parts
+            is_dir = bool(int(is_dir_str))
+            source_is_local = (source_location == "local")
+            target_is_local = target.is_local
+            
+        except Exception as e:
+            self._log_message(f"Failed to parse drop data: {e}", is_error=True)
+            return False
+        
+        # Don't allow drop on the same panel
+        if source_is_local == target_is_local:
+            self._log_message(_("Cannot drop on the same panel"), is_error=True)
+            return False
+        
+        # Determine destination directory and start transfer
+        if source_is_local:
+            # Dragging from local to remote (upload)
+            dest_dir = self.current_remote_path
+            self._log_message(_("Drag and drop: uploading {path}...").format(path=source_path))
+            thread = threading.Thread(target=self._upload_worker, args=(source_path, dest_dir, is_dir))
+            thread.daemon = True
+            thread.start()
+        else:
+            # Dragging from remote to local (download)
+            dest_dir = self.current_local_path
+            self._log_message(_("Drag and drop: downloading {path}...").format(path=source_path))
+            thread = threading.Thread(target=self._download_worker, args=(source_path, dest_dir, is_dir))
+            thread.daemon = True
+            thread.start()
+        
+        return True
 
 
     def on_transfer_activated(self, action, param):
@@ -1105,8 +1404,8 @@ class SftpWidget(Gtk.Box):
                     # Refresh local view
                     self.ui_queue.put(lambda: self._load_local_directory(self.current_local_path))
                 else: # Remote
-                    self.sftp_client.chmod(path, new_mode)
-                    # Refresh remote view
+                    with self._sftp_lock:
+                        self.sftp_client.chmod(path, new_mode)
                     self.ui_queue.put(lambda: self._load_remote_directory_threaded(self.current_remote_path))
 
                 self._log_message(_("Permissions changed for {path} to {mode}").format(path=path, mode=oct(new_mode)[2:]))
@@ -1137,3 +1436,33 @@ class SftpWidget(Gtk.Box):
 
         # Otherwise, let the ScrolledWindow handle the event.
         return False
+
+    def _on_log_scroll(self, controller, dx, dy, scrolled_window):
+        """
+        Handles scroll events on the log view to prevent them from propagating
+        to the parent notebook when the log is already at its limit.
+        """
+        adj = scrolled_window.get_vadjustment()
+        current_value = adj.get_value()
+        upper = adj.get_upper()
+        page_size = adj.get_page_size()
+
+        # dy > 0 means scrolling down, dy < 0 means scrolling up
+        if dy > 0 and current_value >= upper - page_size:
+            # We are at the bottom and scrolling down, stop the event.
+            return True
+        elif dy < 0 and current_value <= adj.get_lower():
+            # We are at the top and scrolling up, stop the event.
+            return True
+
+        # Otherwise, let the ScrolledWindow handle the event.
+        return False
+
+    def _on_global_scroll(self, controller, dx, dy):
+        """
+        Global scroll handler for the entire SFTP widget.
+        Prevents ALL scroll events from propagating to the parent notebook.
+        This catches scroll events on empty spaces, buttons, entries, etc.
+        """
+        # Always stop propagation to prevent notebook tab switching
+        return True
