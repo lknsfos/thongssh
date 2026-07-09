@@ -6,7 +6,6 @@ gi.require_version('Vte', '3.91')
 import os
 import sys
 import signal
-import atexit
 import shlex
 import copy
 import logging
@@ -238,9 +237,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.notebook.add_controller(scroll_controller)
         self.connect("map", self.on_first_map)
 
-
-        # On exit, save the tree back to JSON
-        atexit.register(self.rebuild_config_and_save)
 
         # ✨ Connect signals to update menu sensitivity
         self.notebook.connect("notify::page", self.update_menu_sensitivity)
@@ -729,6 +725,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Right-click handler: Shows PopoverMenu (100% GTK4).
         Connected to 'released' so the button is already up when the popover
         opens — prevents the release event from activating the first menu item."""
+        # Clear stale tab context so SFTP/terminal actions use the tree selection,
+        # not whatever tab was last right-clicked.
+        self.last_clicked_tab = None
         tree_view = gesture.get_widget()
         path_info = tree_view.get_path_at_pos(int(x), int(y))
 

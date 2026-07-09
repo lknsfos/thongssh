@@ -1,11 +1,16 @@
 import json
 import os
+import shutil
 import logging
 from pathlib import Path
 
 # --- Global Constants ---
 CONFIG_DIR = Path.home() / ".config" / "thongssh"
-CONFIG_FILE = CONFIG_DIR / "hosts.json" 
+CONFIG_FILE     = CONFIG_DIR / "hosts.json"
+CONFIG_BACKUP_1 = CONFIG_DIR / "hosts.json.bak1"
+CONFIG_BACKUP_2 = CONFIG_DIR / "hosts.json.bak2"
+CONFIG_BACKUP_3 = CONFIG_DIR / "hosts.json.bak3"
+CONFIG_TEMP     = CONFIG_DIR / "hosts.json.tmp"
 from gi.repository import GLib
 
 # Default template for a new config file
@@ -72,45 +77,80 @@ def _recursive_migrate(node):
     return node, needs_save
 
 
+def _try_load_json(path):
+    """Returns parsed JSON from path, or None if missing/corrupted."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
 def load_and_migrate_config():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if not CONFIG_FILE.exists():
-        logging.info("Config file not found, creating a new one...")
+
+    # Try main file, then backups in order
+    candidates = [CONFIG_FILE, CONFIG_BACKUP_1, CONFIG_BACKUP_2, CONFIG_BACKUP_3]
+    data = None
+    loaded_from = None
+    for candidate in candidates:
+        result = _try_load_json(candidate)
+        if result is not None:
+            data = result
+            loaded_from = candidate
+            break
+
+    if data is None:
+        logging.info("No valid config found, creating default...")
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(DEFAULT_CONFIG_DATA, f, indent=4)
         return DEFAULT_CONFIG_DATA
 
-    try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+    if loaded_from != CONFIG_FILE:
+        logging.warning(f"Main config missing/corrupted; restored from {loaded_from.name}")
+        try:
+            shutil.copy2(loaded_from, CONFIG_FILE)
+        except Exception as e:
+            logging.error(f"Failed to restore config from backup: {e}")
 
-        needs_save_after_wrap = False
-        if isinstance(data, list):
-            logging.info("Old config format (list) detected, wrapping in Root...")
-            data = {"type": "group", "name": "Root", "children": data}
-            needs_save_after_wrap = True
+    needs_save_after_wrap = False
+    if isinstance(data, list):
+        logging.info("Old config format (list) detected, wrapping in Root...")
+        data = {"type": "group", "name": "Root", "children": data}
+        needs_save_after_wrap = True
 
-        migrated_data, needs_migration_save = _recursive_migrate(data)
+    migrated_data, needs_migration_save = _recursive_migrate(data)
 
-        if needs_save_after_wrap or needs_migration_save:
-            logging.info("Updating config file (migration)...")
-            try:
-                with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(migrated_data, f, indent=4, ensure_ascii=False)
-            except Exception as e:
-                logging.error(f"Failed to save migrated config: {e}")
+    if needs_save_after_wrap or needs_migration_save:
+        logging.info("Updating config file (migration)...")
+        save_config(migrated_data)
 
-        return migrated_data
-    except json.JSONDecodeError:
-        logging.error(f"ERROR: Config {CONFIG_FILE} is corrupted. Creating a backup.")
-        os.rename(CONFIG_FILE, f"{CONFIG_FILE}.bak")
-        return load_and_migrate_config()
+    return migrated_data
 
 
 def save_config(config_data):
-    """Saves the given dictionary to hosts.json."""
+    """Saves config atomically with 3-file backup rotation.
+
+    Write order ensures the main file is never absent or half-written:
+    1. Write to .tmp (crash here leaves main file intact)
+    2. Rotate bak2→bak3, bak1→bak2 (os.replace is atomic)
+    3. Copy main→bak1 (copy so main is still readable during this step)
+    4. os.replace .tmp→main (atomic rename)
+    """
     try:
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_TEMP, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, indent=4, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+
+        if CONFIG_BACKUP_2.exists():
+            os.replace(CONFIG_BACKUP_2, CONFIG_BACKUP_3)
+        if CONFIG_BACKUP_1.exists():
+            os.replace(CONFIG_BACKUP_1, CONFIG_BACKUP_2)
+        if CONFIG_FILE.exists():
+            shutil.copy2(CONFIG_FILE, CONFIG_BACKUP_1)
+
+        os.replace(CONFIG_TEMP, CONFIG_FILE)
     except Exception as e:
         logging.error(f"Failed to save config: {e}")
