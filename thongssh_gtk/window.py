@@ -15,7 +15,8 @@ import re
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio, GObject
 
 from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, resource_path
-from .dialogs import InputDialog, HostDialog, GroupDialog # Removed SettingsDialog
+from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog # Removed SettingsDialog
+from .send_file import SendFileDialog, guess_remote_cwd
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
 from .settings import SettingsManager
 from .keyring import KeyringManager
@@ -69,7 +70,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
         header_bar.set_show_end_title_buttons(True) # Shows min/max/close
 
-        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.3.12")
+        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.4.1")
         header_bar.set_title_widget(title_widget)
 
         self.setup_global_menu(header_bar)
@@ -80,6 +81,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.sidebar_toggle_button.set_tooltip_text(_("Toggle Sidebar"))
         self.sidebar_toggle_button.connect("toggled", self.on_toggle_sidebar)
         header_bar.pack_start(self.sidebar_toggle_button)
+
+        # --- ✨ Batch Command button in HeaderBar ---
+        self.batch_command_button = Gtk.Button(icon_name="mail-send-symbolic")
+        self.batch_command_button.set_tooltip_text(_("Batch Command"))
+        self.batch_command_button.connect("clicked", self.on_menu_batch_command)
+        header_bar.pack_start(self.batch_command_button)
 
 
 
@@ -565,6 +572,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_about.connect("activate", self.on_menu_about)
         self.add_action(action_about)
 
+        action_batch_command = Gio.SimpleAction.new("batch-command", None)
+        action_batch_command.connect("activate", self.on_menu_batch_command)
+        self.add_action(action_batch_command)
+
         # 2. Create GMenu (model)
         main_menu_model = Gio.Menu()
 
@@ -573,6 +584,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         file_section.append(_("Close Tab"), "win.close-tab")
         file_section.append(_("Quit"), "win.quit")
         main_menu_model.append_section(None, file_section)
+
+        # "Batch" section
+        batch_section = Gio.Menu()
+        batch_section.append(_("Batch Command"), "win.batch-command")
+        main_menu_model.append_section(None, batch_section)
 
         # "Edit" section
         edit_section = Gio.Menu()
@@ -663,6 +679,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_paste = Gio.SimpleAction.new("paste-clipboard", None)
         action_paste.connect("activate", self.on_menu_paste)
         self.add_action(action_paste)
+
+        action_send_file = Gio.SimpleAction.new("send-file", None)
+        action_send_file.connect("activate", self.on_menu_send_file)
+        self.add_action(action_send_file)
         
         action_user_cmd = Gio.SimpleAction.new_stateful("user-command", GLib.VariantType.new('s'), GLib.Variant.new_string(""))
         action_user_cmd.connect("activate", self.on_menu_user_command)
@@ -704,6 +724,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         terminal_menu = Gio.Menu()
         terminal_menu.append(_("Copy"), "win.copy-clipboard")
         terminal_menu.append(_("Paste"), "win.paste-clipboard")
+        terminal_menu.append(_("Send File..."), "win.send-file")
 
         tab_menu = Gio.Menu()
         tab_menu.append(_("Disconnect"), "win.tab-disconnect")
@@ -811,6 +832,17 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.lookup_action("copy-clipboard").set_enabled(terminal.get_has_selection())
         self.lookup_action("paste-clipboard").set_enabled(True)
 
+        # "Send File" only makes sense for SSH sessions (SFTP under the hood) —
+        # telnet has no equivalent file-transfer sub-protocol.
+        page_widget = terminal.get_parent()
+        tab_info = self.tab_data.get(page_widget)
+        can_send_file = (
+            tab_info is not None
+            and tab_info.get("type") == "terminal"
+            and tab_info.get("config", {}).get("protocol", "ssh") == "ssh"
+        )
+        self.lookup_action("send-file").set_enabled(can_send_file)
+
         translated_x, translated_y = terminal.translate_coordinates(self, x, y)
 
         rect = Gdk.Rectangle()
@@ -833,6 +865,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         terminal = self.get_active_terminal()
         if terminal:
             terminal.paste_clipboard()
+
+    def on_menu_send_file(self, action, param):
+        """Opens the Send File dialog for the active terminal's remote host."""
+        terminal = self.get_active_terminal()
+        page_widget = self.get_active_terminal_widget()
+        if terminal is None or page_widget is None:
+            return
+        tab_info = self.tab_data.get(page_widget)
+        if not tab_info or tab_info.get("type") != "terminal":
+            return
+        host_config = tab_info["config"]
+        initial_dir = guess_remote_cwd(terminal)
+        dialog = SendFileDialog(self, host_config, initial_dir, terminal=terminal)
+        dialog.present()
 
     def on_popover_terminal_closed(self, popover):
         """Gives focus back to the active terminal when the context menu is closed."""
@@ -930,11 +976,16 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         dialog = SettingsDialog(self, self.settings_manager)
         dialog.present()
 
+    def on_menu_batch_command(self, *args):
+        """Shows the Batch Command window — sends one command to a chosen set of open terminal tabs."""
+        dialog = BatchCommandDialog(self)
+        dialog.present()
+
     def on_menu_about(self, action, param):
         """Shows the 'About' window."""
         dialog = Adw.AboutWindow(transient_for=self)
         dialog.set_application_name("ThongSSH")
-        dialog.set_version("0.3.12")
+        dialog.set_version("0.4.1")
         dialog.set_license_type(Gtk.License.MIT_X11)
         dialog.set_comments(_("SSH client with a tree-like host structure"))
         dialog.set_copyright("© 2025 Mikhael Karpov")
@@ -1224,6 +1275,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if username_from_prompt:
              host_str = f"{username_from_prompt}@{host_str}"
 
+        # Captured before the telnet branch below strips the user@ part back
+        # off — this is what actually gets used to auth this session, so
+        # it's what tab_data should remember (e.g. for "Send File" later),
+        # not the original config which may have had no username at all.
+        resolved_host_str = host_str
+
         protocol = config.get("protocol", "ssh")
         cmd = []
         password = None
@@ -1387,8 +1444,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 self.notebook.set_current_page(page_num)
                 terminal.grab_focus()
 
+                resolved_config = dict(config)
+                resolved_config['host'] = resolved_host_str
+
                 self.open_sessions[scrolled_term] = (terminal, pid)
-                self.tab_data[scrolled_term] = {"type": "terminal", "config": config}
+                self.tab_data[scrolled_term] = {"type": "terminal", "config": resolved_config}
                 close_btn.connect("clicked", self.on_tab_close_button_clicked, scrolled_term, pid)
                 terminal.connect("child-exited", self.on_ssh_process_exited, scrolled_term)
             else: # This is a reconnect, just update the PID

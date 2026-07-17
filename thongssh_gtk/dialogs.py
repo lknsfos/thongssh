@@ -1012,6 +1012,104 @@ class SettingsDialog(Adw.Window):
             self.sftp_sort_col_row.set_selected(sort_col_map.get(DEFAULT_SETTINGS["sftp.local_default_sort_column"], 0))
             sort_dir_map = {"asc": 0, "desc": 1}
             self.sftp_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.local_default_sort_direction"], 0))
-
             self.sftp_remote_sort_col_row.set_selected(sort_col_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_column"], 0))
             self.sftp_remote_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_direction"], 0))
+
+
+class BatchCommandDialog(Adw.Window):
+    """
+    Sends one command to a chosen set of currently open terminal tabs at
+    once (never SFTP tabs — those have no shell to feed a command into).
+    """
+    def __init__(self, parent_window):
+        super().__init__(transient_for=parent_window)
+        self.parent_window = parent_window
+        self.set_default_size(420, 480)
+        self.set_title(_("Batch Command"))
+        self._syncing_select_all = False
+
+        header_bar = Adw.HeaderBar()
+        send_button = Gtk.Button(label=_("Send"), css_classes=["suggested-action"])
+        send_button.connect("clicked", self.on_send_clicked)
+        header_bar.pack_end(send_button)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_box.append(header_bar)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
+                            margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        content_box.append(main_box)
+
+        self.command_entry = Gtk.Entry(placeholder_text=_("Command to send to selected terminals"))
+        self.command_entry.connect("activate", self.on_send_clicked)
+        main_box.append(self.command_entry)
+
+        self.close_after_send_check = Gtk.CheckButton(label=_("Close window after send"), active=True)
+        main_box.append(self.close_after_send_check)
+
+        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin_top=6)
+
+        self.select_all_check = Gtk.CheckButton(label=_("Select / Deselect All"), active=True)
+        self.select_all_check.connect("toggled", self.on_select_all_toggled)
+        list_box.append(self.select_all_check)
+        list_box.append(Gtk.Separator(margin_top=3, margin_bottom=3))
+
+        # (checkbutton, page_widget) — page_widget is the key into
+        # parent_window.open_sessions, which holds the actual Vte.Terminal.
+        self.terminal_checks = []
+        for page_widget, info in parent_window.tab_data.items():
+            if info.get("type") != "terminal":
+                continue
+            if page_widget not in parent_window.open_sessions:
+                continue
+            name = info.get("config", {}).get("name", _("Unnamed"))
+            check = Gtk.CheckButton(label=name, active=True)
+            check.connect("toggled", self.on_individual_toggled)
+            list_box.append(check)
+            self.terminal_checks.append((check, page_widget))
+
+        if not self.terminal_checks:
+            self.select_all_check.set_sensitive(False)
+            list_box.append(Gtk.Label(label=_("No open terminal sessions."), css_classes=["dim-label"]))
+
+        scrolled = Gtk.ScrolledWindow(vexpand=True)
+        scrolled.set_child(list_box)
+        main_box.append(scrolled)
+
+        self.set_content(content_box)
+
+    def on_select_all_toggled(self, checkbutton):
+        if self._syncing_select_all:
+            return
+        self._syncing_select_all = True
+        active = checkbutton.get_active()
+        for check, _widget in self.terminal_checks:
+            check.set_active(active)
+        self._syncing_select_all = False
+
+    def on_individual_toggled(self, checkbutton):
+        if self._syncing_select_all:
+            return
+        self._syncing_select_all = True
+        all_active = all(check.get_active() for check, _widget in self.terminal_checks)
+        self.select_all_check.set_active(all_active)
+        self._syncing_select_all = False
+
+    def on_send_clicked(self, *args):
+        command = self.command_entry.get_text()
+        if not command:
+            return
+        payload = (command + "\n").encode("utf-8")
+        for check, page_widget in self.terminal_checks:
+            if not check.get_active():
+                continue
+            session = self.parent_window.open_sessions.get(page_widget)
+            if session is None:
+                continue
+            terminal, pid = session
+            terminal.feed_child(payload)
+
+        if self.close_after_send_check.get_active():
+            self.close()
+        else:
+            self.command_entry.set_text("")
