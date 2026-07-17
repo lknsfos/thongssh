@@ -40,7 +40,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         self.set_deletable(True)
 
-        self.set_icon_name(APP_ID)
+        # Make the bundled icon resolvable by name even when no .desktop file
+        # (or icon-theme install step) has registered it in hicolor — the
+        # gresource ships the PNG at /com/example/thongssh/thongssh.png, so
+        # add that as a resource path and look it up by its filename stem.
+        icon_theme = Gtk.IconTheme.get_for_display(self.get_display())
+        icon_theme.add_resource_path("/com/example/thongssh")
+        self.set_icon_name("thongssh")
 
         # Load and migrate the config
         self.config_data = load_and_migrate_config()
@@ -229,12 +235,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.paned.set_end_child(self.notebook)
         # ✨ Add a small margin to prevent accidentally grabbing the paned handle
         self.notebook.set_margin_start(6)
-        
-        # ✨ Add mouse wheel scroll support for scrolling tabs.
-        # This will SWITCH tabs, as requested.
-        scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
-        scroll_controller.connect("scroll", self.on_notebook_scroll_switch)
-        self.notebook.add_controller(scroll_controller)
+
         self.connect("map", self.on_first_map)
 
 
@@ -938,7 +939,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         dialog.set_copyright("© 2025 Mikhael Karpov")
         dialog.set_developers(["Gemini Code Assist", "Claude Code (Anthropic)"])
         dialog.set_designers(["Mikhael Karpov (lknsfos)"])
-        dialog.set_application_icon(APP_ID) # Используем ID для поиска иконки
+        dialog.set_application_icon("thongssh") # Имя ресурса иконки, зарегистрированной в icon_theme
         dialog.present()
 
 
@@ -1420,6 +1421,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         right_click_gesture.connect("pressed", self._on_right_press_guard)
         right_click_gesture.connect("released", self.on_tab_right_click)
         tab_label_box.add_controller(right_click_gesture)
+
+        # ✨ Mouse wheel over the tab label switches tabs. Attached here (not on
+        # the whole Notebook) so scrolling over page content — an SFTP log, a
+        # file list, anything — never gets mistaken for a tab-switch gesture.
+        tab_scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
+        tab_scroll_controller.connect("scroll", self.on_notebook_scroll_switch)
+        tab_label_box.add_controller(tab_scroll_controller)
 
         return tab_label_box, close_btn
 
