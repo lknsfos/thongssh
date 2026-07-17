@@ -24,6 +24,7 @@ DEFAULT_SETTINGS = {
     "sftp.remote_default_sort_column": "name", # name, size, date
     "sftp.remote_default_sort_direction": "asc", # asc, desc
     "terminal.close_on_disconnect": True, # ✨ NEW: Whether to close tab on disconnect
+    "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
 }
 
 class SettingsManager:

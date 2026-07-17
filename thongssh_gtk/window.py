@@ -14,7 +14,7 @@ import re
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio, GObject
 
-from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA
+from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, resource_path
 from .dialogs import InputDialog, HostDialog, GroupDialog # Removed SettingsDialog
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
 from .settings import SettingsManager
@@ -40,19 +40,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         self.set_deletable(True)
 
-        # Make the bundled icon resolvable by name even when no .desktop file
-        # (or icon-theme install step) has registered it in hicolor — the
-        # gresource ships the PNG at /com/example/thongssh/thongssh.png, so
-        # add that as a resource path and look it up by its filename stem.
-        icon_theme = Gtk.IconTheme.get_for_display(self.get_display())
-        icon_theme.add_resource_path("/com/example/thongssh")
-        self.set_icon_name("thongssh")
-
         # Load and migrate the config
         self.config_data = load_and_migrate_config()
 
         # ✨ Load application settings
         self.settings_manager = SettingsManager()
+
+        # Make the bundled icon resolvable by name even when no .desktop file
+        # (or icon-theme install step) has registered it in hicolor. Reads
+        # straight from the icons/ directory on disk — not the compiled
+        # .gresource, which only updates on an explicit rebuild and used to
+        # go stale silently whenever someone swapped the PNG on disk.
+        icon_theme = Gtk.IconTheme.get_for_display(self.get_display())
+        icon_theme.add_search_path(resource_path("icons"))
+        self.set_icon_name(self.settings_manager.get("interface.icon"))
 
         # ✨ Keyring manager for passwords
         self.keyring = KeyringManager()
@@ -939,7 +940,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         dialog.set_copyright("© 2025 Mikhael Karpov")
         dialog.set_developers(["Gemini Code Assist", "Claude Code (Anthropic)"])
         dialog.set_designers(["Mikhael Karpov (lknsfos)"])
-        dialog.set_application_icon("thongssh") # Имя ресурса иконки, зарегистрированной в icon_theme
+        dialog.set_application_icon(self.settings_manager.get("interface.icon"))
         dialog.present()
 
 

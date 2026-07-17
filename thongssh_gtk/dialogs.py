@@ -695,6 +695,7 @@ class GroupDialog(Adw.Window):
 class SettingsDialog(Adw.Window):
     def __init__(self, parent_window, settings_manager):
         super().__init__(transient_for=parent_window, modal=True)
+        self.parent_window = parent_window
         self.settings_manager = settings_manager
 
         self.set_default_size(600, 450)
@@ -823,6 +824,29 @@ class SettingsDialog(Adw.Window):
 
         group_commands.add(commands_box)
 
+        # --- Interface Page ---
+        page_interface = Adw.PreferencesPage()
+        page_interface.set_title(_("Interface"))
+        page_interface.set_icon_name("preferences-desktop-appearance-symbolic")
+
+        group_logo = Adw.PreferencesGroup(title=_("Logo"))
+        page_interface.add(group_logo)
+
+        # (label, settings value / icon file stem without extension)
+        self._icon_options = [
+            (_("Safe"), "thongssh"),
+            (_("Original"), "thongssh_orig"),
+        ]
+        icon_labels = [label for label, stem in self._icon_options]
+        self.icon_row = Adw.ComboRow(title=_("App Icon"), model=Gtk.StringList.new(icon_labels))
+        current_icon_stem = self.settings_manager.get("interface.icon")
+        try:
+            current_icon_index = [stem for label, stem in self._icon_options].index(current_icon_stem)
+        except ValueError:
+            current_icon_index = 0
+        self.icon_row.set_selected(current_icon_index)
+        group_logo.add(self.icon_row)
+
         # --- SFTP Page ---
         page_sftp = Adw.PreferencesPage()
         page_sftp.set_title(_("SFTP"))
@@ -873,6 +897,7 @@ class SettingsDialog(Adw.Window):
         self.stack.add_titled_with_icon(page_sftp, "sftp", _("SFTP"), "folder-remote-symbolic")
         self.stack.add_titled_with_icon(page_client, "client", _("Client Options"), "network-wired-symbolic")
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
+        self.stack.add_titled_with_icon(page_interface, "interface", _("Interface"), "preferences-desktop-appearance-symbolic")
 
         for page in self.stack.get_pages():
             row = Adw.ActionRow(title=page.get_title())
@@ -927,9 +952,19 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("sftp.remote_default_sort_column", sort_col_map_rev.get(self.sftp_remote_sort_col_row.get_selected(), "name"))
         self.settings_manager.set("sftp.remote_default_sort_direction", sort_dir_map_rev.get(self.sftp_remote_sort_dir_row.get_selected(), "asc"))
 
-
+        icon_stem = self._icon_options[self.icon_row.get_selected()][1]
+        self.settings_manager.set("interface.icon", icon_stem)
 
         self.settings_manager.save()
+
+        # Apply the icon change immediately — the window's own icon, and the
+        # macOS Dock icon (About dialog just reads the setting fresh next
+        # time it's opened, no extra work needed there).
+        self.parent_window.set_icon_name(icon_stem)
+        app = self.parent_window.get_application()
+        if app is not None and hasattr(app, "apply_macos_dock_icon"):
+            app.apply_macos_dock_icon()
+
         self.close()
 
     def on_command_edited(self, widget, path, text, column_index):

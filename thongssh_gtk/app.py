@@ -21,6 +21,7 @@ except ValueError as e:
 from gi.repository import Adw, Gio, Gtk, GdkPixbuf
 from .window import ThongSSHWindow # Keep relative import
 from .constants import APP_ID, resource_path # Import our new function
+from .settings import SettingsManager
 
 # --- Application Class ---
 class ThongSSHApp(Adw.Application):
@@ -33,15 +34,19 @@ class ThongSSHApp(Adw.Application):
         except gi.repository.GLib.GError:
             logging.debug("Resources already registered, skipping.")
         self._apply_native_font()
-        self._apply_macos_dock_icon()
+        self.apply_macos_dock_icon()
         self.connect('activate', self.on_activate)
 
-    def _apply_macos_dock_icon(self):
+    def apply_macos_dock_icon(self):
         # GTK's icon-theme machinery (set_icon_name, etc.) has no reach into
         # the macOS Dock/Cmd-Tab switcher — that's owned by AppKit and keyed
         # off the running process, not a .desktop file. Set it directly via
         # NSApplication so the icon shows even for a bare `python3 thongssh.py`
         # with no .app bundle involved.
+        #
+        # Public (no leading underscore): also called from SettingsDialog to
+        # refresh the Dock icon immediately after the user changes it, not
+        # just once at startup.
         if sys.platform != "darwin":
             return
         try:
@@ -49,7 +54,8 @@ class ThongSSHApp(Adw.Application):
         except ImportError:
             logging.warning("Dock icon: pyobjc-framework-Cocoa not installed; skipping native Dock icon.")
             return
-        icon_path = resource_path("icons/thongssh.png")
+        icon_stem = SettingsManager().get("interface.icon")
+        icon_path = resource_path(f"icons/{icon_stem}.png")
         image = NSImage.alloc().initWithContentsOfFile_(icon_path)
         if image is None:
             logging.warning(f"Dock icon: could not load image from {icon_path}")
