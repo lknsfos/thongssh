@@ -41,13 +41,12 @@ class SettingsManager:
         try:
             with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
                 loaded_settings = json.load(f)
-            # Обновляем только существующие ключи, чтобы не потерять новые при обновлении
+            # Only update existing keys, so new defaults added by an app update aren't lost
             for key in self.settings:
                 if key in loaded_settings:
                     self.settings[key] = loaded_settings[key]
         except (json.JSONDecodeError, IOError) as e:
             logging.error(f"Failed to load settings: {e}. Using defaults.")
-            # В случае ошибки, можно создать бэкап
             if SETTINGS_FILE.exists():
                 SETTINGS_FILE.rename(f"{SETTINGS_FILE}.bak")
 

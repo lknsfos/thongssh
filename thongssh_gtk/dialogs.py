@@ -12,15 +12,65 @@ from .keyring import KeyringManager
 # Placeholder for future internationalization (i18n)
 _ = lambda s: s
 
-class InputDialog(Adw.Window):
+
+def _populate_groups_combo(combo_group, group_iters, tree_store, active_parent_iter):
     """
-    A simple dialog with a single text entry.
-    Used for "Rename" and "Login Prompt".
+    Recursively populates a group Gtk.ComboBoxText with groups from a
+    Gtk.TreeStore, and selects active_parent_iter's group if given.
+    Shared by HostDialog and GroupDialog, which both keep their own
+    `self.combo_group`/`self.group_iters`/`self.tree_store` for this.
+    """
+    combo_group.append("root", _("Root (/)"))
+    group_iters["root"] = None  # iter for the root
+
+    def iter_groups(model, tree_iter, prefix=""):
+        node_type = model.get_value(tree_iter, COL_TYPE)
+        if node_type == "group":
+            name = model.get_value(tree_iter, COL_NAME)
+            display_name = f"{prefix} {name}"
+
+            combo_group.append(display_name, display_name)
+            group_iters[display_name] = tree_iter.copy()  # Copy the iter!
+
+            child_iter = model.iter_children(tree_iter)
+            while child_iter:
+                iter_groups(model, child_iter, prefix + "  └─")
+                child_iter = model.iter_next(child_iter)
+
+    root_iter = tree_store.get_iter_first()
+    while root_iter:
+        iter_groups(tree_store, root_iter)
+        root_iter = tree_store.iter_next(root_iter)
+
+    combo_group.set_active_id("root")
+
+    if active_parent_iter:
+        for k, v in group_iters.items():
+            if v and tree_store.get_path(v) == tree_store.get_path(active_parent_iter):
+                combo_group.set_active_id(k)
+                return
+
+
+class ResponseDialog(Adw.Window):
+    """
+    Common base for the modal dialogs below: adds a 'response' signal (with
+    an int response code, mirroring Gtk.ResponseType) and the emit-then-close
+    helper they all shared as identical copy-pasted code.
     """
     __gsignals__ = {
         'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
     }
 
+    def response(self, response_id):
+        self.emit("response", response_id)
+        self.close()
+
+
+class InputDialog(ResponseDialog):
+    """
+    A simple dialog with a single text entry.
+    Used for "Rename" and "Login Prompt".
+    """
     def __init__(self, parent, title, message, default_text="", is_password=False):
         super().__init__(transient_for=parent, modal=True)
         self.set_default_size(400, -1)
@@ -67,10 +117,6 @@ class InputDialog(Adw.Window):
     def get_text(self):
         return self.entry.get_text().strip()
 
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
-
     def run_async(self, callback):
         """Asynchronous launch for login prompt."""
         def on_response(dialog, response):
@@ -81,14 +127,10 @@ class InputDialog(Adw.Window):
         self.connect("response", on_response)
         self.present()
 
-class MessageDialog(Adw.Window):
+class MessageDialog(ResponseDialog):
     """
     A simple wrapper around Adw.MessageDialog to provide an async run method.
     """
-    __gsignals__ = {
-        'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
-    }
-
     def __init__(self, parent, heading, body=None, buttons=None):
         super().__init__(transient_for=parent, modal=True)
         self.set_default_size(400, -1)
@@ -121,10 +163,6 @@ class MessageDialog(Adw.Window):
         self.dialog.set_default_response(f"response_{Gtk.ResponseType.OK}" if buttons else "ok")
         self.dialog.set_close_response(f"response_{Gtk.ResponseType.CANCEL}" if buttons else "ok")
 
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
-
     def run_async(self, callback):
         """Helper to run the dialog and get the result in a callback."""
         def on_response(dialog_widget, response_id_str):
@@ -135,12 +173,8 @@ class MessageDialog(Adw.Window):
         self.dialog.connect("response", on_response)
         self.dialog.present() # Present the actual dialog, not the wrapper
 
-class PermissionsDialog(Adw.Window):
+class PermissionsDialog(ResponseDialog):
     """A dialog for viewing and editing file permissions (chmod)."""
-
-    __gsignals__ = {
-        'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
-    }
 
     def __init__(self, parent, initial_mode):
         super().__init__(transient_for=parent, modal=True)
@@ -241,10 +275,6 @@ class PermissionsDialog(Adw.Window):
         except (ValueError, TypeError):
             return 0 # Or handle error appropriately
 
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
-
     def run_async(self, callback):
         """Helper to run the dialog and get the result in a callback."""
         def on_response(dialog, response_id):
@@ -253,11 +283,7 @@ class PermissionsDialog(Adw.Window):
         self.connect("response", on_response)
         self.present()
 
-class HostDialog(Adw.Window):
-
-    __gsignals__ = {
-        'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
-    }
+class HostDialog(ResponseDialog):
 
     def __init__(self, parent_window, tree_store, host_data_to_edit=None, parent_iter=None):
 
@@ -464,41 +490,7 @@ class HostDialog(Adw.Window):
         dialog.destroy()
 
     def populate_groups_combo(self, active_parent_iter):
-        """Recursively populates the ComboBox with groups from the TreeStore."""
-        self.combo_group.append("root", _("Root (/)"))
-        self.group_iters["root"] = None # iter for the root
-
-        def iter_groups(model, tree_iter, prefix=""):
-            node_type = model.get_value(tree_iter, COL_TYPE)
-            if node_type == "group":
-                name = model.get_value(tree_iter, COL_NAME)
-                display_name = f"{prefix} {name}"
-
-                self.combo_group.append(display_name, display_name)
-                self.group_iters[display_name] = tree_iter.copy() # Copy the iter!
-
-                # Recurse
-                child_iter = model.iter_children(tree_iter)
-                while child_iter:
-                    iter_groups(model, child_iter, prefix + "  └─")
-                    child_iter = model.iter_next(child_iter)
-
-        # Start from the root
-        root_iter = self.tree_store.get_iter_first()
-        while root_iter:
-            iter_groups(self.tree_store, root_iter)
-            root_iter = self.tree_store.iter_next(root_iter)
-
-        # Set the active item
-        if active_parent_iter:
-            # Find the group name by its iter
-            active_name = self.tree_store.get_value(active_parent_iter, COL_NAME)
-            for k, v in self.group_iters.items():
-                if v and self.tree_store.get_path(v) == self.tree_store.get_path(active_parent_iter):
-                    self.combo_group.set_active_id(k)
-                    return
-
-        self.combo_group.set_active_id("root")
+        _populate_groups_combo(self.combo_group, self.group_iters, self.tree_store, active_parent_iter)
 
     def populate_fields(self):
         """Fills the fields with data from self.host_config (Edit mode)."""
@@ -537,10 +529,6 @@ class HostDialog(Adw.Window):
         name_ok = len(self.entry_name.get_text().strip()) > 0
         host_ok = len(self.entry_host.get_text().strip()) > 0
         self.ok_button.set_sensitive(name_ok and host_ok)
-
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
 
     def on_clear_password(self, button):
         """Handles click on the 'clear password' button."""
@@ -590,11 +578,7 @@ class HostDialog(Adw.Window):
 
 
 # --- CLASS: Add Group Dialog ---
-class GroupDialog(Adw.Window):
-
-    __gsignals__ = {
-        'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
-    }
+class GroupDialog(ResponseDialog):
 
     def __init__(self, parent_window, tree_store, parent_iter=None):
         super().__init__(transient_for=parent_window, modal=True)
@@ -632,7 +616,6 @@ class GroupDialog(Adw.Window):
         self.combo_group = Gtk.ComboBoxText()
         content_box.append(self.combo_group)
 
-        # Populate the ComboBox
         self.group_iters = {}
         self.populate_groups_combo(parent_iter)
 
@@ -642,46 +625,8 @@ class GroupDialog(Adw.Window):
         text = entry.get_text().strip()
         self.ok_button.set_sensitive(len(text) > 0)
 
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
-
     def populate_groups_combo(self, active_parent_iter):
-        """Recursively populates the ComboBox with groups from the TreeStore."""
-        self.combo_group.append("root", _("Root (/)"))
-        self.group_iters["root"] = None # iter for the root
-
-        def iter_groups(model, tree_iter, prefix=""):
-            node_type = model.get_value(tree_iter, COL_TYPE)
-            if node_type == "group":
-                name = model.get_value(tree_iter, COL_NAME)
-                display_name = f"{prefix} {name}"
-
-                self.combo_group.append(display_name, display_name)
-                self.group_iters[display_name] = tree_iter.copy() # Copy the iter!
-
-                # Recurse
-                child_iter = model.iter_children(tree_iter)
-                while child_iter:
-                    iter_groups(model, child_iter, prefix + "  └─")
-                    child_iter = model.iter_next(child_iter)
-
-        # Start from the root
-        root_iter = self.tree_store.get_iter_first()
-        while root_iter:
-            iter_groups(self.tree_store, root_iter)
-            root_iter = self.tree_store.iter_next(root_iter)
-
-        # Set the active item (defaults to "Root")
-        self.combo_group.set_active_id("root")
-
-        if active_parent_iter:
-            # Find the group name by its iter
-            active_name = self.tree_store.get_value(active_parent_iter, COL_NAME)
-            for k, v in self.group_iters.items():
-                if v and self.tree_store.get_path(v) == self.tree_store.get_path(active_parent_iter):
-                    self.combo_group.set_active_id(k)
-                    return
+        _populate_groups_combo(self.combo_group, self.group_iters, self.tree_store, active_parent_iter)
 
     def get_data(self):
         new_name = self.entry_name.get_text().strip()

@@ -57,7 +57,6 @@ class SftpWidget(Gtk.Box):
         self.host_config = host_config
         self.settings = SettingsManager()
 
-        # ✨ Set initial local path from settings
         default_path_str = self.settings.get("sftp.local_default_path")
         default_path = Path(default_path_str.replace("~", str(Path.home()))).resolve()
         if default_path.is_dir():
@@ -295,7 +294,6 @@ class SftpWidget(Gtk.Box):
 
             self.local_view.append_column(column)
 
-        # ✨ Set initial sort order from settings
         sort_col_map = {"name": COL_NAME, "size": COL_SIZE_BYTES, "date": COL_MODIFIED_TS}
         sort_dir_map = {"asc": Gtk.SortType.ASCENDING, "desc": Gtk.SortType.DESCENDING}
         sort_col = sort_col_map.get(self.settings.get("sftp.local_default_sort_column"), COL_NAME)
@@ -307,7 +305,6 @@ class SftpWidget(Gtk.Box):
         right_click_gesture.connect("pressed", self.on_view_right_click, self.local_view)
         self.local_view.add_controller(right_click_gesture)
 
-        # ✨ Setup drag and drop for local view
         self._setup_drag_source(self.local_view, is_local=True)
         self._setup_drop_target(self.local_view, is_local=True)
 
@@ -388,14 +385,12 @@ class SftpWidget(Gtk.Box):
                     column.add_attribute(renderer, "text", COL_PERMS_STR)
             self.remote_view.append_column(column)
 
-        # ✨ Set initial sort order from settings for remote panel
         sort_col_map = {"name": COL_NAME, "size": COL_SIZE_BYTES, "date": COL_MODIFIED_TS}
         sort_dir_map = {"asc": Gtk.SortType.ASCENDING, "desc": Gtk.SortType.DESCENDING}
         sort_col = sort_col_map.get(self.settings.get("sftp.remote_default_sort_column"), COL_NAME)
         sort_dir = sort_dir_map.get(self.settings.get("sftp.remote_default_sort_direction"), Gtk.SortType.ASCENDING)
         self.remote_sortable_model.set_sort_column_id(sort_col, sort_dir)
 
-        # ✨ Setup drag and drop for remote view
         self._setup_drag_source(self.remote_view, is_local=False)
         self._setup_drop_target(self.remote_view, is_local=False)
 
@@ -669,33 +664,6 @@ class SftpWidget(Gtk.Box):
             # If we reach here, it means all attempts failed.
             self._log_message(_("Authentication failed. Please check credentials and connection."), is_error=True)
             self.is_reconnecting = False # Reset the flag on total failure
-
-    def _make_progress_callback(self, filename, total_size):
-        """Creates a callback function for paramiko to track file transfer progress."""
-        import time
-        last_percent = -1
-        last_update_time = 0
-
-        def progress(bytes_transferred, _total_bytes):
-            nonlocal last_percent, last_update_time
-            if total_size == 0:
-                return
-
-            current_time = time.time()
-            percent = int((bytes_transferred / total_size) * 100)
-
-            # Log progress in increments of 25% AND only if 5 seconds passed to avoid UI flooding
-            # This is very conservative to prevent any blocking
-            if percent >= last_percent + 25 and (current_time - last_update_time) >= 5.0:
-                last_percent = percent
-                last_update_time = current_time
-                # Log without formatting to minimize string operations
-                try:
-                    self._log_message(f"Transferring {filename}: {percent}%")
-                except:
-                    pass # Silently ignore if logging fails
-
-        return progress
 
     def on_upload_clicked(self, button):
         """Handles the click on the Upload (>) button."""

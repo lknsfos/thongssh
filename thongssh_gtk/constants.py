@@ -15,12 +15,10 @@ def resource_path(relative_path):
     # In development, the path is relative to the thongssh_gtk directory
     return os.path.join(os.path.dirname(__file__), relative_path)
 
-# --- КОЛОНКИ TreeStore ---
-# (Имя, Тип, Иконка, Объект данных (config/node))
+# TreeStore columns: name, type, icon, data object (config/node)
 (
     COL_NAME,
     COL_TYPE,
     COL_ICON,
     COL_DATA
 ) = range(4)
-# -------------------------
