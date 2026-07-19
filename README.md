@@ -72,8 +72,8 @@ Yes, really. She works on a Mac now. Here's the fitting session, via [Homebrew](
 brew install gtk4 libadwaita vte3 libsecret gobject-introspection pygobject3 pkg-config sshpass
 
 # 2. Grab the repo
-git clone https://github.com/lknsfos/thongs-gtk4.dev.git
-cd thongs-gtk4.dev
+git clone https://github.com/lknsfos/thongssh.git
+cd thongssh
 
 # 3. A venv that can still see Homebrew's PyGObject/pycairo
 python3 -m venv --system-site-packages venv
@@ -104,8 +104,8 @@ Updates and packages will happen **someday**. Maybe. If the vibe is right. For n
 Make sure you've installed everything, then run:
 
 ```bash
-git clone https://github.com/lknsfos/thongs-gtk4.dev.git
-cd thongs-gtk4.dev
+git clone https://github.com/lknsfos/thongssh.git
+cd thongssh
 python3 thongssh.py
 ```
 
