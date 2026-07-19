@@ -67,7 +67,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
         header_bar.set_show_end_title_buttons(True) # Shows min/max/close
 
-        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.5.1")
+        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.5.2")
         header_bar.set_title_widget(title_widget)
 
         self.setup_global_menu(header_bar)
@@ -403,13 +403,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         notebook.set_hexpand(True)
         # ✨ Add a small margin to prevent accidentally grabbing a paned handle
         notebook.set_margin_start(6)
-        # Same group name lets a detachable tab be picked up from one pane;
-        # accepting the drop on the other end still needs the explicit
-        # GtkDropTarget below (GTK4 doesn't wire that part up automatically).
-        notebook.set_group_name("thongssh-panes")
         notebook.connect("notify::page", self.update_menu_sensitivity)
 
-        drop_target = Gtk.DropTarget.new(Gtk.NotebookPage, Gdk.DragAction.MOVE)
+        # Cross-pane tab movement is a fully custom drag: a Gtk.DragSource on
+        # each tab label (added in _create_tab_label) hands off a plain
+        # string tab-id, and this DropTarget looks the widget back up by it.
+        # Earlier this used Gtk.Notebook's own tab-detachable + a DropTarget
+        # typed for Gtk.NotebookPage — reliable on Linux, but that custom
+        # GObject payload didn't survive the drag round-trip on macOS's
+        # Quartz backend: the source notebook would visually drop the tab
+        # (assuming the transfer succeeded) while the drop side never
+        # actually received it, leaving it orphaned until some unrelated
+        # redraw resynced the view and it "came back". A plain string is
+        # the one payload type every GDK backend's DnD implementation
+        # handles the same way, so there's no cross-platform quirk left to
+        # trip over here.
+        drop_target = Gtk.DropTarget.new(str, Gdk.DragAction.MOVE)
         drop_target.connect("drop", self._on_pane_tab_drop, notebook)
         notebook.add_controller(drop_target)
 
@@ -439,8 +448,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     def _on_pane_tab_drop(self, drop_target, value, x, y, dest_notebook):
         """Accepts a tab dragged from another pane (or reordered within the
         same one — Gtk.Notebook still handles that natively before this ever
-        fires). `value` is the dragged Gtk.NotebookPage."""
-        child = value.get_child()
+        fires). `value` is the plain string tab-id from the drag source's
+        'prepare' callback in _create_tab_label."""
+        child = self._find_page_widget_by_id(value)
+        if child is None:
+            return False
         src_notebook = self._find_notebook_for_page_widget(child)
         if src_notebook is None or src_notebook is dest_notebook:
             return False
@@ -456,11 +468,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         return True
 
     def _mark_tab_draggable(self, notebook, child):
-        """Every tab needs both flags: reorderable for drag-to-reorder within
-        one notebook, detachable so it can be picked up and dropped onto a
-        different pane at all."""
+        """Reorderable for drag-to-reorder within one notebook. Moving a tab
+        to a *different* pane is handled entirely by the custom
+        DragSource/DropTarget pair (see _create_tab_label / _create_pane_notebook),
+        not Gtk.Notebook's own tab-detachable — so that flag is deliberately
+        not set here."""
         notebook.set_tab_reorderable(child, True)
-        notebook.set_tab_detachable(child, True)
 
     def _set_active_pane(self, notebook):
         if self.active_pane is notebook:
@@ -481,6 +494,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         for nb in self.pane_notebooks:
             if nb.page_num(widget) != -1:
                 return nb
+        return None
+
+    def _find_page_widget_by_id(self, tab_id):
+        """Reverse of the id(child) string handed off by a tab's DragSource
+        in _create_tab_label — finds the actual content widget by scanning
+        all panes. The id is only ever resolved while the drag that produced
+        it is still in flight, and the widget stays alive (still parented in
+        its source notebook) for that whole time, so id() collisions aren't
+        a concern here."""
+        for nb in self.pane_notebooks:
+            for i in range(nb.get_n_pages()):
+                child = nb.get_nth_page(i)
+                if str(id(child)) == tab_id:
+                    return child
         return None
 
     def _find_pane_by_tab_label(self, tab_label_box):
@@ -1275,7 +1302,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Shows the 'About' window."""
         dialog = Adw.AboutWindow(transient_for=self)
         dialog.set_application_name("ThongSSH")
-        dialog.set_version("0.5.1")
+        dialog.set_version("0.5.2")
         dialog.set_license_type(Gtk.License.MIT_X11)
         dialog.set_comments(_("SSH client with a tree-like host structure"))
         dialog.set_copyright("© 2025 Mikhael Karpov")
@@ -1783,6 +1810,23 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         tab_scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
         tab_scroll_controller.connect("scroll", self.on_notebook_scroll_switch)
         tab_label_box.add_controller(tab_scroll_controller)
+
+        # Lets this tab be dragged into a different pane (see the DropTarget
+        # in _create_pane_notebook for why this hands off a plain string
+        # instead of relying on Gtk.Notebook's own tab-detachable). Attached
+        # once here, at tab-label creation time, rather than in
+        # _mark_tab_draggable — that gets re-invoked every time a tab moves
+        # to a new pane, which would otherwise pile up duplicate DragSources
+        # on the same label.
+        drag_source = Gtk.DragSource.new()
+        drag_source.set_actions(Gdk.DragAction.MOVE)
+        def on_drag_prepare(source, x, y, box=tab_label_box):
+            _pane, child = self._find_pane_by_tab_label(box)
+            if child is None:
+                return None
+            return Gdk.ContentProvider.new_for_value(str(id(child)))
+        drag_source.connect("prepare", on_drag_prepare)
+        tab_label_box.add_controller(drag_source)
 
         return tab_label_box, close_btn
 
