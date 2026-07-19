@@ -67,7 +67,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
         header_bar.set_show_end_title_buttons(True) # Shows min/max/close
 
-        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.4.2")
+        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.5.1")
         header_bar.set_title_widget(title_widget)
 
         self.setup_global_menu(header_bar)
@@ -82,6 +82,24 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.batch_command_button.set_tooltip_text(_("Batch Command"))
         self.batch_command_button.connect("clicked", self.on_menu_batch_command)
         header_bar.pack_start(self.batch_command_button)
+
+        self.split_vertical_btn = Gtk.Button(icon_name="view-dual-symbolic")
+        self.split_vertical_btn.set_tooltip_text(_("Split view left/right"))
+        self.split_vertical_btn.connect("clicked", lambda w: self.on_split_button_clicked("vertical"))
+        header_bar.pack_start(self.split_vertical_btn)
+
+        self.split_horizontal_btn = Gtk.Button()
+        horizontal_split_icon = Gtk.Image.new_from_icon_name("view-dual-symbolic")
+        horizontal_split_icon.add_css_class("thongssh-rotate-90")
+        self.split_horizontal_btn.set_child(horizontal_split_icon)
+        self.split_horizontal_btn.set_tooltip_text(_("Split view top/bottom"))
+        self.split_horizontal_btn.connect("clicked", lambda w: self.on_split_button_clicked("horizontal"))
+        header_bar.pack_start(self.split_horizontal_btn)
+
+        self.split_grid_btn = Gtk.Button(icon_name="view-grid-symbolic")
+        self.split_grid_btn.set_tooltip_text(_("Split view into 4"))
+        self.split_grid_btn.connect("clicked", lambda w: self.on_split_button_clicked("grid"))
+        header_bar.pack_start(self.split_grid_btn)
 
         self.paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.paned.set_resize_start_child(False)
@@ -227,20 +245,21 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # The collapse button is now in the HeaderBar
         self.left_panel.append(button_box)
 
-        # --- Right Panel (Tabs) ---
-        self.notebook = Gtk.Notebook()
-        self.notebook.set_scrollable(True)
-        self.notebook.set_vexpand(True)
-        self.notebook.set_hexpand(True)
-        self.paned.set_end_child(self.notebook)
-        # ✨ Add a small margin to prevent accidentally grabbing the paned handle
-        self.notebook.set_margin_start(6)
+        # --- Right Panel (Tabs, with up to 4-way split support) ---
+        # Four persistent Gtk.Notebook "panes" are created up front and never
+        # destroyed — the split-view buttons only ever reparent them into a
+        # different Gtk.Paned tree and move pages between them, so terminal
+        # PIDs / SFTP connections / tab_data entries (keyed by page widget)
+        # stay valid across split/merge/orientation changes.
+        self.split_mode = None  # None | 'vertical' | 'horizontal' | 'grid'
+        self.pane_notebooks = [self._create_pane_notebook() for _ in range(4)]
+        self.active_pane = None
+        self._set_active_pane(self.pane_notebooks[0])
+        self._apply_pane_layout()
 
         self.connect("map", self.on_first_map)
 
-
         # ✨ Connect signals to update menu sensitivity
-        self.notebook.connect("notify::page", self.update_menu_sensitivity)
         self.tree_view.get_selection().connect("changed", self.update_menu_sensitivity)
         self.update_menu_sensitivity()
 
@@ -258,6 +277,15 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         }
         menuitem > label[label^="<b>&gt;_</b>"] {
             -gtk-icon-source: none;
+        }
+        .thongssh-rotate-90 {
+            transform: rotate(90deg);
+        }
+        .thongssh-active-pane {
+            /* box-shadow (not border!) — a border adds to the widget's size
+               requisition, which made the pane visibly grow/jump in the
+               Paned the instant it became active. box-shadow is paint-only. */
+            box-shadow: inset 0 0 0 2px alpha(@accent_color, 0.65);
         }
         """
         css_provider.load_from_string(css_data)
@@ -351,6 +379,277 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.paned.set_position(300)
         # Disconnect the handler so it only runs once
         self.disconnect_by_func(self.on_first_map)
+
+    # --- Split-pane layout (up to 4 independent tab notebooks) ---
+    #
+    # Slots: 0=top-left (also "single"/"left"/"top"), 1=top-right (also
+    # "right" in a 2-way vertical split), 2=bottom-left (also "bottom" in a
+    # 2-way horizontal split), 3=bottom-right (grid only).
+    #
+    # Invariant: whenever split_mode is 'vertical' or 'horizontal' (a 2-way
+    # split), the two live notebooks are always pane_notebooks[0] and [1] —
+    # only the Paned orientation differs. This is what lets switching
+    # between vertical/horizontal just re-orient the same two panes with no
+    # tab movement at all.
+
+    def _create_pane_notebook(self):
+        """Builds one persistent tab-notebook 'pane'. All 4 are created once
+        in __init__ and only ever reparented/emptied — never destroyed — so
+        widgets keyed in open_sessions/tab_data stay valid across layout
+        changes."""
+        notebook = Gtk.Notebook()
+        notebook.set_scrollable(True)
+        notebook.set_vexpand(True)
+        notebook.set_hexpand(True)
+        # ✨ Add a small margin to prevent accidentally grabbing a paned handle
+        notebook.set_margin_start(6)
+        # Same group name lets a detachable tab be picked up from one pane;
+        # accepting the drop on the other end still needs the explicit
+        # GtkDropTarget below (GTK4 doesn't wire that part up automatically).
+        notebook.set_group_name("thongssh-panes")
+        notebook.connect("notify::page", self.update_menu_sensitivity)
+
+        drop_target = Gtk.DropTarget.new(Gtk.NotebookPage, Gdk.DragAction.MOVE)
+        drop_target.connect("drop", self._on_pane_tab_drop, notebook)
+        notebook.add_controller(drop_target)
+
+        # Track "last interacted-with pane" as the active one. Keyboard focus
+        # (below) already covers clicking into any page's content (terminal,
+        # SFTP view, tree...) since those all grab_focus() on activation. The
+        # one case focus can't catch is a click on a pane with zero pages —
+        # nothing inside it to focus — so this click gesture only ever acts
+        # then; it stays a passive observer otherwise (never claims/denies
+        # the sequence) so it can't interfere with clicks meant for a tab, a
+        # terminal, or anything else already inside the notebook.
+        click_controller = Gtk.GestureClick.new()
+        click_controller.set_button(0)  # any button
+        click_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        def on_pane_pressed(gesture, n_press, x, y, nb=notebook):
+            if nb.get_n_pages() == 0:
+                self._set_active_pane(nb)
+        click_controller.connect("pressed", on_pane_pressed)
+        notebook.add_controller(click_controller)
+
+        focus_controller = Gtk.EventControllerFocus.new()
+        focus_controller.connect("enter", lambda c, nb=notebook: self._set_active_pane(nb))
+        notebook.add_controller(focus_controller)
+
+        return notebook
+
+    def _on_pane_tab_drop(self, drop_target, value, x, y, dest_notebook):
+        """Accepts a tab dragged from another pane (or reordered within the
+        same one — Gtk.Notebook still handles that natively before this ever
+        fires). `value` is the dragged Gtk.NotebookPage."""
+        child = value.get_child()
+        src_notebook = self._find_notebook_for_page_widget(child)
+        if src_notebook is None or src_notebook is dest_notebook:
+            return False
+
+        tab_label = src_notebook.get_tab_label(child)
+        # detach_tab() (not remove_page()) so the source notebook knows this
+        # was consumed by a drop rather than cancelled mid-drag.
+        src_notebook.detach_tab(child)
+        dest_notebook.append_page(child, tab_label)
+        self._mark_tab_draggable(dest_notebook, child)
+        dest_notebook.set_current_page(dest_notebook.page_num(child))
+        self._set_active_pane(dest_notebook)
+        return True
+
+    def _mark_tab_draggable(self, notebook, child):
+        """Every tab needs both flags: reorderable for drag-to-reorder within
+        one notebook, detachable so it can be picked up and dropped onto a
+        different pane at all."""
+        notebook.set_tab_reorderable(child, True)
+        notebook.set_tab_detachable(child, True)
+
+    def _set_active_pane(self, notebook):
+        if self.active_pane is notebook:
+            return
+        if self.active_pane is not None:
+            self.active_pane.remove_css_class("thongssh-active-pane")
+        self.active_pane = notebook
+        notebook.add_css_class("thongssh-active-pane")
+
+    def _get_active_notebook(self):
+        """The pane new tabs should open into / menu actions should target."""
+        if self.active_pane not in self.pane_notebooks:
+            self._set_active_pane(self.pane_notebooks[0])
+        return self.active_pane
+
+    def _find_notebook_for_page_widget(self, widget):
+        """Which pane currently holds this tab's content widget, if any."""
+        for nb in self.pane_notebooks:
+            if nb.page_num(widget) != -1:
+                return nb
+        return None
+
+    def _find_pane_by_tab_label(self, tab_label_box):
+        """Which pane owns the tab whose label widget is tab_label_box, and
+        that tab's content widget. Needed because a tab label's gestures
+        (right-click menu, scroll-to-switch) don't know which of the up to 4
+        notebooks they currently live in — tabs can move between panes."""
+        for nb in self.pane_notebooks:
+            for i in range(nb.get_n_pages()):
+                child = nb.get_nth_page(i)
+                if nb.get_tab_label(child) == tab_label_box:
+                    return nb, child
+        return None, None
+
+    def _get_region_options(self):
+        """The (key, label) pane regions selectable for the current split
+        mode — used by BatchCommandDialog's div filter. Empty when there's
+        only one pane (nothing to filter by)."""
+        if self.split_mode == "vertical":
+            return [("left", _("Left")), ("right", _("Right"))]
+        elif self.split_mode == "horizontal":
+            return [("top", _("Top")), ("bottom", _("Bottom"))]
+        elif self.split_mode == "grid":
+            return [
+                ("top-left", _("Top-Left")), ("top-right", _("Top-Right")),
+                ("bottom-left", _("Bottom-Left")), ("bottom-right", _("Bottom-Right")),
+            ]
+        return []
+
+    def _pane_region_label(self, notebook):
+        """Maps a pane notebook to its region key under the current split
+        mode (see _get_region_options). None if there's nothing to filter."""
+        if notebook is None or self.split_mode is None:
+            return None
+        p0, p1, p2, p3 = self.pane_notebooks
+        if self.split_mode == "vertical":
+            return {p0: "left", p1: "right"}.get(notebook)
+        elif self.split_mode == "horizontal":
+            return {p0: "top", p1: "bottom"}.get(notebook)
+        elif self.split_mode == "grid":
+            return {p0: "top-left", p1: "top-right", p2: "bottom-left", p3: "bottom-right"}.get(notebook)
+        return None
+
+    def _move_all_tabs(self, src, dest):
+        """Moves every page from src to dest, preserving the same page and
+        tab-label widgets (so terminals/SFTP connections/tab_data stay valid)."""
+        if src is dest:
+            return
+        while src.get_n_pages() > 0:
+            child = src.get_nth_page(0)
+            tab_label = src.get_tab_label(child)
+            src.remove_page(0)
+            dest.append_page(child, tab_label)
+            self._mark_tab_draggable(dest, child)
+        if self.active_pane is src:
+            self._set_active_pane(dest)
+
+    def _detach_pane(self, notebook):
+        """Unparents a pane notebook from whatever Paned currently holds it,
+        so it can be reparented into a freshly-built layout tree."""
+        parent = notebook.get_parent()
+        if parent is None:
+            return
+        if isinstance(parent, Gtk.Paned):
+            if parent.get_start_child() is notebook:
+                parent.set_start_child(None)
+            elif parent.get_end_child() is notebook:
+                parent.set_end_child(None)
+
+    def _build_pane_layout_widget(self, mode):
+        """Builds the widget tree for the tab area for a given split mode.
+        Always rebuilds from scratch (cheap: at most 4 notebooks + 3 Paned) —
+        simpler and less bug-prone than patching an existing Paned tree."""
+        p0, p1, p2, p3 = self.pane_notebooks
+        for nb in self.pane_notebooks:
+            self._detach_pane(nb)
+
+        if mode is None:
+            return p0
+
+        def make_paned(orientation, start, end):
+            paned = Gtk.Paned(orientation=orientation, wide_handle=True, vexpand=True, hexpand=True)
+            paned.set_start_child(start)
+            paned.set_end_child(end)
+            paned.set_resize_start_child(True)
+            paned.set_resize_end_child(True)
+            paned.set_shrink_start_child(False)
+            paned.set_shrink_end_child(False)
+            # A brand new Paned would otherwise size its two children off
+            # their content (an empty, freshly-split pane has near-zero
+            # natural size), squeezing it into a sliver at one edge instead
+            # of an even 50/50 — force the divider to the midpoint once the
+            # Paned actually has a real size. A single realize+idle_add shot
+            # (as used for the SFTP local/remote split) isn't reliable here:
+            # this Paned is spliced into an ALREADY-running, already-mapped
+            # window on a button click, and one idle callback can easily run
+            # before the next real size-allocate pass — so instead poll every
+            # frame for up to ~0.5s until a nonzero size shows up.
+            attempts = [0]
+            def try_center():
+                size = paned.get_width() if orientation == Gtk.Orientation.HORIZONTAL else paned.get_height()
+                if size > 0:
+                    paned.set_position(size // 2)
+                    return False
+                attempts[0] += 1
+                return attempts[0] < 30
+            GLib.timeout_add(16, try_center)
+            return paned
+
+        if mode == "vertical":  # side-by-side (left/right)
+            return make_paned(Gtk.Orientation.HORIZONTAL, p0, p1)
+        elif mode == "horizontal":  # stacked (top/bottom)
+            return make_paned(Gtk.Orientation.VERTICAL, p0, p1)
+        elif mode == "grid":  # 2x2
+            left_col = make_paned(Gtk.Orientation.VERTICAL, p0, p2)
+            right_col = make_paned(Gtk.Orientation.VERTICAL, p1, p3)
+            return make_paned(Gtk.Orientation.HORIZONTAL, left_col, right_col)
+
+        return p0
+
+    def _apply_pane_layout(self):
+        new_root = self._build_pane_layout_widget(self.split_mode)
+        self.paned.set_end_child(new_root)
+
+    def _update_split_buttons_ui(self):
+        """Highlights whichever split button matches the current mode."""
+        active_button = {
+            "vertical": self.split_vertical_btn,
+            "horizontal": self.split_horizontal_btn,
+            "grid": self.split_grid_btn,
+        }.get(self.split_mode)
+        for button in (self.split_vertical_btn, self.split_horizontal_btn, self.split_grid_btn):
+            if button is active_button:
+                button.add_css_class("suggested-action")
+            else:
+                button.remove_css_class("suggested-action")
+
+    def on_split_button_clicked(self, target_mode):
+        """Handles the vertical/horizontal/grid split buttons.
+
+        Pressing the button for the CURRENTLY active mode cancels the split
+        (all tabs move back into pane 0). Otherwise transitions to the
+        target mode, merging tabs where panes are being removed:
+        - grid -> vertical: bottom row moves up into the top row per column.
+        - grid -> horizontal: right column moves left into the left column
+          per row (then relabeled so the 2-way invariant pane0/pane1 holds).
+        - vertical <-> horizontal: no tabs move, panes just re-orient.
+        - single/2-way -> grid: nothing to move, new panes start empty.
+        """
+        if self.split_mode == target_mode:
+            p0, p1, p2, p3 = self.pane_notebooks
+            for nb in (p1, p2, p3):
+                self._move_all_tabs(nb, p0)
+            self.split_mode = None
+        else:
+            p0, p1, p2, p3 = self.pane_notebooks
+            if self.split_mode == "grid":
+                if target_mode == "vertical":
+                    self._move_all_tabs(p2, p0)
+                    self._move_all_tabs(p3, p1)
+                elif target_mode == "horizontal":
+                    self._move_all_tabs(p1, p0)
+                    self._move_all_tabs(p3, p2)
+                    self._move_all_tabs(p2, p1)
+            self.split_mode = target_mode
+
+        self._apply_pane_layout()
+        self._update_split_buttons_ui()
+        self.update_menu_sensitivity()
 
     def on_toggle_sidebar(self, button):
         """Collapses or expands the left sidebar."""
@@ -612,7 +911,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     def update_menu_sensitivity(self, *args):
         """Updates menu item sensitivity based on the current state."""
         # "Close Tab"
-        can_close_tab = self.notebook.get_n_pages() > 0
+        can_close_tab = any(nb.get_n_pages() > 0 for nb in self.pane_notebooks)
         self.lookup_action("close-tab").set_enabled(can_close_tab)
 
         # "Edit" and "Delete"
@@ -918,25 +1217,27 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # Create a tab label with a close button
         tab_label_box, close_btn = self._create_tab_label("folder-remote-symbolic", host_config['name'])
 
-        # Add the new widget to the notebook
-        page_num = self.notebook.append_page(sftp_view, tab_label_box)
-        self.notebook.set_tab_reorderable(sftp_view, True)
-        self.notebook.set_current_page(page_num)
+        # Add the new widget to the active pane
+        target_notebook = self._get_active_notebook()
+        page_num = target_notebook.append_page(sftp_view, tab_label_box)
+        self._mark_tab_draggable(target_notebook, sftp_view)
+        target_notebook.set_current_page(page_num)
         sftp_view.grab_focus()
 
         # Connect the close button to a simple tab-closing lambda
-        close_btn.connect("clicked", lambda btn: self.notebook.remove_page(self.notebook.page_num(sftp_view)))
+        close_btn.connect("clicked", lambda btn: self.close_tab(sftp_view))
         self.tab_data[sftp_view] = {"type": "sftp", "config": host_config}
 
 
 
     # --- Handlers for the global menu ---
     def on_menu_close_tab(self, action, param):
-        """Closes the active tab."""
-        current_page_idx = self.notebook.get_current_page()
+        """Closes the active tab in the active pane."""
+        notebook = self._get_active_notebook()
+        current_page_idx = notebook.get_current_page()
         if current_page_idx < 0: return
 
-        page_widget = self.notebook.get_nth_page(current_page_idx)
+        page_widget = notebook.get_nth_page(current_page_idx)
         if not page_widget: return
 
         # ✨ Check if it's a terminal tab (has a PID)
@@ -944,7 +1245,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             terminal, pid = self.open_sessions[page_widget]
             self.on_tab_close_button_clicked(None, page_widget, pid)
         else: # It's an SFTP tab or something else without a process
-            self.notebook.remove_page(current_page_idx)
+            self.close_tab(page_widget)
 
     def on_menu_edit_rename(self, action, param):
         """Calls 'Edit' or 'Rename' depending on the node type."""
@@ -974,7 +1275,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Shows the 'About' window."""
         dialog = Adw.AboutWindow(transient_for=self)
         dialog.set_application_name("ThongSSH")
-        dialog.set_version("0.4.2")
+        dialog.set_version("0.5.1")
         dialog.set_license_type(Gtk.License.MIT_X11)
         dialog.set_comments(_("SSH client with a tree-like host structure"))
         dialog.set_copyright("© 2025 Mikhael Karpov")
@@ -1212,7 +1513,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def get_active_terminal(self):
         """Returns the active Vte.Terminal widget or None."""
-        current_page_widget = self.notebook.get_nth_page(self.notebook.get_current_page())
+        current_page_widget = self.get_active_terminal_widget()
         # scrolled_term is the key in self.open_sessions
         if current_page_widget and current_page_widget in self.open_sessions:
             terminal, pid = self.open_sessions[current_page_widget]
@@ -1220,9 +1521,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         return None
 
     def get_active_terminal_widget(self):
-        """Returns the container widget (ScrolledWindow) of the active tab."""
-        if self.notebook.get_n_pages() > 0:
-            return self.notebook.get_nth_page(self.notebook.get_current_page())
+        """Returns the container widget (ScrolledWindow) of the active tab
+        in the active pane."""
+        notebook = self._get_active_notebook()
+        if notebook.get_n_pages() > 0:
+            return notebook.get_nth_page(notebook.get_current_page())
         return None
 
     def _get_target_tab_widget(self):
@@ -1429,9 +1732,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
                 tab_label_box, close_btn = self._create_tab_label("utilities-terminal-symbolic", config['name'])
 
-                page_num = self.notebook.append_page(scrolled_term, tab_label_box)
-                self.notebook.set_tab_reorderable(scrolled_term, True)
-                self.notebook.set_current_page(page_num)
+                target_notebook = self._get_active_notebook()
+                page_num = target_notebook.append_page(scrolled_term, tab_label_box)
+                self._mark_tab_draggable(target_notebook, scrolled_term)
+                target_notebook.set_current_page(page_num)
                 terminal.grab_focus()
 
                 resolved_config = dict(config)
@@ -1486,12 +1790,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Shows the context menu for a notebook tab. Connected to 'released'."""
         tab_label_box = gesture.get_widget()
 
-        page_widget = None
-        for i in range(self.notebook.get_n_pages()):
-            child = self.notebook.get_nth_page(i)
-            if self.notebook.get_tab_label(child) == tab_label_box:
-                page_widget = child
-                break
+        _owner_pane, page_widget = self._find_pane_by_tab_label(tab_label_box)
 
         # ✨ Store the clicked tab so the context menu knows which tab to act on.
         if page_widget:
@@ -1584,39 +1883,31 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def close_tab(self, widget):
         """
-        Closes a tab, removes it from the notebook, and cleans up associated resources
-        like session data and timers.
+        Closes a tab, removes it from whichever pane notebook currently holds
+        it, and cleans up associated resources like session data and timers.
         """
-        """Uses .remove_page()"""
-        if widget in self.open_sessions:
-            page_num = self.notebook.page_num(widget)
+        owner = self._find_notebook_for_page_widget(widget)
+        if owner is not None:
+            page_num = owner.page_num(widget)
             if page_num != -1:
-                 self.notebook.remove_page(page_num)
-            
-            if self.notebook.get_n_pages() > 0:
-                def focus_active_terminal():
-                    active_terminal = self.get_active_terminal()
-                    if active_terminal: active_terminal.grab_focus()
-                GLib.idle_add(focus_active_terminal)
-
-            if widget in self.tab_data:
-                del self.tab_data[widget]
-
-            if widget in self.force_close_tabs:
-                self.force_close_tabs.remove(widget)
-
-            del self.open_sessions[widget]
+                owner.remove_page(page_num)
         else:
-            # It might be an SFTP tab or another non-session widget
-            page_num = self.notebook.page_num(widget)
-            if page_num != -1:
-                self.notebook.remove_page(page_num)
-            if widget in self.tab_data:
-                del self.tab_data[widget]
-            if widget in self.force_close_tabs:
-                self.force_close_tabs.remove(widget)
+            logging.warning("Attempted to close a tab that is not in any pane.")
 
-            logging.warning(f"Attempted to close a tab that is not in open_sessions.")
+        if widget in self.open_sessions:
+            del self.open_sessions[widget]
+
+        if widget in self.tab_data:
+            del self.tab_data[widget]
+
+        if widget in self.force_close_tabs:
+            self.force_close_tabs.remove(widget)
+
+        if owner is not None and owner.get_n_pages() > 0:
+            def focus_active_terminal():
+                active_terminal = self.get_active_terminal()
+                if active_terminal: active_terminal.grab_focus()
+            GLib.idle_add(focus_active_terminal)
 
     # --- Tab Context Menu Handlers ---
     def on_menu_tab_disconnect(self, action, param):
@@ -1676,22 +1967,29 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 # This is complex, for now, just open a new SFTP based on config
                 sftp_view = SftpWidget(tab_info["config"])
                 tab_label_box, close_btn = self._create_tab_label("folder-remote-symbolic", tab_info["config"]['name'])
-                page_num = self.notebook.append_page(sftp_view, tab_label_box)
-                self.notebook.set_tab_reorderable(sftp_view, True)
-                self.notebook.set_current_page(page_num)
-                close_btn.connect("clicked", lambda btn: self.notebook.remove_page(self.notebook.page_num(sftp_view)))
+                target_notebook = self._get_active_notebook()
+                page_num = target_notebook.append_page(sftp_view, tab_label_box)
+                self._mark_tab_draggable(target_notebook, sftp_view)
+                target_notebook.set_current_page(page_num)
+                close_btn.connect("clicked", lambda btn: self.close_tab(sftp_view))
                 self.tab_data[sftp_view] = {"type": "sftp", "config": tab_info["config"]}
             else: # terminal
                  self.start_session(tab_info["config"])
 
     def on_notebook_scroll_switch(self, controller, dx, dy):
-        """Handles mouse wheel scrolling over the notebook to switch tabs."""
+        """Handles mouse wheel scrolling over a tab label to switch tabs
+        within whichever pane that tab currently belongs to."""
+        tab_label_box = controller.get_widget()
+        notebook, _page_widget = self._find_pane_by_tab_label(tab_label_box)
+        if notebook is None:
+            return False
+
         # dy < 0 is scroll up, dy > 0 is scroll down
-        n_pages = self.notebook.get_n_pages()
+        n_pages = notebook.get_n_pages()
         if n_pages < 2:
             return False # Don't handle if there's nothing to switch to
 
-        current_page = self.notebook.get_current_page()
+        current_page = notebook.get_current_page()
 
         if dy < 0: # Scroll Up -> Previous Tab
             new_page = (current_page - 1 + n_pages) % n_pages
@@ -1700,7 +1998,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         else:
             return False # No vertical scroll
 
-        self.notebook.set_current_page(new_page)
+        notebook.set_current_page(new_page)
         return True # Event handled, stop propagation
 
     def on_menu_open_ssh_from_tab(self, action, param):

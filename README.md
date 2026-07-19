@@ -10,6 +10,14 @@ Just like the perfect pair of thongs, this client is barely there, but it holds 
 
 ThongSSH is for those who love minimalism. We've got a cute host panel so you never lose track of your servers.
 
+### 🆕 What's New in 0.5.1
+
+She's getting flexible — splits every which way:
+* **Multi-div split view** — three new header bar buttons let you split the tab area vertically (side by side), horizontally (stacked), or into a full 2x2 grid. Each div runs its own independent set of tabs. Hit the same button twice to snap back to one div (everything merges back together). Switch between vertical/horizontal and your tabs just re-orient, no shuffling. Drag a tab from one div straight into another whenever you want to rearrange.
+* **Active div highlight** — a subtle accent-colored outline shows which div is currently "listening" for new tabs, so double-clicking a host in the tree always lands where you expect.
+* **Batch Command learned to filter by div** — the "Select / Deselect All" row now has a "Divs" dropdown next to it. Split the view and it fills in with Left/Right, Top/Bottom, or all four quadrants, so you can blast a command at just the terminals in one section instead of everything at once.
+* **SFTP: New Folder** — right-click (even on empty space) in either the local or remote panel to create a new directory where you're standing.
+
 ### 🆕 What's New in 0.4.1
 
 She's been to the gym:

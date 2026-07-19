@@ -1086,36 +1086,53 @@ class SftpWidget(Gtk.Box):
         action_chmod.connect("activate", self.on_chmod_activated)
         self.sftp_action_group.add_action(action_chmod)
 
+        action_new_folder = Gio.SimpleAction.new("new-folder", None)
+        action_new_folder.connect("activate", self.on_new_folder_activated)
+        self.sftp_action_group.add_action(action_new_folder)
+
+        item_section = Gio.Menu()
+        item_section.append(_("Transfer"), "sftp.transfer-file")
+        item_section.append(_("Rename..."), "sftp.rename-file")
+        item_section.append(_("Change Permissions..."), "sftp.chmod-file")
+        item_section.append(_("Delete"), "sftp.delete-file")
+
         menu = Gio.Menu()
-        menu.append(_("Transfer"), "sftp.transfer-file")
-        menu.append(_("Rename..."), "sftp.rename-file")
-        menu.append(_("Change Permissions..."), "sftp.chmod-file")
-        menu.append(_("Delete"), "sftp.delete-file")
+        menu.append(_("New Folder..."), "sftp.new-folder")
+        menu.append_section(None, item_section)
 
         self.popover_file = Gtk.PopoverMenu.new_from_model(menu)
         self.popover_file.set_parent(self) # The popover is a child of the whole widget
 
     def on_view_right_click(self, gesture, n_press, x, y, view):
-        """Shows the context menu for a file/directory. This is the final, correct implementation."""
+        """Shows the context menu for a file/directory, or for empty space
+        (in which case only 'New Folder' is offered, for the current directory)."""
         # Stop the event from propagating further to prevent selection issues.
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        self.last_clicked_view = view
 
+        item_action_names = ("rename-file", "delete-file", "transfer-file", "chmod-file")
         path_info = view.get_path_at_pos(int(x), int(y))
+
         if not path_info:
             view.get_selection().unselect_all()
-            return
-
-        path, col, _, _ = path_info
-        # It's crucial to select the row *before* showing the menu.
-        view.get_selection().select_path(path)
-        self.last_clicked_view = view
-        model = view.get_model()
-
-        chmod_action = self.sftp_action_group.lookup_action("chmod-file")
-        if model.get_value(model.get_iter(path), COL_NAME) == "..":
-            if chmod_action: chmod_action.set_enabled(False)
+            for name in item_action_names:
+                action = self.sftp_action_group.lookup_action(name)
+                if action: action.set_enabled(False)
         else:
-            if chmod_action: chmod_action.set_enabled(True)
+            path, col, _, _ = path_info
+            # It's crucial to select the row *before* showing the menu.
+            view.get_selection().select_path(path)
+            model = view.get_model()
+
+            for name in ("rename-file", "delete-file", "transfer-file"):
+                action = self.sftp_action_group.lookup_action(name)
+                if action: action.set_enabled(True)
+
+            chmod_action = self.sftp_action_group.lookup_action("chmod-file")
+            if model.get_value(model.get_iter(path), COL_NAME) == "..":
+                if chmod_action: chmod_action.set_enabled(False)
+            else:
+                if chmod_action: chmod_action.set_enabled(True)
 
         translated_x, translated_y = view.translate_coordinates(self, x, y)
 
@@ -1160,6 +1177,41 @@ class SftpWidget(Gtk.Box):
                 self._log_message(_("Rename failed: {e}").format(e=e), is_error=True)
 
         thread = threading.Thread(target=rename_task)
+        thread.daemon = True
+        thread.start()
+
+    def on_new_folder_activated(self, action, param):
+        """Handles the 'New Folder' action from the context menu."""
+        if not self.last_clicked_view: return
+        is_local = (self.last_clicked_view == self.local_view)
+        parent_dir = self.current_local_path if is_local else self.current_remote_path
+        if not parent_dir:
+            self._log_message(_("Cannot create folder: no current directory."), is_error=True)
+            return
+
+        dialog = InputDialog(self.get_root(), title=_("New Folder"), message=_("Folder name:"), default_text=_("New Folder"))
+        dialog.run_async(lambda name: self._execute_mkdir(parent_dir, name, is_local))
+
+    def _execute_mkdir(self, parent_dir, name, is_local):
+        """Creates a new directory locally or remotely (runs in a thread)."""
+        if not name: return
+
+        def mkdir_task():
+            try:
+                if is_local:
+                    new_path = os.path.join(parent_dir, name)
+                    os.mkdir(new_path)
+                    self.ui_queue.put(lambda: self._load_local_directory(self.current_local_path))
+                else:
+                    new_path = os.path.join(parent_dir, name).replace('\\', '/')
+                    with self._sftp_lock:
+                        self.sftp_client.mkdir(new_path)
+                    self.ui_queue.put(lambda: self._load_remote_directory_threaded(self.current_remote_path))
+                self._log_message(_("Created directory: {path}").format(path=new_path))
+            except Exception as e:
+                self._log_message(_("Failed to create directory '{name}': {e}").format(name=name, e=e), is_error=True)
+
+        thread = threading.Thread(target=mkdir_task)
         thread.daemon = True
         thread.start()
 

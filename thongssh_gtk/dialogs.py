@@ -965,6 +965,9 @@ class BatchCommandDialog(Adw.Window):
     """
     Sends one command to a chosen set of currently open terminal tabs at
     once (never SFTP tabs — those have no shell to feed a command into).
+    The div filter dropdown (next to Select/Deselect All) narrows that set
+    to whichever split panes are checked — its options depend on the
+    window's current split mode (none/vertical/horizontal/grid).
     """
     def __init__(self, parent_window):
         super().__init__(transient_for=parent_window)
@@ -972,6 +975,7 @@ class BatchCommandDialog(Adw.Window):
         self.set_default_size(420, 480)
         self.set_title(_("Batch Command"))
         self._syncing_select_all = False
+        self._syncing_region_all = False
 
         header_bar = Adw.HeaderBar()
         send_button = Gtk.Button(label=_("Send"), css_classes=["suggested-action"])
@@ -992,36 +996,110 @@ class BatchCommandDialog(Adw.Window):
         self.close_after_send_check = Gtk.CheckButton(label=_("Close window after send"), active=True)
         main_box.append(self.close_after_send_check)
 
-        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin_top=6)
-
+        # --- "Select / Deselect All" + the div filter dropdown beside it ---
+        top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, margin_top=6)
         self.select_all_check = Gtk.CheckButton(label=_("Select / Deselect All"), active=True)
         self.select_all_check.connect("toggled", self.on_select_all_toggled)
-        list_box.append(self.select_all_check)
-        list_box.append(Gtk.Separator(margin_top=3, margin_bottom=3))
+        top_row.append(self.select_all_check)
+
+        # (region key, checkbutton) for whichever panes exist in the current
+        # split mode — e.g. [("left", ...), ("right", ...)] for a vertical
+        # split, or the 4 quadrants for a grid. Empty when there's only one
+        # pane, since there'd be nothing to filter by.
+        self.region_checks = []
+        self.region_menu_button = Gtk.MenuButton(label=_("Divs"), halign=Gtk.Align.END, hexpand=True)
+        region_options = parent_window._get_region_options()
+        if region_options:
+            popover = Gtk.Popover()
+            popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3,
+                                   margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+            self.region_all_check = Gtk.CheckButton(label=_("All divs"), active=True)
+            self.region_all_check.connect("toggled", self.on_region_all_toggled)
+            popover_box.append(self.region_all_check)
+            popover_box.append(Gtk.Separator(margin_top=3, margin_bottom=3))
+            for key, label in region_options:
+                check = Gtk.CheckButton(label=label, active=True)
+                check.connect("toggled", self.on_region_toggled)
+                popover_box.append(check)
+                self.region_checks.append((key, check))
+            popover.set_child(popover_box)
+            self.region_menu_button.set_popover(popover)
+        else:
+            self.region_menu_button.set_sensitive(False)
+            self.region_menu_button.set_tooltip_text(_("Split the view to filter by pane"))
+        top_row.append(self.region_menu_button)
+        main_box.append(top_row)
+
+        self.terminal_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin_top=6)
+        scrolled = Gtk.ScrolledWindow(vexpand=True)
+        scrolled.set_child(self.terminal_list_box)
+        main_box.append(scrolled)
 
         # (checkbutton, page_widget) — page_widget is the key into
         # parent_window.open_sessions, which holds the actual Vte.Terminal.
+        # Rebuilt whenever the div filter changes.
         self.terminal_checks = []
-        for page_widget, info in parent_window.tab_data.items():
+        self._rebuild_terminal_list()
+
+        self.set_content(content_box)
+
+    def _rebuild_terminal_list(self):
+        """Repopulates the terminal checklist from tab_data, restricted to
+        whichever div(s) are currently checked in the region filter."""
+        child = self.terminal_list_box.get_first_child()
+        while child is not None:
+            next_child = child.get_next_sibling()
+            self.terminal_list_box.remove(child)
+            child = next_child
+
+        active_regions = None
+        if self.region_checks:
+            active_regions = {key for key, check in self.region_checks if check.get_active()}
+
+        self.terminal_checks = []
+        for page_widget, info in self.parent_window.tab_data.items():
             if info.get("type") != "terminal":
                 continue
-            if page_widget not in parent_window.open_sessions:
+            if page_widget not in self.parent_window.open_sessions:
                 continue
+            if active_regions is not None:
+                owner_pane = self.parent_window._find_notebook_for_page_widget(page_widget)
+                if self.parent_window._pane_region_label(owner_pane) not in active_regions:
+                    continue
             name = info.get("config", {}).get("name", _("Unnamed"))
             check = Gtk.CheckButton(label=name, active=True)
             check.connect("toggled", self.on_individual_toggled)
-            list_box.append(check)
+            self.terminal_list_box.append(check)
             self.terminal_checks.append((check, page_widget))
 
         if not self.terminal_checks:
             self.select_all_check.set_sensitive(False)
-            list_box.append(Gtk.Label(label=_("No open terminal sessions."), css_classes=["dim-label"]))
+            self.terminal_list_box.append(Gtk.Label(label=_("No open terminal sessions."), css_classes=["dim-label"]))
+            return
 
-        scrolled = Gtk.ScrolledWindow(vexpand=True)
-        scrolled.set_child(list_box)
-        main_box.append(scrolled)
+        self.select_all_check.set_sensitive(True)
+        self._syncing_select_all = True
+        self.select_all_check.set_active(all(check.get_active() for check, _widget in self.terminal_checks))
+        self._syncing_select_all = False
 
-        self.set_content(content_box)
+    def on_region_all_toggled(self, checkbutton):
+        if self._syncing_region_all:
+            return
+        self._syncing_region_all = True
+        active = checkbutton.get_active()
+        for _key, check in self.region_checks:
+            check.set_active(active)
+        self._syncing_region_all = False
+        self._rebuild_terminal_list()
+
+    def on_region_toggled(self, checkbutton):
+        if self._syncing_region_all:
+            return
+        self._syncing_region_all = True
+        all_active = all(check.get_active() for _key, check in self.region_checks)
+        self.region_all_check.set_active(all_active)
+        self._syncing_region_all = False
+        self._rebuild_terminal_list()
 
     def on_select_all_toggled(self, checkbutton):
         if self._syncing_select_all:
@@ -1045,6 +1123,9 @@ class BatchCommandDialog(Adw.Window):
         if not command:
             return
         payload = (command + "\n").encode("utf-8")
+
+        sent = 0
+        errors = []
         for check, page_widget in self.terminal_checks:
             if not check.get_active():
                 continue
@@ -1052,7 +1133,28 @@ class BatchCommandDialog(Adw.Window):
             if session is None:
                 continue
             terminal, pid = session
-            terminal.feed_child(payload)
+            try:
+                terminal.feed_child(payload)
+                sent += 1
+            except Exception as e:
+                errors.append(str(e))
+
+        if errors:
+            # Fail loud instead of silently doing nothing, so a real error
+            # here is visible rather than looking like a dead Send button.
+            error_dialog = Adw.MessageDialog(
+                transient_for=self,
+                heading=_("Some terminals didn't receive the command"),
+                body="\n".join(errors[:5]),
+            )
+            error_dialog.add_response("ok", _("OK"))
+            error_dialog.present()
+            return
+
+        if sent == 0:
+            # Nothing was actually selected/available — leave the window
+            # open rather than closing on a no-op send.
+            return
 
         if self.close_after_send_check.get_active():
             self.close()
