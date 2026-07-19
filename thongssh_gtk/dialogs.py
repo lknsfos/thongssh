@@ -12,15 +12,65 @@ from .keyring import KeyringManager
 # Placeholder for future internationalization (i18n)
 _ = lambda s: s
 
-class InputDialog(Adw.Window):
+
+def _populate_groups_combo(combo_group, group_iters, tree_store, active_parent_iter):
     """
-    A simple dialog with a single text entry.
-    Used for "Rename" and "Login Prompt".
+    Recursively populates a group Gtk.ComboBoxText with groups from a
+    Gtk.TreeStore, and selects active_parent_iter's group if given.
+    Shared by HostDialog and GroupDialog, which both keep their own
+    `self.combo_group`/`self.group_iters`/`self.tree_store` for this.
+    """
+    combo_group.append("root", _("Root (/)"))
+    group_iters["root"] = None  # iter for the root
+
+    def iter_groups(model, tree_iter, prefix=""):
+        node_type = model.get_value(tree_iter, COL_TYPE)
+        if node_type == "group":
+            name = model.get_value(tree_iter, COL_NAME)
+            display_name = f"{prefix} {name}"
+
+            combo_group.append(display_name, display_name)
+            group_iters[display_name] = tree_iter.copy()  # Copy the iter!
+
+            child_iter = model.iter_children(tree_iter)
+            while child_iter:
+                iter_groups(model, child_iter, prefix + "  └─")
+                child_iter = model.iter_next(child_iter)
+
+    root_iter = tree_store.get_iter_first()
+    while root_iter:
+        iter_groups(tree_store, root_iter)
+        root_iter = tree_store.iter_next(root_iter)
+
+    combo_group.set_active_id("root")
+
+    if active_parent_iter:
+        for k, v in group_iters.items():
+            if v and tree_store.get_path(v) == tree_store.get_path(active_parent_iter):
+                combo_group.set_active_id(k)
+                return
+
+
+class ResponseDialog(Adw.Window):
+    """
+    Common base for the modal dialogs below: adds a 'response' signal (with
+    an int response code, mirroring Gtk.ResponseType) and the emit-then-close
+    helper they all shared as identical copy-pasted code.
     """
     __gsignals__ = {
         'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
     }
 
+    def response(self, response_id):
+        self.emit("response", response_id)
+        self.close()
+
+
+class InputDialog(ResponseDialog):
+    """
+    A simple dialog with a single text entry.
+    Used for "Rename" and "Login Prompt".
+    """
     def __init__(self, parent, title, message, default_text="", is_password=False):
         super().__init__(transient_for=parent, modal=True)
         self.set_default_size(400, -1)
@@ -67,10 +117,6 @@ class InputDialog(Adw.Window):
     def get_text(self):
         return self.entry.get_text().strip()
 
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
-
     def run_async(self, callback):
         """Asynchronous launch for login prompt."""
         def on_response(dialog, response):
@@ -81,14 +127,10 @@ class InputDialog(Adw.Window):
         self.connect("response", on_response)
         self.present()
 
-class MessageDialog(Adw.Window):
+class MessageDialog(ResponseDialog):
     """
     A simple wrapper around Adw.MessageDialog to provide an async run method.
     """
-    __gsignals__ = {
-        'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
-    }
-
     def __init__(self, parent, heading, body=None, buttons=None):
         super().__init__(transient_for=parent, modal=True)
         self.set_default_size(400, -1)
@@ -121,10 +163,6 @@ class MessageDialog(Adw.Window):
         self.dialog.set_default_response(f"response_{Gtk.ResponseType.OK}" if buttons else "ok")
         self.dialog.set_close_response(f"response_{Gtk.ResponseType.CANCEL}" if buttons else "ok")
 
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
-
     def run_async(self, callback):
         """Helper to run the dialog and get the result in a callback."""
         def on_response(dialog_widget, response_id_str):
@@ -135,12 +173,8 @@ class MessageDialog(Adw.Window):
         self.dialog.connect("response", on_response)
         self.dialog.present() # Present the actual dialog, not the wrapper
 
-class PermissionsDialog(Adw.Window):
+class PermissionsDialog(ResponseDialog):
     """A dialog for viewing and editing file permissions (chmod)."""
-
-    __gsignals__ = {
-        'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
-    }
 
     def __init__(self, parent, initial_mode):
         super().__init__(transient_for=parent, modal=True)
@@ -241,10 +275,6 @@ class PermissionsDialog(Adw.Window):
         except (ValueError, TypeError):
             return 0 # Or handle error appropriately
 
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
-
     def run_async(self, callback):
         """Helper to run the dialog and get the result in a callback."""
         def on_response(dialog, response_id):
@@ -253,11 +283,7 @@ class PermissionsDialog(Adw.Window):
         self.connect("response", on_response)
         self.present()
 
-class HostDialog(Adw.Window):
-
-    __gsignals__ = {
-        'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
-    }
+class HostDialog(ResponseDialog):
 
     def __init__(self, parent_window, tree_store, host_data_to_edit=None, parent_iter=None):
 
@@ -464,41 +490,7 @@ class HostDialog(Adw.Window):
         dialog.destroy()
 
     def populate_groups_combo(self, active_parent_iter):
-        """Recursively populates the ComboBox with groups from the TreeStore."""
-        self.combo_group.append("root", _("Root (/)"))
-        self.group_iters["root"] = None # iter for the root
-
-        def iter_groups(model, tree_iter, prefix=""):
-            node_type = model.get_value(tree_iter, COL_TYPE)
-            if node_type == "group":
-                name = model.get_value(tree_iter, COL_NAME)
-                display_name = f"{prefix} {name}"
-
-                self.combo_group.append(display_name, display_name)
-                self.group_iters[display_name] = tree_iter.copy() # Copy the iter!
-
-                # Recurse
-                child_iter = model.iter_children(tree_iter)
-                while child_iter:
-                    iter_groups(model, child_iter, prefix + "  └─")
-                    child_iter = model.iter_next(child_iter)
-
-        # Start from the root
-        root_iter = self.tree_store.get_iter_first()
-        while root_iter:
-            iter_groups(self.tree_store, root_iter)
-            root_iter = self.tree_store.iter_next(root_iter)
-
-        # Set the active item
-        if active_parent_iter:
-            # Find the group name by its iter
-            active_name = self.tree_store.get_value(active_parent_iter, COL_NAME)
-            for k, v in self.group_iters.items():
-                if v and self.tree_store.get_path(v) == self.tree_store.get_path(active_parent_iter):
-                    self.combo_group.set_active_id(k)
-                    return
-
-        self.combo_group.set_active_id("root")
+        _populate_groups_combo(self.combo_group, self.group_iters, self.tree_store, active_parent_iter)
 
     def populate_fields(self):
         """Fills the fields with data from self.host_config (Edit mode)."""
@@ -537,10 +529,6 @@ class HostDialog(Adw.Window):
         name_ok = len(self.entry_name.get_text().strip()) > 0
         host_ok = len(self.entry_host.get_text().strip()) > 0
         self.ok_button.set_sensitive(name_ok and host_ok)
-
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
 
     def on_clear_password(self, button):
         """Handles click on the 'clear password' button."""
@@ -590,11 +578,7 @@ class HostDialog(Adw.Window):
 
 
 # --- CLASS: Add Group Dialog ---
-class GroupDialog(Adw.Window):
-
-    __gsignals__ = {
-        'response': (GObject.SignalFlags.RUN_FIRST, None, (int,))
-    }
+class GroupDialog(ResponseDialog):
 
     def __init__(self, parent_window, tree_store, parent_iter=None):
         super().__init__(transient_for=parent_window, modal=True)
@@ -632,7 +616,6 @@ class GroupDialog(Adw.Window):
         self.combo_group = Gtk.ComboBoxText()
         content_box.append(self.combo_group)
 
-        # Populate the ComboBox
         self.group_iters = {}
         self.populate_groups_combo(parent_iter)
 
@@ -642,46 +625,8 @@ class GroupDialog(Adw.Window):
         text = entry.get_text().strip()
         self.ok_button.set_sensitive(len(text) > 0)
 
-    def response(self, response_id):
-        self.emit("response", response_id)
-        self.close()
-
     def populate_groups_combo(self, active_parent_iter):
-        """Recursively populates the ComboBox with groups from the TreeStore."""
-        self.combo_group.append("root", _("Root (/)"))
-        self.group_iters["root"] = None # iter for the root
-
-        def iter_groups(model, tree_iter, prefix=""):
-            node_type = model.get_value(tree_iter, COL_TYPE)
-            if node_type == "group":
-                name = model.get_value(tree_iter, COL_NAME)
-                display_name = f"{prefix} {name}"
-
-                self.combo_group.append(display_name, display_name)
-                self.group_iters[display_name] = tree_iter.copy() # Copy the iter!
-
-                # Recurse
-                child_iter = model.iter_children(tree_iter)
-                while child_iter:
-                    iter_groups(model, child_iter, prefix + "  └─")
-                    child_iter = model.iter_next(child_iter)
-
-        # Start from the root
-        root_iter = self.tree_store.get_iter_first()
-        while root_iter:
-            iter_groups(self.tree_store, root_iter)
-            root_iter = self.tree_store.iter_next(root_iter)
-
-        # Set the active item (defaults to "Root")
-        self.combo_group.set_active_id("root")
-
-        if active_parent_iter:
-            # Find the group name by its iter
-            active_name = self.tree_store.get_value(active_parent_iter, COL_NAME)
-            for k, v in self.group_iters.items():
-                if v and self.tree_store.get_path(v) == self.tree_store.get_path(active_parent_iter):
-                    self.combo_group.set_active_id(k)
-                    return
+        _populate_groups_combo(self.combo_group, self.group_iters, self.tree_store, active_parent_iter)
 
     def get_data(self):
         new_name = self.entry_name.get_text().strip()
@@ -695,6 +640,7 @@ class GroupDialog(Adw.Window):
 class SettingsDialog(Adw.Window):
     def __init__(self, parent_window, settings_manager):
         super().__init__(transient_for=parent_window, modal=True)
+        self.parent_window = parent_window
         self.settings_manager = settings_manager
 
         self.set_default_size(600, 450)
@@ -823,6 +769,29 @@ class SettingsDialog(Adw.Window):
 
         group_commands.add(commands_box)
 
+        # --- Interface Page ---
+        page_interface = Adw.PreferencesPage()
+        page_interface.set_title(_("Interface"))
+        page_interface.set_icon_name("preferences-desktop-appearance-symbolic")
+
+        group_logo = Adw.PreferencesGroup(title=_("Logo"))
+        page_interface.add(group_logo)
+
+        # (label, settings value / icon file stem without extension)
+        self._icon_options = [
+            (_("Safe"), "thongssh"),
+            (_("Original"), "thongssh_orig"),
+        ]
+        icon_labels = [label for label, stem in self._icon_options]
+        self.icon_row = Adw.ComboRow(title=_("App Icon"), model=Gtk.StringList.new(icon_labels))
+        current_icon_stem = self.settings_manager.get("interface.icon")
+        try:
+            current_icon_index = [stem for label, stem in self._icon_options].index(current_icon_stem)
+        except ValueError:
+            current_icon_index = 0
+        self.icon_row.set_selected(current_icon_index)
+        group_logo.add(self.icon_row)
+
         # --- SFTP Page ---
         page_sftp = Adw.PreferencesPage()
         page_sftp.set_title(_("SFTP"))
@@ -873,6 +842,7 @@ class SettingsDialog(Adw.Window):
         self.stack.add_titled_with_icon(page_sftp, "sftp", _("SFTP"), "folder-remote-symbolic")
         self.stack.add_titled_with_icon(page_client, "client", _("Client Options"), "network-wired-symbolic")
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
+        self.stack.add_titled_with_icon(page_interface, "interface", _("Interface"), "preferences-desktop-appearance-symbolic")
 
         for page in self.stack.get_pages():
             row = Adw.ActionRow(title=page.get_title())
@@ -927,9 +897,19 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("sftp.remote_default_sort_column", sort_col_map_rev.get(self.sftp_remote_sort_col_row.get_selected(), "name"))
         self.settings_manager.set("sftp.remote_default_sort_direction", sort_dir_map_rev.get(self.sftp_remote_sort_dir_row.get_selected(), "asc"))
 
-
+        icon_stem = self._icon_options[self.icon_row.get_selected()][1]
+        self.settings_manager.set("interface.icon", icon_stem)
 
         self.settings_manager.save()
+
+        # Apply the icon change immediately — the window's own icon, and the
+        # macOS Dock icon (About dialog just reads the setting fresh next
+        # time it's opened, no extra work needed there).
+        self.parent_window.set_icon_name(icon_stem)
+        app = self.parent_window.get_application()
+        if app is not None and hasattr(app, "apply_macos_dock_icon"):
+            app.apply_macos_dock_icon()
+
         self.close()
 
     def on_command_edited(self, widget, path, text, column_index):
@@ -977,6 +957,104 @@ class SettingsDialog(Adw.Window):
             self.sftp_sort_col_row.set_selected(sort_col_map.get(DEFAULT_SETTINGS["sftp.local_default_sort_column"], 0))
             sort_dir_map = {"asc": 0, "desc": 1}
             self.sftp_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.local_default_sort_direction"], 0))
-
             self.sftp_remote_sort_col_row.set_selected(sort_col_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_column"], 0))
             self.sftp_remote_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_direction"], 0))
+
+
+class BatchCommandDialog(Adw.Window):
+    """
+    Sends one command to a chosen set of currently open terminal tabs at
+    once (never SFTP tabs — those have no shell to feed a command into).
+    """
+    def __init__(self, parent_window):
+        super().__init__(transient_for=parent_window)
+        self.parent_window = parent_window
+        self.set_default_size(420, 480)
+        self.set_title(_("Batch Command"))
+        self._syncing_select_all = False
+
+        header_bar = Adw.HeaderBar()
+        send_button = Gtk.Button(label=_("Send"), css_classes=["suggested-action"])
+        send_button.connect("clicked", self.on_send_clicked)
+        header_bar.pack_end(send_button)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_box.append(header_bar)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
+                            margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        content_box.append(main_box)
+
+        self.command_entry = Gtk.Entry(placeholder_text=_("Command to send to selected terminals"))
+        self.command_entry.connect("activate", self.on_send_clicked)
+        main_box.append(self.command_entry)
+
+        self.close_after_send_check = Gtk.CheckButton(label=_("Close window after send"), active=True)
+        main_box.append(self.close_after_send_check)
+
+        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin_top=6)
+
+        self.select_all_check = Gtk.CheckButton(label=_("Select / Deselect All"), active=True)
+        self.select_all_check.connect("toggled", self.on_select_all_toggled)
+        list_box.append(self.select_all_check)
+        list_box.append(Gtk.Separator(margin_top=3, margin_bottom=3))
+
+        # (checkbutton, page_widget) — page_widget is the key into
+        # parent_window.open_sessions, which holds the actual Vte.Terminal.
+        self.terminal_checks = []
+        for page_widget, info in parent_window.tab_data.items():
+            if info.get("type") != "terminal":
+                continue
+            if page_widget not in parent_window.open_sessions:
+                continue
+            name = info.get("config", {}).get("name", _("Unnamed"))
+            check = Gtk.CheckButton(label=name, active=True)
+            check.connect("toggled", self.on_individual_toggled)
+            list_box.append(check)
+            self.terminal_checks.append((check, page_widget))
+
+        if not self.terminal_checks:
+            self.select_all_check.set_sensitive(False)
+            list_box.append(Gtk.Label(label=_("No open terminal sessions."), css_classes=["dim-label"]))
+
+        scrolled = Gtk.ScrolledWindow(vexpand=True)
+        scrolled.set_child(list_box)
+        main_box.append(scrolled)
+
+        self.set_content(content_box)
+
+    def on_select_all_toggled(self, checkbutton):
+        if self._syncing_select_all:
+            return
+        self._syncing_select_all = True
+        active = checkbutton.get_active()
+        for check, _widget in self.terminal_checks:
+            check.set_active(active)
+        self._syncing_select_all = False
+
+    def on_individual_toggled(self, checkbutton):
+        if self._syncing_select_all:
+            return
+        self._syncing_select_all = True
+        all_active = all(check.get_active() for check, _widget in self.terminal_checks)
+        self.select_all_check.set_active(all_active)
+        self._syncing_select_all = False
+
+    def on_send_clicked(self, *args):
+        command = self.command_entry.get_text()
+        if not command:
+            return
+        payload = (command + "\n").encode("utf-8")
+        for check, page_widget in self.terminal_checks:
+            if not check.get_active():
+                continue
+            session = self.parent_window.open_sessions.get(page_widget)
+            if session is None:
+                continue
+            terminal, pid = session
+            terminal.feed_child(payload)
+
+        if self.close_after_send_check.get_active():
+            self.close()
+        else:
+            self.command_entry.set_text("")

@@ -24,6 +24,7 @@ DEFAULT_SETTINGS = {
     "sftp.remote_default_sort_column": "name", # name, size, date
     "sftp.remote_default_sort_direction": "asc", # asc, desc
     "terminal.close_on_disconnect": True, # ✨ NEW: Whether to close tab on disconnect
+    "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
 }
 
 class SettingsManager:
@@ -40,13 +41,12 @@ class SettingsManager:
         try:
             with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
                 loaded_settings = json.load(f)
-            # Обновляем только существующие ключи, чтобы не потерять новые при обновлении
+            # Only update existing keys, so new defaults added by an app update aren't lost
             for key in self.settings:
                 if key in loaded_settings:
                     self.settings[key] = loaded_settings[key]
         except (json.JSONDecodeError, IOError) as e:
             logging.error(f"Failed to load settings: {e}. Using defaults.")
-            # В случае ошибки, можно создать бэкап
             if SETTINGS_FILE.exists():
                 SETTINGS_FILE.rename(f"{SETTINGS_FILE}.bak")
 

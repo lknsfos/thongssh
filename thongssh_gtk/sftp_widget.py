@@ -57,7 +57,6 @@ class SftpWidget(Gtk.Box):
         self.host_config = host_config
         self.settings = SettingsManager()
 
-        # ✨ Set initial local path from settings
         default_path_str = self.settings.get("sftp.local_default_path")
         default_path = Path(default_path_str.replace("~", str(Path.home()))).resolve()
         if default_path.is_dir():
@@ -81,31 +80,40 @@ class SftpWidget(Gtk.Box):
         self.file_monitors = {} # {local_temp_path: (monitor, remote_path)}
         self._log_message(f"Created temporary directory for remote editing: {self.temp_dir}")
 
-        # --- ABSOLUTELY FIXED 50/50 LAYOUT ---
-        # [ Homogeneous Box: [Frame: Local] | [Frame: Remote] ]
+        # --- RESIZABLE LAYOUT ---
+        # [ Paned (H): [Frame: Local] | [Frame: Remote] ]  <- drag the handle to resize
         # [ Box: Button > | Button < ]
+        # [ Paned (V) divider, drag to resize the log panel's height ]
         # [ Log Panel             ]
 
-        # 1. A horizontal box that will hold the two panels.
-        panels_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, vexpand=True, hexpand=True)
-        panels_box.set_homogeneous(True) # This is the key: force equal size for all children.
-        self.append(panels_box)
+        # 1. A horizontal paned holding the two panels — drag the handle in the
+        #    middle to resize them relative to each other.
+        hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL, vexpand=True, hexpand=True, wide_handle=True)
 
         # 2. The left panel (Local File Manager).
         local_panel = self._create_local_panel()
-        panels_box.append(local_panel)
+        hpaned.set_start_child(local_panel)
+        hpaned.set_resize_start_child(True)
+        hpaned.set_shrink_start_child(False)
 
         # 3. The right panel (Remote).
         right_panel = self._create_remote_panel()
-        panels_box.append(right_panel)
-        
+        hpaned.set_end_child(right_panel)
+        hpaned.set_resize_end_child(True)
+        hpaned.set_shrink_end_child(False)
+
+        # Start the handle at the middle, same as the old fixed 50/50 layout.
+        hpaned.connect("realize", lambda w: GLib.idle_add(
+            lambda: w.set_position(w.get_width() // 2) if w.get_width() > 0 else None))
+
         # Initial load
         self._load_local_directory(self.current_local_path)
 
-        # 4. A centered box for the transfer buttons.
-        self.button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, vexpand=False, hexpand=False, halign=Gtk.Align.CENTER)
+        # 4. The transfer buttons, kept centered ON the local/remote divider
+        #    so they still visually mean "left panel <-> right panel" once
+        #    that divider is draggable instead of fixed at the midpoint.
+        self.button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, vexpand=False, hexpand=False, halign=Gtk.Align.START)
         self.button_box.set_sensitive(False) # Disabled until connection is established
-        self.append(self.button_box)
         upload_button = Gtk.Button(label=">")
         upload_button.connect("clicked", self.on_upload_clicked)
         upload_button.set_tooltip_text(_("Upload selected to remote"))
@@ -115,20 +123,51 @@ class SftpWidget(Gtk.Box):
         self.button_box.append(upload_button)
         self.button_box.append(download_button)
 
+        # An invisible spacer sized to (divider position - half the button
+        # row's width), so the button row's center lands exactly on the
+        # divider. Driven synchronously off "notify::position" — no idle_add,
+        # no margin recomputation racing against layout (that's what caused
+        # the buttons to drift on their own before).
+        divider_spacer = Gtk.Box()
+
+        def _sync_divider_spacer(paned, *_args):
+            _, natural_width, _, _ = self.button_box.measure(Gtk.Orientation.HORIZONTAL, -1)
+            divider_spacer.set_property("width-request", max(paned.get_position() - natural_width // 2, 0))
+
+        hpaned.connect("notify::position", _sync_divider_spacer)
+        _sync_divider_spacer(hpaned)
+
+        button_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, hexpand=True)
+        button_row.append(divider_spacer)
+        button_row.append(self.button_box)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, vexpand=True, hexpand=True)
+        content_box.append(hpaned)
+        content_box.append(button_row)
+
         # 5. The log panel at the bottom.
-        log_frame = Gtk.Frame(height_request=100, vexpand=False)
+        log_frame = Gtk.Frame(vexpand=True)
         log_scrolled = Gtk.ScrolledWindow()
         log_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.log_view = Gtk.TextView(editable=False, cursor_visible=False)
         log_scrolled.set_child(self.log_view)
         log_frame.set_child(log_scrolled)
-        
-        # ✨ Add scroll controller to log view to prevent scroll events from propagating to notebook
-        log_scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
-        log_scroll_controller.connect("scroll", self._on_log_scroll, log_scrolled)
-        self.log_view.add_controller(log_scroll_controller)
-        
-        self.append(log_frame)
+
+        # 6. A vertical paned between the main content and the log panel —
+        #    drag its handle to resize the log panel's height.
+        vpaned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL, vexpand=True, hexpand=True, wide_handle=True)
+        vpaned.set_start_child(content_box)
+        vpaned.set_resize_start_child(True)
+        vpaned.set_shrink_start_child(False)
+        vpaned.set_end_child(log_frame)
+        vpaned.set_resize_end_child(True)
+        vpaned.set_shrink_end_child(True)
+
+        # Start with roughly the old fixed 100px log height, still adjustable afterwards.
+        vpaned.connect("realize", lambda w: GLib.idle_add(
+            lambda: w.set_position(max(w.get_height() - 100, 100)) if w.get_height() > 0 else None))
+
+        self.append(vpaned)
 
         # Start the connection process
         self.setup_actions_and_popovers()
@@ -136,11 +175,6 @@ class SftpWidget(Gtk.Box):
         GLib.timeout_add(100, self._process_ui_queue)
         self.connection_check_timer_id = GLib.timeout_add_seconds(15, self._check_connection_and_reconnect) # Check connection every 15 seconds
         self.connect("unrealize", self.on_widget_destroy)
-        
-        # ✨ Add a global scroll controller to the entire widget to prevent scroll events from propagating to notebook
-        global_scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
-        global_scroll_controller.connect("scroll", self._on_global_scroll)
-        self.add_controller(global_scroll_controller)
 
     def reconnect(self):
         """Public method to trigger a reconnection."""
@@ -260,7 +294,6 @@ class SftpWidget(Gtk.Box):
 
             self.local_view.append_column(column)
 
-        # ✨ Set initial sort order from settings
         sort_col_map = {"name": COL_NAME, "size": COL_SIZE_BYTES, "date": COL_MODIFIED_TS}
         sort_dir_map = {"asc": Gtk.SortType.ASCENDING, "desc": Gtk.SortType.DESCENDING}
         sort_col = sort_col_map.get(self.settings.get("sftp.local_default_sort_column"), COL_NAME)
@@ -272,12 +305,6 @@ class SftpWidget(Gtk.Box):
         right_click_gesture.connect("pressed", self.on_view_right_click, self.local_view)
         self.local_view.add_controller(right_click_gesture)
 
-        # Add a scroll controller to prevent scroll events from propagating to the notebook
-        scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
-        scroll_controller.connect("scroll", self._on_view_scroll, scrolled_window)
-        self.local_view.add_controller(scroll_controller)
-
-        # ✨ Setup drag and drop for local view
         self._setup_drag_source(self.local_view, is_local=True)
         self._setup_drop_target(self.local_view, is_local=True)
 
@@ -325,11 +352,6 @@ class SftpWidget(Gtk.Box):
         right_click_gesture.connect("pressed", self.on_view_right_click, self.remote_view)
         self.remote_view.add_controller(right_click_gesture)
 
-        # Add a scroll controller to prevent scroll events from propagating to the notebook
-        scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
-        scroll_controller.connect("scroll", self._on_view_scroll, scrolled_window)
-        self.remote_view.add_controller(scroll_controller)
-
         column_definitions = [
             (_("Name"), COL_NAME), (_("Size"), COL_SIZE_BYTES),
             (_("Date Modified"), COL_MODIFIED_TS), (_("Permissions"), None) # Permissions column is not sortable
@@ -363,14 +385,12 @@ class SftpWidget(Gtk.Box):
                     column.add_attribute(renderer, "text", COL_PERMS_STR)
             self.remote_view.append_column(column)
 
-        # ✨ Set initial sort order from settings for remote panel
         sort_col_map = {"name": COL_NAME, "size": COL_SIZE_BYTES, "date": COL_MODIFIED_TS}
         sort_dir_map = {"asc": Gtk.SortType.ASCENDING, "desc": Gtk.SortType.DESCENDING}
         sort_col = sort_col_map.get(self.settings.get("sftp.remote_default_sort_column"), COL_NAME)
         sort_dir = sort_dir_map.get(self.settings.get("sftp.remote_default_sort_direction"), Gtk.SortType.ASCENDING)
         self.remote_sortable_model.set_sort_column_id(sort_col, sort_dir)
 
-        # ✨ Setup drag and drop for remote view
         self._setup_drag_source(self.remote_view, is_local=False)
         self._setup_drop_target(self.remote_view, is_local=False)
 
@@ -644,33 +664,6 @@ class SftpWidget(Gtk.Box):
             # If we reach here, it means all attempts failed.
             self._log_message(_("Authentication failed. Please check credentials and connection."), is_error=True)
             self.is_reconnecting = False # Reset the flag on total failure
-
-    def _make_progress_callback(self, filename, total_size):
-        """Creates a callback function for paramiko to track file transfer progress."""
-        import time
-        last_percent = -1
-        last_update_time = 0
-
-        def progress(bytes_transferred, _total_bytes):
-            nonlocal last_percent, last_update_time
-            if total_size == 0:
-                return
-
-            current_time = time.time()
-            percent = int((bytes_transferred / total_size) * 100)
-
-            # Log progress in increments of 25% AND only if 5 seconds passed to avoid UI flooding
-            # This is very conservative to prevent any blocking
-            if percent >= last_percent + 25 and (current_time - last_update_time) >= 5.0:
-                last_percent = percent
-                last_update_time = current_time
-                # Log without formatting to minimize string operations
-                try:
-                    self._log_message(f"Transferring {filename}: {percent}%")
-                except:
-                    pass # Silently ignore if logging fails
-
-        return progress
 
     def on_upload_clicked(self, button):
         """Handles the click on the Upload (>) button."""
@@ -1020,9 +1013,15 @@ class SftpWidget(Gtk.Box):
                     buf.delete(start, delete_end)
 
                 if is_at_bottom:
-                    # Scroll without using idle_add to reduce queue buildup
-                    end_iter = buf.get_end_iter()
-                    self.log_view.scroll_to_iter(end_iter, 0.0, True, 0.0, 1.0)
+                    # scroll_adj.get_upper() isn't updated yet right after insert
+                    # (GTK recomputes it on the next layout pass), so drive the
+                    # adjustment directly from idle_add — by then the new
+                    # line's height is accounted for and this reliably lands
+                    # at the true bottom instead of one line short.
+                    def scroll_to_bottom():
+                        scroll_adj.set_value(scroll_adj.get_upper() - scroll_adj.get_page_size())
+                        return False
+                    GLib.idle_add(scroll_to_bottom)
             except Exception as e:
                 # Silently ignore errors to prevent cascade failures
                 pass
@@ -1416,53 +1415,3 @@ class SftpWidget(Gtk.Box):
         thread.daemon = True
         thread.start()
 
-    def _on_view_scroll(self, controller, dx, dy, scrolled_window):
-        """
-        Handles scroll events on the TreeViews to prevent them from propagating
-        to the parent notebook when the view is already at its limit.
-        """
-        adj = scrolled_window.get_vadjustment()
-        current_value = adj.get_value()
-        upper = adj.get_upper()
-        page_size = adj.get_page_size()
-
-        # dy > 0 means scrolling down, dy < 0 means scrolling up
-        if dy > 0 and current_value >= upper - page_size:
-            # We are at the bottom and scrolling down, stop the event.
-            return True
-        elif dy < 0 and current_value <= adj.get_lower():
-            # We are at the top and scrolling up, stop the event.
-            return True
-
-        # Otherwise, let the ScrolledWindow handle the event.
-        return False
-
-    def _on_log_scroll(self, controller, dx, dy, scrolled_window):
-        """
-        Handles scroll events on the log view to prevent them from propagating
-        to the parent notebook when the log is already at its limit.
-        """
-        adj = scrolled_window.get_vadjustment()
-        current_value = adj.get_value()
-        upper = adj.get_upper()
-        page_size = adj.get_page_size()
-
-        # dy > 0 means scrolling down, dy < 0 means scrolling up
-        if dy > 0 and current_value >= upper - page_size:
-            # We are at the bottom and scrolling down, stop the event.
-            return True
-        elif dy < 0 and current_value <= adj.get_lower():
-            # We are at the top and scrolling up, stop the event.
-            return True
-
-        # Otherwise, let the ScrolledWindow handle the event.
-        return False
-
-    def _on_global_scroll(self, controller, dx, dy):
-        """
-        Global scroll handler for the entire SFTP widget.
-        Prevents ALL scroll events from propagating to the parent notebook.
-        This catches scroll events on empty spaces, buttons, entries, etc.
-        """
-        # Always stop propagation to prevent notebook tab switching
-        return True

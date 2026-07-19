@@ -14,8 +14,9 @@ import re
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio, GObject
 
-from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA
-from .dialogs import InputDialog, HostDialog, GroupDialog # Removed SettingsDialog
+from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, resource_path
+from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog # Removed SettingsDialog
+from .send_file import SendFileDialog, guess_remote_cwd
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
 from .settings import SettingsManager
 from .keyring import KeyringManager
@@ -40,18 +41,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         self.set_deletable(True)
 
-        self.set_icon_name(APP_ID)
-
         # Load and migrate the config
         self.config_data = load_and_migrate_config()
 
-        # ✨ Load application settings
         self.settings_manager = SettingsManager()
 
-        # ✨ Keyring manager for passwords
+        # Make the bundled icon resolvable by name even when no .desktop file
+        # (or icon-theme install step) has registered it in hicolor. Reads
+        # straight from the icons/ directory on disk — not the compiled
+        # .gresource, which only updates on an explicit rebuild and used to
+        # go stale silently whenever someone swapped the PNG on disk.
+        icon_theme = Gtk.IconTheme.get_for_display(self.get_display())
+        icon_theme.add_search_path(resource_path("icons"))
+        self.set_icon_name(self.settings_manager.get("interface.icon"))
+
         self.keyring = KeyringManager()
 
-        # ✨ Setup custom CSS to hide menu item markers
         self.setup_css()
 
         # --- 1. Main window structure ---
@@ -62,21 +67,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
         header_bar.set_show_end_title_buttons(True) # Shows min/max/close
 
-        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.3.12")
+        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.4.2")
         header_bar.set_title_widget(title_widget)
 
         self.setup_global_menu(header_bar)
         self.main_box.append(header_bar)
 
-        # --- ✨ Flap Toggle Button in HeaderBar ---
         self.sidebar_toggle_button = Gtk.ToggleButton(icon_name="go-previous-symbolic", active=True)
         self.sidebar_toggle_button.set_tooltip_text(_("Toggle Sidebar"))
         self.sidebar_toggle_button.connect("toggled", self.on_toggle_sidebar)
         header_bar.pack_start(self.sidebar_toggle_button)
 
+        self.batch_command_button = Gtk.Button(icon_name="mail-send-symbolic")
+        self.batch_command_button.set_tooltip_text(_("Batch Command"))
+        self.batch_command_button.connect("clicked", self.on_menu_batch_command)
+        header_bar.pack_start(self.batch_command_button)
 
-
-        # --- ✨ Gtk.Paned for resizable sidebar ---
         self.paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.paned.set_resize_start_child(False)
         self.paned.set_shrink_start_child(False)
@@ -212,7 +218,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         remove_btn = Gtk.Button(icon_name="list-remove-symbolic")
         remove_btn.set_tooltip_text(_("Remove Selected"))
-        remove_btn.connect("clicked", self.on_remove_selected_clicked, None) # None - нет action
+        remove_btn.connect("clicked", self.on_remove_selected_clicked, None)
 
         button_box.append(add_host_btn)
         button_box.append(search_btn)
@@ -229,19 +235,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.paned.set_end_child(self.notebook)
         # ✨ Add a small margin to prevent accidentally grabbing the paned handle
         self.notebook.set_margin_start(6)
-        
-        # ✨ Add mouse wheel scroll support for scrolling tabs.
-        # This will SWITCH tabs, as requested.
-        scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
-        scroll_controller.connect("scroll", self.on_notebook_scroll_switch)
-        self.notebook.add_controller(scroll_controller)
+
         self.connect("map", self.on_first_map)
 
 
         # ✨ Connect signals to update menu sensitivity
         self.notebook.connect("notify::page", self.update_menu_sensitivity)
         self.tree_view.get_selection().connect("changed", self.update_menu_sensitivity)
-        self.update_menu_sensitivity() # Первоначальная настройка
+        self.update_menu_sensitivity()
 
         # ✨ Add a global key controller for shortcuts like Ctrl+W
         key_controller_window = Gtk.EventControllerKey.new()
@@ -266,13 +267,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-    # --- Сохранение из TreeStore в JSON ---
     def rebuild_config_and_save(self):
-        """Парсит Gtk.TreeStore и сохраняет его в hosts.json."""
+        """Parses the Gtk.TreeStore and saves it to hosts.json."""
         logging.debug("Saving tree to config...")
 
         def iter_tree(model, tree_iter):
-            """Рекурсивно парсит Gtk.TreeStore в dict."""
+            """Recursively parses the Gtk.TreeStore into a dict."""
             children = []
             while tree_iter:
                 node_type = model.get_value(tree_iter, COL_TYPE)
@@ -543,7 +543,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             return True # Event handled
         return False
 
-    # --- Глобальное меню ---
     def setup_global_menu(self, header_bar):
         """Creates and configures the application's global menu."""
         # 1. Create GActions (actions)
@@ -563,6 +562,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_about.connect("activate", self.on_menu_about)
         self.add_action(action_about)
 
+        action_batch_command = Gio.SimpleAction.new("batch-command", None)
+        action_batch_command.connect("activate", self.on_menu_batch_command)
+        self.add_action(action_batch_command)
+
         # 2. Create GMenu (model)
         main_menu_model = Gio.Menu()
 
@@ -571,6 +574,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         file_section.append(_("Close Tab"), "win.close-tab")
         file_section.append(_("Quit"), "win.quit")
         main_menu_model.append_section(None, file_section)
+
+        # "Batch" section
+        batch_section = Gio.Menu()
+        batch_section.append(_("Batch Command"), "win.batch-command")
+        main_menu_model.append_section(None, batch_section)
 
         # "Edit" section
         edit_section = Gio.Menu()
@@ -661,6 +669,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_paste = Gio.SimpleAction.new("paste-clipboard", None)
         action_paste.connect("activate", self.on_menu_paste)
         self.add_action(action_paste)
+
+        action_send_file = Gio.SimpleAction.new("send-file", None)
+        action_send_file.connect("activate", self.on_menu_send_file)
+        self.add_action(action_send_file)
         
         action_user_cmd = Gio.SimpleAction.new_stateful("user-command", GLib.VariantType.new('s'), GLib.Variant.new_string(""))
         action_user_cmd.connect("activate", self.on_menu_user_command)
@@ -702,6 +714,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         terminal_menu = Gio.Menu()
         terminal_menu.append(_("Copy"), "win.copy-clipboard")
         terminal_menu.append(_("Paste"), "win.paste-clipboard")
+        terminal_menu.append(_("Send File..."), "win.send-file")
 
         tab_menu = Gio.Menu()
         tab_menu.append(_("Disconnect"), "win.tab-disconnect")
@@ -713,8 +726,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # 3. Create Popover (widgets)
         self.popover_host = Gtk.PopoverMenu.new_from_model(host_menu)
         self.popover_group = Gtk.PopoverMenu.new_from_model(group_menu)
-        self.popover_terminal = Gtk.PopoverMenu.new_from_model(terminal_menu) # TODO: Check if this is used
-        self.popover_tab = Gtk.PopoverMenu.new_from_model(tab_menu) # ✨ New popover for tabs
+        self.popover_terminal = Gtk.PopoverMenu.new_from_model(terminal_menu)
+        self.popover_tab = Gtk.PopoverMenu.new_from_model(tab_menu)
         self.popover_host.set_parent(self) # Set parent once to the main window
         self.popover_terminal.connect("closed", self.on_popover_terminal_closed)
         self.popover_tab.set_parent(self)
@@ -809,6 +822,17 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.lookup_action("copy-clipboard").set_enabled(terminal.get_has_selection())
         self.lookup_action("paste-clipboard").set_enabled(True)
 
+        # "Send File" only makes sense for SSH sessions (SFTP under the hood) —
+        # telnet has no equivalent file-transfer sub-protocol.
+        page_widget = terminal.get_parent()
+        tab_info = self.tab_data.get(page_widget)
+        can_send_file = (
+            tab_info is not None
+            and tab_info.get("type") == "terminal"
+            and tab_info.get("config", {}).get("protocol", "ssh") == "ssh"
+        )
+        self.lookup_action("send-file").set_enabled(can_send_file)
+
         translated_x, translated_y = terminal.translate_coordinates(self, x, y)
 
         rect = Gdk.Rectangle()
@@ -831,6 +855,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         terminal = self.get_active_terminal()
         if terminal:
             terminal.paste_clipboard()
+
+    def on_menu_send_file(self, action, param):
+        """Opens the Send File dialog for the active terminal's remote host."""
+        terminal = self.get_active_terminal()
+        page_widget = self.get_active_terminal_widget()
+        if terminal is None or page_widget is None:
+            return
+        tab_info = self.tab_data.get(page_widget)
+        if not tab_info or tab_info.get("type") != "terminal":
+            return
+        host_config = tab_info["config"]
+        initial_dir = guess_remote_cwd(terminal)
+        dialog = SendFileDialog(self, host_config, initial_dir, terminal=terminal)
+        dialog.present()
 
     def on_popover_terminal_closed(self, popover):
         """Gives focus back to the active terminal when the context menu is closed."""
@@ -888,7 +926,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         # Connect the close button to a simple tab-closing lambda
         close_btn.connect("clicked", lambda btn: self.notebook.remove_page(self.notebook.page_num(sftp_view)))
-        # ✨ Store config for this tab
         self.tab_data[sftp_view] = {"type": "sftp", "config": host_config}
 
 
@@ -928,17 +965,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         dialog = SettingsDialog(self, self.settings_manager)
         dialog.present()
 
+    def on_menu_batch_command(self, *args):
+        """Shows the Batch Command window — sends one command to a chosen set of open terminal tabs."""
+        dialog = BatchCommandDialog(self)
+        dialog.present()
+
     def on_menu_about(self, action, param):
         """Shows the 'About' window."""
         dialog = Adw.AboutWindow(transient_for=self)
         dialog.set_application_name("ThongSSH")
-        dialog.set_version("0.3.12")
+        dialog.set_version("0.4.2")
         dialog.set_license_type(Gtk.License.MIT_X11)
         dialog.set_comments(_("SSH client with a tree-like host structure"))
         dialog.set_copyright("© 2025 Mikhael Karpov")
         dialog.set_developers(["Gemini Code Assist", "Claude Code (Anthropic)"])
         dialog.set_designers(["Mikhael Karpov (lknsfos)"])
-        dialog.set_application_icon(APP_ID) # Используем ID для поиска иконки
+        dialog.set_application_icon(self.settings_manager.get("interface.icon"))
         dialog.present()
 
 
@@ -1183,9 +1225,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             return self.notebook.get_nth_page(self.notebook.get_current_page())
         return None
 
+    def _get_target_tab_widget(self):
+        """The tab a context-menu action should act on: the one that was
+        right-clicked, or the currently active one if none was."""
+        return self.last_clicked_tab if self.last_clicked_tab else self.get_active_terminal_widget()
 
-
-    # --- 6. Логика подключения (Терминал) (Пункт 6) ---
     # --- 6. Connection Logic (Terminal) ---
 
     def start_session(self, config, existing_terminal_widget=None):
@@ -1222,15 +1266,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if username_from_prompt:
              host_str = f"{username_from_prompt}@{host_str}"
 
-        protocol = config.get("protocol", "ssh")
+        # Captured before the telnet branch below strips the user@ part back
+        # off — this is what actually gets used to auth this session, so
+        # it's what tab_data should remember (e.g. for "Send File" later),
+        # not the original config which may have had no username at all.
+        resolved_host_str = host_str
+
         cmd = []
         password = None
 
         if protocol == "ssh":
-            # ✨ Check for a password in the keyring
+            # Check for a password in the keyring
             password = self.keyring.load_password(config.get("name"))
 
-            # --- 6.2. Сборка команды SSH ---
+            # Build the SSH command
             if password and "@" in host_str:
                 # Use sshpass if a password is set
                 sshpass_path = self.settings_manager.get("client.sshpass_path")
@@ -1268,7 +1317,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             cmd.append(host_str)
 
         elif protocol == "telnet":
-            # --- 6.2. Сборка команды Telnet ---
+            # Build the Telnet command
             cmd = [self.settings_manager.get("client.telnet_path")]
             # Telnet usually takes host and port as separate arguments
             if "@" in host_str:
@@ -1385,8 +1434,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 self.notebook.set_current_page(page_num)
                 terminal.grab_focus()
 
+                resolved_config = dict(config)
+                resolved_config['host'] = resolved_host_str
+
                 self.open_sessions[scrolled_term] = (terminal, pid)
-                self.tab_data[scrolled_term] = {"type": "terminal", "config": config}
+                self.tab_data[scrolled_term] = {"type": "terminal", "config": resolved_config}
                 close_btn.connect("clicked", self.on_tab_close_button_clicked, scrolled_term, pid)
                 terminal.connect("child-exited", self.on_ssh_process_exited, scrolled_term)
             else: # This is a reconnect, just update the PID
@@ -1420,6 +1472,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         right_click_gesture.connect("pressed", self._on_right_press_guard)
         right_click_gesture.connect("released", self.on_tab_right_click)
         tab_label_box.add_controller(right_click_gesture)
+
+        # ✨ Mouse wheel over the tab label switches tabs. Attached here (not on
+        # the whole Notebook) so scrolling over page content — an SFTP log, a
+        # file list, anything — never gets mistaken for a tab-switch gesture.
+        tab_scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
+        tab_scroll_controller.connect("scroll", self.on_notebook_scroll_switch)
+        tab_label_box.add_controller(tab_scroll_controller)
 
         return tab_label_box, close_btn
 
@@ -1562,8 +1621,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     # --- Tab Context Menu Handlers ---
     def on_menu_tab_disconnect(self, action, param):
         """Closes the currently active tab."""
-        # ✨ Use the last clicked tab if available, otherwise use current
-        page_widget = self.last_clicked_tab if self.last_clicked_tab else self.notebook.get_nth_page(self.notebook.get_current_page())
+        page_widget = self._get_target_tab_widget()
         if not page_widget:
             return
 
@@ -1576,8 +1634,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def on_menu_tab_reconnect(self, action, param):
         """Reconnects the current tab without closing it."""
-        # ✨ Use the last clicked tab if available, otherwise use current
-        page_widget = self.last_clicked_tab if self.last_clicked_tab else self.notebook.get_nth_page(self.notebook.get_current_page())
+        page_widget = self._get_target_tab_widget()
         if not page_widget:
             return
 
@@ -1610,8 +1667,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def on_menu_tab_duplicate(self, action, param):
         """Opens a new tab with the same config as the selected tab."""
-        # Use the last right-clicked tab. Fallback to the active tab if needed.
-        target_widget = self.last_clicked_tab if self.last_clicked_tab else self.get_active_terminal_widget()
+        target_widget = self._get_target_tab_widget()
         if target_widget and target_widget in self.tab_data:
             tab_info = self.tab_data[target_widget]
             
@@ -1649,8 +1705,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def on_menu_open_ssh_from_tab(self, action, param):
         """Opens a terminal session based on the current SFTP tab's config."""
-        # ✨ Use the last clicked tab if available, otherwise use current
-        page_widget = self.last_clicked_tab if self.last_clicked_tab else self.notebook.get_nth_page(self.notebook.get_current_page())
+        page_widget = self._get_target_tab_widget()
         if not page_widget:
             return
 
