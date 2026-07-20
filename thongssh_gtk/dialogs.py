@@ -7,6 +7,7 @@ import stat
 from .constants import COL_NAME, COL_TYPE
 from .colors import COLOR_SCHEMES
 from .settings import DEFAULT_SETTINGS
+from .launcher_icon import apply_launcher_icon
 from .keyring import KeyringManager
 
 # Placeholder for future internationalization (i18n)
@@ -902,10 +903,13 @@ class SettingsDialog(Adw.Window):
 
         self.settings_manager.save()
 
-        # Apply the icon change immediately — the window's own icon, and the
+        # Apply the icon change immediately — the window's own icon, the
         # macOS Dock icon (About dialog just reads the setting fresh next
-        # time it's opened, no extra work needed there).
+        # time it's opened, no extra work needed there), and the GNOME
+        # Wayland dock/taskbar icon (via a user-local .desktop override,
+        # since Shell reads Icon= from the .desktop file, not the window).
         self.parent_window.set_icon_name(icon_stem)
+        apply_launcher_icon(icon_stem)
         app = self.parent_window.get_application()
         if app is not None and hasattr(app, "apply_macos_dock_icon"):
             app.apply_macos_dock_icon()

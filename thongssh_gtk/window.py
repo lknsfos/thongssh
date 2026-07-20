@@ -19,6 +19,7 @@ from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog # 
 from .send_file import SendFileDialog, guess_remote_cwd
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
 from .settings import SettingsManager
+from .launcher_icon import apply_launcher_icon
 from .keyring import KeyringManager
 from .sftp_widget import SftpWidget
 from .colors import COLOR_SCHEMES
@@ -54,6 +55,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         icon_theme = Gtk.IconTheme.get_for_display(self.get_display())
         icon_theme.add_search_path(resource_path("icons"))
         self.set_icon_name(self.settings_manager.get("interface.icon"))
+        apply_launcher_icon(self.settings_manager.get("interface.icon"))
 
         self.keyring = KeyringManager()
 
