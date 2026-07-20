@@ -1,6 +1,8 @@
 import sys
 import os
 
+__version__ = "0.5.2"
+
 APP_ID = "com.example.thongssh"
 
 def resource_path(relative_path):

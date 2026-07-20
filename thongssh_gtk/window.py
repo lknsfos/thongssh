@@ -14,7 +14,7 @@ import re
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio, GObject
 
-from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, resource_path
+from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, resource_path, __version__
 from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog # Removed SettingsDialog
 from .send_file import SendFileDialog, guess_remote_cwd
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
@@ -67,7 +67,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
         header_bar.set_show_end_title_buttons(True) # Shows min/max/close
 
-        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle="0.5.2")
+        title_widget = Adw.WindowTitle(title="ThongSSH", subtitle=__version__)
         header_bar.set_title_widget(title_widget)
 
         self.setup_global_menu(header_bar)
@@ -1302,7 +1302,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Shows the 'About' window."""
         dialog = Adw.AboutWindow(transient_for=self)
         dialog.set_application_name("ThongSSH")
-        dialog.set_version("0.5.2")
+        dialog.set_version(__version__)
         dialog.set_license_type(Gtk.License.MIT_X11)
         dialog.set_comments(_("SSH client with a tree-like host structure"))
         dialog.set_copyright("© 2025 Mikhael Karpov")
