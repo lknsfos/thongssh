@@ -1360,7 +1360,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         is_logging = tab_info is not None and tab_info.get("log_path") is not None
         save_log_action = self.lookup_action("save-log-tab")
         save_log_action.set_state(GLib.Variant.new_boolean(is_logging))
-        save_log_action.set_enabled(not is_logging)
+        save_log_action.set_enabled(tab_info is not None)
 
         translated_x, translated_y = terminal.translate_coordinates(self, x, y)
 
@@ -1572,12 +1572,21 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     # empty log.
 
     def on_menu_toggle_log_tab(self, action, param):
-        """Activates the terminal context menu's "Save log" checkbox item.
-        Only reachable when not already logging (see on_terminal_right_click,
-        which disables the action once a log is active)."""
+        """Activates the terminal context menu's "Save log" checkbox item —
+        starts logging if it wasn't running, stops (and closes out the log
+        file) if it was."""
         page_widget = self.get_active_terminal_widget()
-        if page_widget is not None:
+        if page_widget is None:
+            return
+        tab_info = self.tab_data.get(page_widget)
+        if tab_info is None:
+            return
+        if tab_info.get("log_path") is not None:
+            self._stop_session_logging(page_widget)
+            tab_info["log_path"] = None
+        else:
             self._start_session_logging(page_widget)
+        action.set_state(GLib.Variant.new_boolean(tab_info.get("log_path") is not None))
 
     def _start_session_logging(self, page_widget):
         tab_info = self.tab_data.get(page_widget)
@@ -2049,13 +2058,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     def _compute_log_path(self, host_str, name):
         """Where a new session log should be written — directory per the
         client.log_dir -> .config_path -> CONFIG_DIR/logs fallback chain
-        (see paths.resolve_log_dir), filename "user@hostname-YYYYMMDD-hh:mm:ss"
-        (or the host's name, for the local terminal which has no host string).
-        Takes the already-resolved host_str (with any interactively-prompted
-        username merged in) rather than a whole config dict, so callers can't
-        accidentally pass the pre-prompt version that's missing it."""
+        (see paths.resolve_log_dir), filename "user@NAME-YYYYMMDD-hh:mm:ss"
+        where NAME is the host's config name (the tree's friendly label),
+        not its hostname/IP — the username comes off of host_str (the
+        already-resolved "[user@]hostname" string, with any
+        interactively-prompted username merged in) since that's the only
+        place it lives."""
         log_dir = resolve_log_dir(self.settings_manager.get("client.log_dir"))
-        label = (host_str or name or "session").replace("/", "_")
+        if host_str and "@" in host_str:
+            username, _sep, _hostname = host_str.partition("@")
+            label = f"{username}@{name}" if name else username
+        else:
+            label = name or host_str or "session"
+        label = label.replace("/", "_")
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H:%M:%S")
         return log_dir / f"{label}-{timestamp}"
 

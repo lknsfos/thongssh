@@ -314,11 +314,12 @@ class HostDialog(ResponseDialog):
         cancel_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.CANCEL))
         header_bar.pack_start(cancel_button)
 
-        page = Adw.PreferencesPage()
+        # --- Basic Settings (not tabbed — always visible) ---
+        page_basic = Adw.PreferencesPage()
 
         group_main = Adw.PreferencesGroup()
         group_main.set_title(_("Basic Settings"))
-        page.add(group_main)
+        page_basic.add(group_main)
 
         self.protocol_row = Adw.ComboRow(title=_("Protocol"), model=Gtk.StringList.new(["SSH", "Telnet"]))
         self.protocol_row.connect("notify::selected-item", self.on_protocol_changed)
@@ -327,7 +328,7 @@ class HostDialog(ResponseDialog):
         self.entry_name = Adw.EntryRow(title=_("Name"))
         group_main.add(self.entry_name)
 
-        row_host = Adw.ActionRow(title=_("Hostname"), subtitle=_("Hostname or IP address"))
+        row_host = Adw.ActionRow(title=_("Hostname/IP"), subtitle=_("Hostname or IP address"))
         self.entry_host = Gtk.Entry()
         self.entry_host.set_valign(Gtk.Align.CENTER)
         row_host.add_suffix(self.entry_host)
@@ -342,11 +343,21 @@ class HostDialog(ResponseDialog):
         self.group_iters = {}
         self.populate_groups_combo(parent_iter)
 
+        self.entry_port = Adw.SpinRow(
+            title=_("Port"),
+            adjustment=Gtk.Adjustment(value=22, lower=0, upper=65535, step_increment=1)
+        )
+        group_main.add(self.entry_port)
+
+        # --- Tabbed div: Authentication / Options ---
+        self.tabs_stack = Adw.ViewStack()
+
+        page_auth = Adw.PreferencesPage()
         self.group_auth = Adw.PreferencesGroup(
             title=_("Authentication"),
             description=_("Saved securely in system keyring") # Moved from subtitle
         )
-        page.add(self.group_auth)
+        page_auth.add(self.group_auth)
 
         self.entry_username = Adw.EntryRow(title=_("Username"))
         self.group_auth.add(self.entry_username)
@@ -360,20 +371,19 @@ class HostDialog(ResponseDialog):
         self.password_row.add_suffix(self.clear_password_button)
         self.clear_password_button.set_sensitive(False) # Enabled only in edit mode if password exists
 
-        # --- Port Settings (visible for both) ---
-        self.group_port = Adw.PreferencesGroup()
-        page.add(self.group_port)
+        self.row_key_file = Adw.EntryRow(title=_("Path to key (IdentityFile)"))
+        key_button = Gtk.Button(icon_name="document-open-symbolic")
+        key_button.set_valign(Gtk.Align.CENTER)
+        key_button.connect("clicked", self.on_choose_key_file_clicked)
+        self.row_key_file.add_suffix(key_button)
+        self.group_auth.add(self.row_key_file)
 
-        self.entry_port = Adw.SpinRow(
-            title=_("Port"),
-            subtitle=_("Leave 0 or empty for default"),
-            adjustment=Gtk.Adjustment(value=0, lower=0, upper=65535, step_increment=1)
-        )
-        self.group_port.add(self.entry_port)
+        self.tabs_stack.add_titled(page_auth, "auth", _("Authentication")).set_icon_name("dialog-password-symbolic")
 
-        # --- Logging (visible for both protocols) ---
+        page_options = Adw.PreferencesPage()
+
         group_logging = Adw.PreferencesGroup(title=_("Logging"))
-        page.add(group_logging)
+        page_options.add(group_logging)
 
         self.switch_save_log = Adw.SwitchRow(
             title=_("Save session log"),
@@ -381,19 +391,8 @@ class HostDialog(ResponseDialog):
         )
         group_logging.add(self.switch_save_log)
 
-        # --- SSH Specific Settings ---
-        self.group_ssh_conn = Adw.PreferencesGroup(title=_("SSH Connection"))
-        page.add(self.group_ssh_conn)
-
-        self.row_key_file = Adw.EntryRow(title=_("Path to key (IdentityFile)"))
-        key_button = Gtk.Button(icon_name="document-open-symbolic")
-        key_button.set_valign(Gtk.Align.CENTER)
-        key_button.connect("clicked", self.on_choose_key_file_clicked)
-        self.row_key_file.add_suffix(key_button)
-        self.group_ssh_conn.add(self.row_key_file)
-
         self.group_ssh_opts = Adw.PreferencesGroup(title=_("SSH Options"))
-        page.add(self.group_ssh_opts)
+        page_options.add(self.group_ssh_opts)
 
         self.switch_compat = Adw.SwitchRow(title=_("Compatibility with old systems"),
                                              subtitle=_("Enables old ciphers (for CentOS 5/6, etc.)"))
@@ -415,9 +414,8 @@ class HostDialog(ResponseDialog):
         row_options.set_activatable_widget(self.entry_options)
         self.group_ssh_opts.add(row_options)
 
-        # --- Telnet Specific Settings ---
         self.group_telnet_opts = Adw.PreferencesGroup(title=_("Telnet Options"))
-        page.add(self.group_telnet_opts)
+        page_options.add(self.group_telnet_opts)
 
         self.switch_telnet_binary = Adw.SwitchRow(title=_("Binary Mode"),
                                                   subtitle=_("Enable binary mode transmission"))
@@ -427,13 +425,21 @@ class HostDialog(ResponseDialog):
                                                 subtitle=_("Echo typed characters locally"))
         self.group_telnet_opts.add(self.switch_telnet_echo)
 
+        self.tabs_stack.add_titled(page_options, "options", _("Options")).set_icon_name("preferences-other-symbolic")
+
+        view_switcher = Adw.ViewSwitcher()
+        view_switcher.set_stack(self.tabs_stack)
+        view_switcher.set_policy(Adw.ViewSwitcherPolicy.WIDE)
+        switcher_box = Gtk.Box(halign=Gtk.Align.CENTER, margin_top=6, margin_bottom=6)
+        switcher_box.append(view_switcher)
+
+        self.tabs_stack.set_vexpand(True)
+
         # --- Field Population and Validation ---
         if self.is_edit_mode:
             self.populate_fields()
 
         self.on_protocol_changed(self.protocol_row, None)
-
-
 
         self.entry_name.connect("notify::text", self.on_validate)
         self.entry_host.connect("changed", self.on_validate)
@@ -442,7 +448,9 @@ class HostDialog(ResponseDialog):
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main_box.append(header_bar)
-        main_box.append(page) # Adw.PreferencesPage is already scrollable
+        main_box.append(page_basic) # Adw.PreferencesPage is already scrollable
+        main_box.append(switcher_box)
+        main_box.append(self.tabs_stack)
         self.set_content(main_box)
 
     def on_username_entry_changed(self, entry, *args):
@@ -461,19 +469,18 @@ class HostDialog(ResponseDialog):
         selected_protocol = self.protocol_row.get_selected_item().get_string().lower()
         is_ssh = (selected_protocol == "ssh")
 
-        self.group_ssh_conn.set_visible(is_ssh)
+        self.row_key_file.set_visible(is_ssh) # Telnet has no key-based auth
         self.group_ssh_opts.set_visible(is_ssh)
         self.group_telnet_opts.set_visible(not is_ssh)
 
-        # Update port subtitle and default value if it's empty
+        # Default port for whichever protocol is now selected, unless it's
+        # already been set to something else (including the *other*
+        # protocol's default, in which case switch it over).
         current_port = self.entry_port.get_value()
-        if current_port == 0 or current_port == 22 or current_port == 23:
-            if is_ssh:
-                self.entry_port.set_subtitle(_("Leave 0 for default (22)"))
-                if current_port != 22: self.entry_port.set_value(0)
-            else: # Telnet
-                self.entry_port.set_subtitle(_("Leave 0 for default (23)"))
-                if current_port != 23: self.entry_port.set_value(23)
+        if is_ssh:
+            if current_port in (0, 23): self.entry_port.set_value(22)
+        else: # Telnet
+            if current_port in (0, 22): self.entry_port.set_value(23)
 
 
     def on_choose_key_file_clicked(self, button):
@@ -527,8 +534,8 @@ class HostDialog(ResponseDialog):
         self.entry_username.set_text(username)
         self.entry_host.set_text(hostname)
 
-        port = cfg.get("port") or 0
-        self.entry_port.set_value(int(port))
+        default_port = 23 if protocol == "telnet" else 22
+        self.entry_port.set_value(int(cfg.get("port") or default_port))
 
         self.switch_save_log.set_active(cfg.get("save_log", False))
 

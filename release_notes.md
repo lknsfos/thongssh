@@ -1,5 +1,14 @@
 # Release Notes
 
+### 🆕 What's New in 0.6.1
+
+Quick touch-up after 0.6.0:
+
+* **Keyboard shortcuts don't care what layout you're typing in anymore** — Ctrl+D (logout/EOF), Ctrl+C, Ctrl+W, Ctrl+F, Ctrl+Shift+F and friends now fire off the physical key regardless of which keyboard layout is active. Switch to a Cyrillic (or any other non-Latin) layout and they still work exactly the same.
+* **Host dialog reshuffled** — Protocol, Name, Hostname/IP, and Port are always visible up top; everything else moved into two tabs, **Authentication** (username, password, path to key) and **Options** (session logging, SSH/Telnet-specific settings). Port now shows a real default (22 for SSH, 23 for Telnet) instead of a confusing 0.
+* **Session log filenames now use the host's name** — `user@MyServerName`, not `user@172.x.x.x`, matching what's actually in your host list.
+* **"Save log" can be turned back off** — the terminal right-click checkbox no longer locks itself once logging starts; untick it to stop recording and close out the file.
+
 ### 🆕 What's New in 0.6.0
 
 She got organized *and* chatty:

@@ -15,12 +15,13 @@ ThongSSH is for those who love minimalism. We've got a cute host panel so you ne
 **Connections**
 * SSH, Telnet, and SFTP, plus a plain **local terminal** entry pinned to the top of the host list (separate from your saved hosts — no SSH involved, just a shell).
 * Cross-platform password storage via the `keyring` library — lands in the real native vault on every OS (macOS Keychain, Windows Credential Locker, Linux/BSD Secret Service), with an encrypted local fallback if none is available.
-* Host dialog keeps username and hostname as separate fields (username lives under Authentication), instead of a single crammed-together `user@host` address.
+* Host dialog: Protocol, Name, Hostname/IP, and Port up top, with Authentication (username, password, key path) and Options (logging, SSH/Telnet settings) split into their own tabs.
 * A little more native on macOS — proper Dock icon, About window icon, and a system font that isn't a sad fallback serif.
 
 **Layout**
 * **Multi-div split view** — split the tab area vertically, horizontally, or into a full 2x2 grid, each div running its own independent set of tabs. Switch between vertical/horizontal and your tabs just re-orient, no shuffling. Drag a tab from one div straight into another to rearrange. A subtle accent-colored outline shows which div is currently active.
 * Host search is always visible in the tree panel — click it or hit **Ctrl+F** from anywhere in the app (tree, terminal, wherever) to jump in and start typing.
+* Keyboard shortcuts (Ctrl+D, Ctrl+C, Ctrl+W, Ctrl+F, Ctrl+Shift+F, ...) fire off the physical key regardless of the active keyboard layout — switch to Cyrillic or anything else and they still work.
 * Optional alternating row tint for the host tree, if you want a bit more visual rhythm (Settings → Interface).
 * The window remembers its size and maximized state between launches. (Position can't be — GTK4 removed window-position APIs outright, since Wayland treats placement as the compositor's call, not the app's.)
 
