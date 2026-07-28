@@ -1,7 +1,7 @@
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GObject, Pango
+from gi.repository import Gtk, Adw, Gdk, GObject, Pango
 import stat
 
 from .constants import COL_NAME, COL_TYPE
@@ -327,7 +327,7 @@ class HostDialog(ResponseDialog):
         self.entry_name = Adw.EntryRow(title=_("Name"))
         group_main.add(self.entry_name)
 
-        row_host = Adw.ActionRow(title=_("Address"), subtitle=_("Format: [user@]hostname"))
+        row_host = Adw.ActionRow(title=_("Hostname"), subtitle=_("Hostname or IP address"))
         self.entry_host = Gtk.Entry()
         self.entry_host.set_valign(Gtk.Align.CENTER)
         row_host.add_suffix(self.entry_host)
@@ -348,6 +348,9 @@ class HostDialog(ResponseDialog):
         )
         page.add(self.group_auth)
 
+        self.entry_username = Adw.EntryRow(title=_("Username"))
+        self.group_auth.add(self.entry_username)
+
         self.password_row = Adw.PasswordEntryRow(title=_("Password"))
         self.group_auth.add(self.password_row)
 
@@ -367,6 +370,16 @@ class HostDialog(ResponseDialog):
             adjustment=Gtk.Adjustment(value=0, lower=0, upper=65535, step_increment=1)
         )
         self.group_port.add(self.entry_port)
+
+        # --- Logging (visible for both protocols) ---
+        group_logging = Adw.PreferencesGroup(title=_("Logging"))
+        page.add(group_logging)
+
+        self.switch_save_log = Adw.SwitchRow(
+            title=_("Save session log"),
+            subtitle=_("Records every session to a file in the configured log directory (see Settings → Client Options)")
+        )
+        group_logging.add(self.switch_save_log)
 
         # --- SSH Specific Settings ---
         self.group_ssh_conn = Adw.PreferencesGroup(title=_("SSH Connection"))
@@ -424,7 +437,7 @@ class HostDialog(ResponseDialog):
 
         self.entry_name.connect("notify::text", self.on_validate)
         self.entry_host.connect("changed", self.on_validate)
-        self.entry_host.connect("changed", self.on_host_entry_changed)
+        self.entry_username.connect("notify::text", self.on_username_entry_changed)
         self.on_validate(None)
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -432,9 +445,9 @@ class HostDialog(ResponseDialog):
         main_box.append(page) # Adw.PreferencesPage is already scrollable
         self.set_content(main_box)
 
-    def on_host_entry_changed(self, entry):
+    def on_username_entry_changed(self, entry, *args):
         """Enable/disable password field based on username presence."""
-        has_user = "@" in entry.get_text()
+        has_user = bool(entry.get_text().strip())
         self.password_row.set_sensitive(has_user)
         if not has_user:
             if self.is_edit_mode and self.keyring.load_password(self.entry_name.get_text().strip()):
@@ -503,10 +516,21 @@ class HostDialog(ResponseDialog):
         else:
             self.protocol_row.set_selected(0)
         self.entry_name.set_text(cfg.get("name", ""))
-        self.entry_host.set_text(cfg.get("host", ""))
+        # The stored "host" is still the combined "[user@]hostname" string
+        # (unchanged on-disk format — see get_data) split apart just for
+        # display, so existing hosts.json entries keep working untouched.
+        host_str = cfg.get("host", "")
+        if "@" in host_str:
+            username, hostname = host_str.split("@", 1)
+        else:
+            username, hostname = "", host_str
+        self.entry_username.set_text(username)
+        self.entry_host.set_text(hostname)
 
         port = cfg.get("port") or 0
         self.entry_port.set_value(int(port))
+
+        self.switch_save_log.set_active(cfg.get("save_log", False))
 
         key_path = cfg.get("key_path")
         if key_path:
@@ -521,7 +545,7 @@ class HostDialog(ResponseDialog):
         self.switch_telnet_echo.set_active(cfg.get("telnet_local_echo", False))
 
         # Enable password fields based on current data
-        self.on_host_entry_changed(self.entry_host)
+        self.on_username_entry_changed(self.entry_username)
         # Check if a password exists to enable the clear button
         self.clear_password_button.set_sensitive(self.keyring.load_password(cfg.get("name")) is not None)
 
@@ -558,10 +582,17 @@ class HostDialog(ResponseDialog):
 
         protocol = self.protocol_row.get_selected_item().get_string().lower()
 
+        # Recombined into the same "[user@]hostname" string everything else
+        # in the app (window.py, sftp_widget.py, send_file.py) still expects
+        # in the "host" field — only the dialog's UI splits it into two rows.
+        username = self.entry_username.get_text().strip()
+        hostname = self.entry_host.get_text().strip()
+        host_value = f"{username}@{hostname}" if username else hostname
+
         config = {
             "protocol": protocol,
             "name": self.entry_name.get_text().strip(),
-            "host": self.entry_host.get_text().strip(),
+            "host": host_value,
             "port": port,
             "key_path": key_path,
             "compat_old_systems": self.switch_compat.get_active(),
@@ -570,6 +601,7 @@ class HostDialog(ResponseDialog):
             "ssh_options": self.entry_options.get_text().strip() or None,
             "telnet_binary": self.switch_telnet_binary.get_active(),
             "telnet_local_echo": self.switch_telnet_echo.get_active(),
+            "save_log": self.switch_save_log.get_active(),
         }
 
         parent_id = self.combo_group.get_active_id()
@@ -721,6 +753,23 @@ class SettingsDialog(Adw.Window):
         self.telnet_path_row.set_text(self.settings_manager.get("client.telnet_path"))
         group_paths.add(self.telnet_path_row)
 
+        group_logging = Adw.PreferencesGroup(
+            title=_("Logging"),
+            description=_("Used for hosts with \"Save session log\" enabled. Leave empty to use "
+                           "the .config_path pointer's terminal_logs_path, or the config directory "
+                           "if that's empty too.")
+        )
+        page_client.add(group_logging)
+
+        self.log_dir_row = Adw.EntryRow(title=_("Log Directory"))
+        self.log_dir_row.set_text(self.settings_manager.get("client.log_dir"))
+        log_dir_button = Gtk.Button(icon_name="folder-open-symbolic")
+        log_dir_button.set_valign(Gtk.Align.CENTER)
+        log_dir_button.set_tooltip_text(_("Choose a folder"))
+        log_dir_button.connect("clicked", self.on_choose_log_dir_clicked)
+        self.log_dir_row.add_suffix(log_dir_button)
+        group_logging.add(self.log_dir_row)
+
         # --- User Commands Page (Placeholder) ---
         page_commands = Adw.PreferencesPage()
         page_commands.set_title(_("User Commands"))
@@ -792,6 +841,16 @@ class SettingsDialog(Adw.Window):
             current_icon_index = 0
         self.icon_row.set_selected(current_icon_index)
         group_logo.add(self.icon_row)
+
+        group_host_tree = Adw.PreferencesGroup(title=_("Host Tree"))
+        page_interface.add(group_host_tree)
+
+        self.tree_row_striping_row = Adw.SwitchRow(
+            title=_("Alternating row highlight"),
+            subtitle=_("Tint every other row with a faint accent-color wash")
+        )
+        self.tree_row_striping_row.set_active(self.settings_manager.get("interface.tree_row_striping"))
+        group_host_tree.add(self.tree_row_striping_row)
 
         # --- SFTP Page ---
         page_sftp = Adw.PreferencesPage()
@@ -882,6 +941,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("client.ssh_path", self.ssh_path_row.get_text())
         self.settings_manager.set("client.telnet_path", self.telnet_path_row.get_text())
         self.settings_manager.set("client.sshpass_path", self.sshpass_path_row.get_text())
+        self.settings_manager.set("client.log_dir", self.log_dir_row.get_text().strip())
 
         # User commands
         user_commands = []
@@ -901,6 +961,8 @@ class SettingsDialog(Adw.Window):
         icon_stem = self._icon_options[self.icon_row.get_selected()][1]
         self.settings_manager.set("interface.icon", icon_stem)
 
+        self.settings_manager.set("interface.tree_row_striping", self.tree_row_striping_row.get_active())
+
         self.settings_manager.save()
 
         # Apply the icon change immediately — the window's own icon, the
@@ -914,7 +976,30 @@ class SettingsDialog(Adw.Window):
         if app is not None and hasattr(app, "apply_macos_dock_icon"):
             app.apply_macos_dock_icon()
 
+        # The striping cell-data-func reads the setting live, it just needs
+        # a redraw to pick up the new value immediately.
+        self.parent_window.tree_view.queue_draw()
+
         self.close()
+
+    def on_choose_log_dir_clicked(self, button):
+        """Shows a native folder chooser for the log directory setting."""
+        file_chooser = Gtk.FileChooserDialog(
+            title=_("Select Log Directory"),
+            transient_for=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER
+        )
+        file_chooser.add_button(_("Select"), Gtk.ResponseType.OK)
+        file_chooser.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        file_chooser.connect("response", self.on_log_dir_chosen)
+        file_chooser.present()
+
+    def on_log_dir_chosen(self, dialog, response):
+        if response == Gtk.ResponseType.OK:
+            gfile = dialog.get_file()
+            if gfile:
+                self.log_dir_row.set_text(gfile.get_path())
+        dialog.destroy()
 
     def on_command_edited(self, widget, path, text, column_index):
         """Saves the edited text in the user commands ListStore."""
@@ -950,6 +1035,7 @@ class SettingsDialog(Adw.Window):
             self.ssh_path_row.set_text(DEFAULT_SETTINGS["client.ssh_path"])
             self.telnet_path_row.set_text(DEFAULT_SETTINGS["client.telnet_path"])
             self.sshpass_path_row.set_text(DEFAULT_SETTINGS["client.sshpass_path"])
+            self.log_dir_row.set_text(DEFAULT_SETTINGS["client.log_dir"])
         elif current_page_name == "commands":
             self.commands_store.clear()
             default_commands = DEFAULT_SETTINGS.get("user_commands", [])
@@ -993,9 +1079,30 @@ class BatchCommandDialog(Adw.Window):
                             margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
         content_box.append(main_box)
 
-        self.command_entry = Gtk.Entry(placeholder_text=_("Command to send to selected terminals"))
-        self.command_entry.connect("activate", self.on_send_clicked)
-        main_box.append(self.command_entry)
+        # A multi-row, auto-expanding box (grows with content up to
+        # max_content_height, then scrolls) rather than a single-line Entry
+        # — so a long command is visible in full instead of scrolling off
+        # to the side. Ctrl+Enter sends (see on_command_key_pressed); plain
+        # Enter inserts a newline, same as any other multi-line text input.
+        self.command_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        self.command_view.add_css_class("card")
+        self.command_view.set_top_margin(6)
+        self.command_view.set_bottom_margin(6)
+        self.command_view.set_left_margin(8)
+        self.command_view.set_right_margin(8)
+        self.command_buffer = self.command_view.get_buffer()
+
+        command_key_controller = Gtk.EventControllerKey.new()
+        command_key_controller.connect("key-pressed", self.on_command_key_pressed)
+        self.command_view.add_controller(command_key_controller)
+
+        command_scroller = Gtk.ScrolledWindow()
+        command_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        command_scroller.set_min_content_height(36)   # ~1 line
+        command_scroller.set_max_content_height(150)  # ~6 lines, then it scrolls
+        command_scroller.set_propagate_natural_height(True)
+        command_scroller.set_child(self.command_view)
+        main_box.append(command_scroller)
 
         self.close_after_send_check = Gtk.CheckButton(label=_("Close window after send"), active=True)
         main_box.append(self.close_after_send_check)
@@ -1122,8 +1229,19 @@ class BatchCommandDialog(Adw.Window):
         self.select_all_check.set_active(all_active)
         self._syncing_select_all = False
 
+    def on_command_key_pressed(self, controller, keyval, keycode, modifier):
+        """Ctrl+Enter sends, mirroring the old single-line Entry's
+        activate-on-Enter — plain Enter is left alone to insert a newline,
+        like any other multi-line text view."""
+        is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
+        if is_ctrl and keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self.on_send_clicked()
+            return True
+        return False
+
     def on_send_clicked(self, *args):
-        command = self.command_entry.get_text()
+        start, end = self.command_buffer.get_bounds()
+        command = self.command_buffer.get_text(start, end, False)
         if not command:
             return
         payload = (command + "\n").encode("utf-8")
@@ -1163,4 +1281,4 @@ class BatchCommandDialog(Adw.Window):
         if self.close_after_send_check.get_active():
             self.close()
         else:
-            self.command_entry.set_text("")
+            self.command_buffer.set_text("")

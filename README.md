@@ -10,22 +10,32 @@ Just like the perfect pair of thongs, this client is barely there, but it holds 
 
 ThongSSH is for those who love minimalism. We've got a cute host panel so you never lose track of your servers.
 
-### 🆕 What's New in 0.5.1
+## 💋 Features
 
-She's getting flexible — splits every which way:
-* **Multi-div split view** — three new header bar buttons let you split the tab area vertically (side by side), horizontally (stacked), or into a full 2x2 grid. Each div runs its own independent set of tabs. Hit the same button twice to snap back to one div (everything merges back together). Switch between vertical/horizontal and your tabs just re-orient, no shuffling. Drag a tab from one div straight into another whenever you want to rearrange.
-* **Active div highlight** — a subtle accent-colored outline shows which div is currently "listening" for new tabs, so double-clicking a host in the tree always lands where you expect.
-* **Batch Command learned to filter by div** — the "Select / Deselect All" row now has a "Divs" dropdown next to it. Split the view and it fills in with Left/Right, Top/Bottom, or all four quadrants, so you can blast a command at just the terminals in one section instead of everything at once.
-* **SFTP: New Folder** — right-click (even on empty space) in either the local or remote panel to create a new directory where you're standing.
+**Connections**
+* SSH, Telnet, and SFTP, plus a plain **local terminal** entry pinned to the top of the host list (separate from your saved hosts — no SSH involved, just a shell).
+* Cross-platform password storage via the `keyring` library — lands in the real native vault on every OS (macOS Keychain, Windows Credential Locker, Linux/BSD Secret Service), with an encrypted local fallback if none is available.
+* Host dialog keeps username and hostname as separate fields (username lives under Authentication), instead of a single crammed-together `user@host` address.
+* A little more native on macOS — proper Dock icon, About window icon, and a system font that isn't a sad fallback serif.
 
-### 🆕 What's New in 0.4.1
+**Layout**
+* **Multi-div split view** — split the tab area vertically, horizontally, or into a full 2x2 grid, each div running its own independent set of tabs. Switch between vertical/horizontal and your tabs just re-orient, no shuffling. Drag a tab from one div straight into another to rearrange. A subtle accent-colored outline shows which div is currently active.
+* Host search is always visible in the tree panel — click it or hit **Ctrl+F** from anywhere in the app (tree, terminal, wherever) to jump in and start typing.
+* Optional alternating row tint for the host tree, if you want a bit more visual rhythm (Settings → Interface).
+* The window remembers its size and maximized state between launches. (Position can't be — GTK4 removed window-position APIs outright, since Wayland treats placement as the compositor's call, not the app's.)
 
-She's been to the gym:
-* **Batch Command** — one command, blasted to every open terminal at once, with checkboxes to pick your targets. Header bar button and hamburger menu, your pick.
-* **Send File from a terminal tab** — right-click a terminal, pick a local file, it flies over SFTP to the remote host using whatever auth that session already trusts (key or saved password). There's even a cheeky "Detect from terminal" button that runs a real `pwd` over there to guess the remote directory for you (only press it when you're actually at a shell prompt, not mid-`vim`!).
-* **Cross-platform password storage** — swapped the GNOME-only libsecret dependency for the `keyring` library, so passwords land in the real native vault on every OS (macOS Keychain, Windows Credential Locker, Linux/BSD Secret Service), with an encrypted local fallback if none is available.
-* **A little more native on macOS** — proper Dock icon, About window icon, and a system font that isn't a sad fallback serif.
-* **Interface settings** — pick your app icon (Safe vs. Original 👀) right from Settings → Interface.
+**Terminal**
+* **In-terminal Find** — right-click → Find..., or **Ctrl+Shift+F** from anywhere. Case-sensitive, regex, and wrap-around toggles, with up/down buttons to step through matches.
+* **Session logging** — check "Save session log" on a host and every connection is recorded to a clean, human-readable transcript in real time (not just at disconnect). Didn't turn it on up front? Right-click an open terminal and tick "Save log" to start recording from that point on. Log location is configurable in Settings → Client Options.
+* **Batch Command** — one command, sent to every open terminal at once (or just the ones in a chosen div), via a multi-line, auto-expanding input box so a long command is actually visible instead of scrolling off-screen. Ctrl+Enter sends.
+* **Send File from a terminal tab** — right-click a terminal, pick a local file, it flies over SFTP to the remote host using whatever auth that session already trusts. A "Detect from terminal" button runs a real `pwd` over there to guess the remote directory for you.
+* SFTP panels (local and remote) support right-click **New Folder**, even on empty space.
+
+**Configuration**
+* Pick your app icon (Safe vs. Original 👀) from Settings → Interface.
+* Running from a git checkout instead of a package? Drop a `.config_path` file next to the app (it's created for you automatically, pre-filled with the current default) and point it at a different folder to keep two checkouts' hosts/settings completely separate — handy for not mixing a personal setup with a work one on the same machine.
+
+Full history of what shipped when lives in [release_notes.md](release_notes.md).
 
 ### 🛠️ The Fabric (Tech Stack)
 Stitched together with the latest fashion trends:

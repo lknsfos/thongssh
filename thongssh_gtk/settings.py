@@ -3,11 +3,11 @@ import logging
 from pathlib import Path
 import shutil
 from .colors import COLOR_SCHEMES
+from .paths import CONFIG_DIR
 
 # Placeholder for future internationalization (i18n)
 _ = lambda s: s
 
-CONFIG_DIR = Path.home() / ".config" / "thongssh"
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
 
 DEFAULT_SETTINGS = {
@@ -17,6 +17,7 @@ DEFAULT_SETTINGS = {
     "client.ssh_path": shutil.which("ssh") or "/usr/bin/ssh",
     "client.telnet_path": shutil.which("telnet") or "/usr/bin/telnet",
     "client.sshpass_path": shutil.which("sshpass") or "/usr/bin/sshpass",
+    "client.log_dir": "", # empty = fall back to .config_path's terminal_logs_path, then CONFIG_DIR (see paths.resolve_log_dir)
     "user_commands": [],
     "sftp.local_default_path": "~/Downloads",
     "sftp.local_default_sort_column": "name", # name, size, date
@@ -25,6 +26,7 @@ DEFAULT_SETTINGS = {
     "sftp.remote_default_sort_direction": "asc", # asc, desc
     "terminal.close_on_disconnect": True, # ✨ NEW: Whether to close tab on disconnect
     "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
+    "interface.tree_row_striping": False,
 }
 
 class SettingsManager:

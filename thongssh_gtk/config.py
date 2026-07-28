@@ -4,8 +4,9 @@ import shutil
 import logging
 from pathlib import Path
 
+from .paths import CONFIG_DIR
+
 # --- Global Constants ---
-CONFIG_DIR = Path.home() / ".config" / "thongssh"
 CONFIG_FILE     = CONFIG_DIR / "hosts.json"
 CONFIG_BACKUP_1 = CONFIG_DIR / "hosts.json.bak1"
 CONFIG_BACKUP_2 = CONFIG_DIR / "hosts.json.bak2"
@@ -47,6 +48,7 @@ HOST_CONFIG_TEMPLATE = {
     "forward_agent": False,
     "telnet_binary": False,
     "telnet_local_echo": False,
+    "save_log": False,
 }
 
 

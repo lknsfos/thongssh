@@ -1,0 +1,4 @@
+{
+    "config_path": "~/.config/thongssh",
+    "terminal_logs_path": "~/.config/thongssh/logs"
+}

@@ -8,6 +8,7 @@ import sys
 import signal
 import shlex
 import copy
+import json
 import logging
 import datetime
 import re
@@ -18,6 +19,7 @@ from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, resource_
 from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog # Removed SettingsDialog
 from .send_file import SendFileDialog, guess_remote_cwd
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
+from .paths import resolve_log_dir
 from .settings import SettingsManager
 from .launcher_icon import apply_launcher_icon
 from .keyring import KeyringManager
@@ -26,6 +28,18 @@ from .colors import COLOR_SCHEMES
 
 # Placeholder for future internationalization (i18n)
 _ = lambda s: s
+
+# Window size/maximized state cache. Deliberately separate from
+# settings.json (SettingsManager) — it's regenerated on every close and
+# holds nothing a user would ever want to hand-edit or back up, so it
+# doesn't belong mixed in with actual preferences.
+WINDOW_STATE_FILE = CONFIG_DIR / "window_state.json"
+
+# PCRE2 compile-option bits used for in-terminal search (Vte.Regex wraps
+# PCRE2 directly and doesn't expose these as GI constants). Values are from
+# pcre2.h and are part of PCRE2's stable ABI.
+_PCRE2_CASELESS = 0x00000008
+_PCRE2_MULTILINE = 0x00000400
 
 # --- Main Window ---
 class ThongSSHWindow(Adw.ApplicationWindow):
@@ -38,14 +52,15 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.set_default_size(1024, 768)
-
         self.set_deletable(True)
 
         # Load and migrate the config
         self.config_data = load_and_migrate_config()
 
         self.settings_manager = SettingsManager()
+
+        self._restore_window_geometry()
+        self.connect("close-request", self._on_close_request)
 
         # Make the bundled icon resolvable by name even when no .desktop file
         # (or icon-theme install step) has registered it in hicolor. Reads
@@ -118,8 +133,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         
         # --- SearchBar (The correct way for GTK4) ---
+        # Always revealed — there's no dedicated toggle button anymore, the
+        # bar is just a permanent part of the host panel. "Activating" it
+        # (click, or Ctrl+F from anywhere) only needs to move focus into it.
         self.search_bar = Gtk.SearchBar()
-        self.search_bar.set_search_mode(False)
+        self.search_bar.set_search_mode(True)
 
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.search_entry = Gtk.SearchEntry()
@@ -154,8 +172,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             type1 = model.get_value(iter1, COL_TYPE)
             type2 = model.get_value(iter2, COL_TYPE)
 
-            if type1 == "group" and type2 == "host": return -1
-            if type1 == "host" and type2 == "group": return 1
+            # The synthetic "local machine" row always sorts first, then
+            # groups, then hosts.
+            rank = {"local": 0, "group": 1, "host": 2}
+            rank1, rank2 = rank.get(type1, 3), rank.get(type2, 3)
+            if rank1 != rank2:
+                return -1 if rank1 < rank2 else 1
 
             name1 = model.get_value(iter1, COL_NAME).lower()
             name2 = model.get_value(iter2, COL_NAME).lower()
@@ -182,6 +204,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         column.add_attribute(renderer_text, "text", COL_NAME)
         column.add_attribute(renderer_pixbuf, "icon-name", COL_ICON)
+
+        # ✨ Optional, very subtle alternating-row tint (interface.tree_row_striping
+        # setting) — set as a per-cell data func rather than baked-in attributes
+        # since it needs to react live to both the setting and the current accent
+        # color, not just row data.
+        column.set_cell_data_func(renderer_pixbuf, self._tree_row_cell_data_func)
+        column.set_cell_data_func(renderer_text, self._tree_row_cell_data_func)
 
         self.tree_view.append_column(column)
         scrolled_window.set_child(self.tree_view)
@@ -223,11 +252,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         button_box.set_halign(Gtk.Align.CENTER)
 
-        # ✨ Return the search button to the bottom panel
-        search_btn = Gtk.Button(icon_name="edit-find-symbolic")
-        search_btn.set_tooltip_text(_("Search (Ctrl+F)"))
-        search_btn.connect("clicked", self.on_toggle_search)
-
         add_host_btn = Gtk.Button(icon_name="list-add-symbolic")
         add_host_btn.set_tooltip_text(_("Add Host"))
         add_host_btn.connect("clicked", self.on_add_host_clicked)
@@ -241,7 +265,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         remove_btn.connect("clicked", self.on_remove_selected_clicked, None)
 
         button_box.append(add_host_btn)
-        button_box.append(search_btn)
         button_box.append(add_group_btn)
         button_box.append(remove_btn)
         # The collapse button is now in the HeaderBar
@@ -265,10 +288,109 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.tree_view.get_selection().connect("changed", self.update_menu_sensitivity)
         self.update_menu_sensitivity()
 
-        # ✨ Add a global key controller for shortcuts like Ctrl+W
+        # ✨ Add a global key controller for shortcuts like Ctrl+W / Ctrl+F.
+        # CAPTURE phase so it sees the event on the way down, before it
+        # reaches a descendant like Vte.Terminal — which otherwise consumes
+        # keys like Ctrl+F itself (as terminal input) before they'd ever
+        # bubble back up to a default-phase window controller.
         key_controller_window = Gtk.EventControllerKey.new()
+        key_controller_window.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         key_controller_window.connect("key-pressed", self.on_window_key_pressed)
         self.add_controller(key_controller_window)
+
+    def _load_window_state(self):
+        try:
+            with open(WINDOW_STATE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError, IOError):
+            return {}
+
+    def _save_window_state(self, state):
+        """Atomic write (temp file + rename) so a crash mid-write can never
+        leave a half-written, unparseable cache file behind."""
+        try:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            tmp_path = WINDOW_STATE_FILE.with_suffix(".tmp")
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, WINDOW_STATE_FILE)
+        except OSError as e:
+            logging.error(f"Failed to save window state: {e}")
+
+    def _max_monitor_size(self):
+        """Largest available width/height across all connected monitors, so
+        a saved size can be clamped to fit instead of being discarded
+        outright the moment it's too big for whichever monitor is
+        current — e.g. after unplugging an external display. Falls back to
+        the 1024x768 default if monitor info isn't available yet (can
+        happen this early at startup)."""
+        display = self.get_display()
+        monitors = display.get_monitors() if display else None
+        if monitors is None or monitors.get_n_items() == 0:
+            return 1024, 768
+        max_w = max(monitors.get_item(i).get_geometry().width for i in range(monitors.get_n_items()))
+        max_h = max(monitors.get_item(i).get_geometry().height for i in range(monitors.get_n_items()))
+        return max_w, max_h
+
+    def _restore_window_geometry(self):
+        """Restores the window size (and maximized state) saved when the
+        window was last closed. The saved size is clamped — not discarded —
+        if it no longer fits any current monitor, so it degrades gracefully
+        instead of jumping back to a hardcoded default whenever the screen
+        setup changes. Note: only size/maximized state is persisted, not
+        position — GTK4 dropped window-position APIs entirely
+        (gtk_window_move/get_position don't exist any more), since Wayland
+        treats placement as the compositor's call, not the client's."""
+        state = self._load_window_state()
+        default_width, default_height = 1024, 768
+        width = state.get("width") or default_width
+        height = state.get("height") or default_height
+
+        max_w, max_h = self._max_monitor_size()
+        width = min(width, max_w)
+        height = min(height, max_h)
+
+        self.set_default_size(width, height)
+        logging.debug(f"Window geometry restored: {width}x{height} (saved state: {state})")
+
+        # Continuously track the last known *unmaximized* size — rather than
+        # only reading it once at close time — since default-width/height
+        # can lag behind an in-progress interactive resize; this way,
+        # whatever the most recent settled value was is always on hand.
+        self._last_normal_size = (width, height)
+        def track_normal_size(*_args):
+            if not self.is_maximized():
+                self._last_normal_size = self.get_default_size()
+                logging.debug(f"Tracked normal size: {self._last_normal_size}")
+        self.connect("notify::default-width", track_normal_size)
+        self.connect("notify::default-height", track_normal_size)
+        # Also resync right on the maximized<->normal transition itself,
+        # since that's the one moment GTK is guaranteed to have just
+        # recomputed the "size to restore to".
+        self.connect("notify::maximized", track_normal_size)
+
+        if state.get("maximized"):
+            self.maximize()
+
+    def _on_close_request(self, *args):
+        """Persists the window's current size and maximized state so the
+        next launch reopens at the same geometry. Uses the continuously
+        tracked _last_normal_size (see _restore_window_geometry) rather than
+        querying get_default_size() fresh here, since that query has been
+        observed to occasionally return a stale/default value right at
+        close time."""
+        width, height = getattr(self, "_last_normal_size", None) or self.get_default_size()
+        maximized = self.is_maximized()
+        state = {}
+        if width > 0 and height > 0:
+            state["width"] = width
+            state["height"] = height
+        state["maximized"] = maximized
+        logging.debug(f"Saving window state on close: {state}")
+        self._save_window_state(state)
+        return False # Allow the window to close
 
     def setup_css(self):
         """Applies custom CSS to the application."""
@@ -286,8 +408,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         .thongssh-active-pane {
             /* box-shadow (not border!) — a border adds to the widget's size
                requisition, which made the pane visibly grow/jump in the
-               Paned the instant it became active. box-shadow is paint-only. */
-            box-shadow: inset 0 0 0 2px alpha(@accent_color, 0.65);
+               Paned the instant it became active. box-shadow is paint-only.
+               Kept thin and low-opacity on purpose — this is meant to be a
+               subtle hint of which pane is active, not a hard outline. */
+            box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.35);
         }
         """
         css_provider.load_from_string(css_data)
@@ -332,8 +456,42 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     # --- 3. Tree Functionality (Left Panel) ---
 
+    def _tree_row_cell_data_func(self, column, cell, model, tree_iter, data=None):
+        """Applies the optional interface.tree_row_striping tint. Off by
+        default — when on, every other row gets a barely-there accent-color
+        wash so rows are easier to track by eye without turning into a hard
+        highlight.
+
+        Parity is the row's position among its own siblings (last path
+        index), not a true flattened visual row number — GtkTreeView has no
+        cheap way to compute "the Nth visible row" without walking the whole
+        model on every redraw. For this tree's shape (a couple of levels of
+        groups/hosts) that's an acceptable approximation of a zebra pattern,
+        not a literal one."""
+        if not self.settings_manager.get("interface.tree_row_striping"):
+            cell.set_property("cell-background-set", False)
+            return
+
+        path = model.get_path(tree_iter)
+        if path.get_indices()[-1] % 2 == 0:
+            cell.set_property("cell-background-set", False)
+            return
+
+        accent = Adw.StyleManager.get_default().get_accent_color_rgba()
+        tint = Gdk.RGBA()
+        tint.red, tint.green, tint.blue, tint.alpha = accent.red, accent.green, accent.blue, 0.08
+        cell.set_property("cell-background-rgba", tint)
+
     def populate_tree(self):
         self.main_tree_store.clear()
+
+        # ✨ Synthetic "local machine" entry — always first (see sort_func),
+        # never part of hosts.json / config_data, so it's neither saved by
+        # rebuild_config_and_save() (which only understands "group"/"host"
+        # nodes) nor editable/removable (guarded in on_remove_selected_clicked
+        # and skipped in on_tree_right_click).
+        local_config = {"name": _("Local Terminal"), "protocol": "local"}
+        self.main_tree_store.append(None, [local_config["name"], "local", "computer-symbolic", local_config])
 
         def iter_nodes(node_data, parent_iter):
             if not isinstance(node_data, dict): return
@@ -366,7 +524,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         if tree_iter:
             node_type = model.get_value(tree_iter, COL_TYPE)
-            if node_type == "host":
+            if node_type in ("host", "local"):
                 host_config = model.get_value(tree_iter, COL_DATA)
                 logging.info(f"Connecting to: {host_config['name']}")
                 self.start_session(host_config)
@@ -424,20 +582,21 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         drop_target.connect("drop", self._on_pane_tab_drop, notebook)
         notebook.add_controller(drop_target)
 
-        # Track "last interacted-with pane" as the active one. Keyboard focus
-        # (below) already covers clicking into any page's content (terminal,
-        # SFTP view, tree...) since those all grab_focus() on activation. The
-        # one case focus can't catch is a click on a pane with zero pages —
-        # nothing inside it to focus — so this click gesture only ever acts
-        # then; it stays a passive observer otherwise (never claims/denies
-        # the sequence) so it can't interfere with clicks meant for a tab, a
-        # terminal, or anything else already inside the notebook.
+        # Track "last interacted-with pane" as the active one. This used to
+        # rely solely on keyboard-focus "enter" (below), acting here only for
+        # a click on a pane with zero pages (nothing inside it to focus). But
+        # on GNOME/Wayland, rapidly alternating clicks between two panes can
+        # make the focus-enter notification lag or get dropped, leaving
+        # active_pane stuck on whichever pane last reliably reported it — so
+        # this now fires on every press, in capture phase, as a passive
+        # observer (never claims/denies the sequence) that can't interfere
+        # with clicks meant for a tab, a terminal, or anything else already
+        # inside the notebook.
         click_controller = Gtk.GestureClick.new()
         click_controller.set_button(0)  # any button
         click_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         def on_pane_pressed(gesture, n_press, x, y, nb=notebook):
-            if nb.get_n_pages() == 0:
-                self._set_active_pane(nb)
+            self._set_active_pane(nb)
         click_controller.connect("pressed", on_pane_pressed)
         notebook.add_controller(click_controller)
 
@@ -690,12 +849,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             button.set_icon_name("go-next-symbolic")
 
     def on_toggle_search(self, *args):
-        """Activates/deactivates the search bar."""
-        search_mode_active = not self.search_bar.get_search_mode()
-        self.search_bar.set_search_mode(search_mode_active)
-        if search_mode_active:
-            self.search_entry.set_text("")
-            self.search_entry.grab_focus()
+        """Moves focus into the always-visible search entry, selecting any
+        existing text so typing immediately replaces it."""
+        self.search_entry.grab_focus()
+        self.search_entry.select_region(0, -1)
 
     def setup_search_signals(self):
         """Connects signals for the search widgets."""
@@ -739,11 +896,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.update_search_ui()
 
     def on_search_activate(self, entry):
-        """
-        Handler for Enter key press in the search entry.
-        1. Opens the selected host.
-        2. Hides the search bar.
-        """
+        """Handler for Enter key press in the search entry: opens the
+        currently selected search result, if it's a host."""
         if self.search_results and 0 <= self.current_search_index < len(self.search_results):
             path = self.search_results[self.current_search_index]
             model = self.tree_view.get_model()
@@ -751,8 +905,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             node_type = model.get_value(tree_iter, COL_TYPE)
             if node_type == "host":
                 self.on_tree_row_activated(self.tree_view, path, None)
-
-        self.search_bar.set_search_mode(False)
 
     def on_search_nav_up(self, button):
         if not self.search_results: return
@@ -831,11 +983,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Key press handler (Delete, F2) in the host tree."""
         is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
 
-        # --- Intercept Ctrl+F to activate our search ---
-        if is_ctrl and keyval == Gdk.KEY_f:
-            self.on_toggle_search()
-            return True # Event fully handled, do not propagate further
-        
+        # Ctrl+F is handled globally now (see on_window_key_pressed), which
+        # fires first regardless of where focus is.
+
         selection = self.tree_view.get_selection()
         model, tree_iter = selection.get_selected()
 
@@ -863,12 +1013,32 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         return False # For all other keys - propagate further
 
     def on_window_key_pressed(self, controller, keyval, keycode, modifier):
-        """Handles global key presses for the window (e.g., Ctrl+W)."""
+        """Handles global key presses for the window (e.g., Ctrl+W, Ctrl+F,
+        Ctrl+Shift+F).
+
+        Resolved through _resolve_latin_letter (see on_terminal_key_pressed)
+        rather than compared against keyval directly, same reasoning as
+        there: these are physical-key shortcuts, and should fire the same
+        way regardless of which character the active keyboard layout maps
+        that key to."""
         is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
+        is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
+        letter = self._resolve_latin_letter(keyval, keycode) if is_ctrl else None
+
         # ✨ Handle Ctrl+W globally to close any active tab
-        if is_ctrl and keyval == Gdk.KEY_w:
+        if is_ctrl and letter == "w":
             self.on_menu_close_tab(None, None)
             return True # Event handled
+        # Checked before the plain Ctrl+F branch below since both share
+        # is_ctrl and letter == "f".
+        if is_ctrl and is_shift and letter == "f":
+            self.on_menu_find_in_terminal(None, None)
+            return True
+        # Ctrl+F focuses the search entry from anywhere — terminal, tree,
+        # or elsewhere in the window (see the CAPTURE phase note above).
+        if is_ctrl and letter == "f":
+            self.on_toggle_search()
+            return True
         return False
 
     def setup_global_menu(self, header_bar):
@@ -879,7 +1049,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.add_action(action_close_tab)
 
         action_quit = Gio.SimpleAction.new("quit", None)
-        action_quit.connect("activate", lambda a, p: self.get_application().quit())
+        # self.close() (not get_application().quit()): quit() tears every
+        # window down immediately without emitting "close-request" at all,
+        # which is what _on_close_request relies on to save window geometry
+        # — closing via this menu action silently skipped that save
+        # entirely. close() fires close-request like the titlebar's own
+        # close button does, and the app quits right after since this is
+        # its only window.
+        action_quit.connect("activate", lambda a, p: self.close())
         self.add_action(action_quit)
 
         action_settings = Gio.SimpleAction.new("settings", None)
@@ -1001,7 +1178,17 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_send_file = Gio.SimpleAction.new("send-file", None)
         action_send_file.connect("activate", self.on_menu_send_file)
         self.add_action(action_send_file)
-        
+
+        action_find_in_terminal = Gio.SimpleAction.new("find-in-terminal", None)
+        action_find_in_terminal.connect("activate", self.on_menu_find_in_terminal)
+        self.add_action(action_find_in_terminal)
+
+        # Stateful (checkbox) action — see on_terminal_right_click for how its
+        # state/enabled are kept in sync with the right-clicked tab.
+        action_save_log_tab = Gio.SimpleAction.new_stateful("save-log-tab", None, GLib.Variant.new_boolean(False))
+        action_save_log_tab.connect("activate", self.on_menu_toggle_log_tab)
+        self.add_action(action_save_log_tab)
+
         action_user_cmd = Gio.SimpleAction.new_stateful("user-command", GLib.VariantType.new('s'), GLib.Variant.new_string(""))
         action_user_cmd.connect("activate", self.on_menu_user_command)
         self.add_action(action_user_cmd)
@@ -1043,6 +1230,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         terminal_menu.append(_("Copy"), "win.copy-clipboard")
         terminal_menu.append(_("Paste"), "win.paste-clipboard")
         terminal_menu.append(_("Send File..."), "win.send-file")
+        terminal_menu.append(_("Find... (Ctrl+Shift+F)"), "win.find-in-terminal")
+        terminal_menu.append(_("Save log"), "win.save-log-tab")
 
         tab_menu = Gio.Menu()
         tab_menu.append(_("Disconnect"), "win.tab-disconnect")
@@ -1062,6 +1251,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.popover_group.set_parent(self) # Set parent once to the main window
         self.popover_terminal.set_parent(self) # Attach to the main window
 
+        self._build_find_popover()
+
     def on_tree_right_click(self, gesture, n_press, x, y):
         """Right-click handler: Shows PopoverMenu (100% GTK4).
         Connected to 'released' so the button is already up when the popover
@@ -1079,6 +1270,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             model = tree_view.get_model()
             tree_iter = model.get_iter(path)
             node_type = model.get_value(tree_iter, COL_TYPE)
+
+            # The synthetic "local machine" row isn't a real host — no
+            # edit/clone/remove/SFTP menu applies to it.
+            if node_type == "local":
+                return
 
             # Get the row's rectangle to "attach" the popover to
             rect = tree_view.get_cell_area(path, col)
@@ -1161,6 +1357,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         )
         self.lookup_action("send-file").set_enabled(can_send_file)
 
+        is_logging = tab_info is not None and tab_info.get("log_path") is not None
+        save_log_action = self.lookup_action("save-log-tab")
+        save_log_action.set_state(GLib.Variant.new_boolean(is_logging))
+        save_log_action.set_enabled(not is_logging)
+
         translated_x, translated_y = terminal.translate_coordinates(self, x, y)
 
         rect = Gdk.Rectangle()
@@ -1197,6 +1398,282 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         initial_dir = guess_remote_cwd(terminal)
         dialog = SendFileDialog(self, host_config, initial_dir, terminal=terminal)
         dialog.present()
+
+    # --- In-terminal Find ---
+
+    def _build_find_popover(self):
+        """Builds the (single, reused) in-terminal find popover — same
+        approach as the other context popovers: one instance, parented to
+        the window once, repositioned and repopulated per use rather than
+        rebuilt. Vte.Terminal owns the actual search state (compiled regex,
+        wrap-around) so nothing here is per-tab; _find_target_terminal just
+        tracks which terminal the popover is currently acting on."""
+        self.find_popover = Gtk.Popover()
+        self._find_target_terminal = None
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.set_margin_top(8)
+        box.set_margin_bottom(8)
+        box.set_margin_start(8)
+        box.set_margin_end(8)
+
+        entry_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.find_entry = Gtk.SearchEntry()
+        self.find_entry.set_hexpand(True)
+        self.find_entry.set_width_chars(24)
+        entry_row.append(self.find_entry)
+
+        self.find_prev_button = Gtk.Button(icon_name="go-up-symbolic")
+        self.find_prev_button.set_tooltip_text(_("Previous match"))
+        self.find_next_button = Gtk.Button(icon_name="go-down-symbolic")
+        self.find_next_button.set_tooltip_text(_("Next match"))
+        entry_row.append(self.find_prev_button)
+        entry_row.append(self.find_next_button)
+        box.append(entry_row)
+
+        options_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.find_case_toggle = Gtk.ToggleButton(label=_("Aa"))
+        self.find_case_toggle.set_tooltip_text(_("Case sensitive"))
+        self.find_regex_toggle = Gtk.ToggleButton(label=".*")
+        self.find_regex_toggle.set_tooltip_text(_("Regular expression"))
+        self.find_wrap_toggle = Gtk.ToggleButton(icon_name="view-refresh-symbolic")
+        self.find_wrap_toggle.set_tooltip_text(_("Wrap around"))
+        self.find_wrap_toggle.set_active(True)
+        options_row.append(self.find_case_toggle)
+        options_row.append(self.find_regex_toggle)
+        options_row.append(self.find_wrap_toggle)
+
+        self.find_status_label = Gtk.Label(label="")
+        self.find_status_label.add_css_class("dim-label")
+        self.find_status_label.set_hexpand(True)
+        self.find_status_label.set_halign(Gtk.Align.END)
+        options_row.append(self.find_status_label)
+        box.append(options_row)
+
+        self.find_popover.set_child(box)
+        self.find_popover.set_parent(self)
+
+        self.find_entry.connect("search-changed", self._on_find_text_changed)
+        self.find_entry.connect("activate", lambda e: self._find_next())
+        self.find_prev_button.connect("clicked", lambda b: self._find_previous())
+        self.find_next_button.connect("clicked", lambda b: self._find_next())
+        self.find_case_toggle.connect("toggled", lambda b: self._on_find_text_changed(self.find_entry))
+        self.find_regex_toggle.connect("toggled", lambda b: self._on_find_text_changed(self.find_entry))
+        self.find_wrap_toggle.connect("toggled", lambda b: self._apply_find_wrap_option())
+
+    def on_menu_find_in_terminal(self, action, param):
+        """Opens the find popover targeting the active terminal. Bound to
+        the terminal context menu's "Find..." item and to Ctrl+Shift+F."""
+        terminal = self.get_active_terminal()
+        if terminal is None:
+            return
+        self._find_target_terminal = terminal
+        # Re-apply whatever's already in the entry to *this* terminal — the
+        # popover is shared across terminals, so if it's reopened with
+        # leftover text from a previous tab, that terminal has never had a
+        # regex set on it yet.
+        self._on_find_text_changed(self.find_entry)
+
+        rect = Gdk.Rectangle()
+        anchor_x, anchor_y = terminal.translate_coordinates(self, terminal.get_width() / 2, 0)
+        rect.x, rect.y = int(anchor_x), int(anchor_y)
+        rect.width, rect.height = 1, 1
+        self.find_popover.set_pointing_to(rect)
+        self.find_popover.popup()
+        self.find_entry.grab_focus()
+        self.find_entry.select_region(0, -1)
+
+    def _apply_find_wrap_option(self):
+        if self._find_target_terminal is not None:
+            self._find_target_terminal.search_set_wrap_around(self.find_wrap_toggle.get_active())
+
+    def _compile_find_regex(self, pattern):
+        """Returns a compiled Vte.Regex for pattern, or False if it's an
+        invalid regex (only possible when the regex toggle is on — literal
+        text can't fail to compile once escaped).
+
+        Vte.Regex.new_for_search requires the PCRE2_MULTILINE bit to be set
+        or Vte refuses the regex outright (confirmed via a runtime check in
+        vte_terminal_search_set_regex) — easy to miss since it's not
+        documented in the Python bindings. Plain-text (non-regex) search
+        escapes the pattern rather than using PCRE2_LITERAL, since that flag
+        can't be combined with Vte.REGEX_FLAGS_DEFAULT's other option bits."""
+        is_regex = self.find_regex_toggle.get_active()
+        text = pattern if is_regex else GLib.regex_escape_string(pattern, -1)
+        flags = Vte.REGEX_FLAGS_DEFAULT | _PCRE2_MULTILINE
+        if not self.find_case_toggle.get_active():
+            flags |= _PCRE2_CASELESS
+        try:
+            return Vte.Regex.new_for_search(text, -1, flags)
+        except GLib.GError:
+            return False
+
+    def _on_find_text_changed(self, entry):
+        terminal = self._find_target_terminal
+        if terminal is None:
+            return
+
+        pattern = self.find_entry.get_text()
+        if not pattern:
+            terminal.search_set_regex(None, 0)
+            self.find_entry.remove_css_class("error")
+            self.find_status_label.set_text("")
+            return
+
+        regex = self._compile_find_regex(pattern)
+        if regex is False:
+            self.find_entry.add_css_class("error")
+            self.find_status_label.set_text(_("Invalid pattern"))
+            terminal.search_set_regex(None, 0)
+            return
+
+        self.find_entry.remove_css_class("error")
+        terminal.search_set_regex(regex, 0)
+        self._apply_find_wrap_option()
+        found = terminal.search_find_next()
+        self.find_status_label.set_text("" if found else _("Not found"))
+
+    def _find_next(self):
+        terminal = self._find_target_terminal
+        if terminal is None or not self.find_entry.get_text():
+            return
+        found = terminal.search_find_next()
+        self.find_status_label.set_text("" if found else _("Not found"))
+
+    def _find_previous(self):
+        terminal = self._find_target_terminal
+        if terminal is None or not self.find_entry.get_text():
+            return
+        found = terminal.search_find_previous()
+        self.find_status_label.set_text("" if found else _("Not found"))
+
+    # --- Session logging ("Save session log" on a host, or "Save log" from
+    # an open tab's right-click menu) ---
+    #
+    # Both entry points use the same mechanism: snapshot the terminal's
+    # current rendered buffer as the log's starting content, then poll every
+    # 500ms and append whatever's new. This logs VTE's own rendered plain
+    # text rather than the raw PTY byte stream, which is deliberate — an
+    # earlier version wrapped the spawned command with `script` for a
+    # byte-perfect transcript, but that turned out to be a poor fit twice
+    # over: (1) the raw stream is full of the shell/prompt's own escape
+    # sequences (colors, cursor moves for autosuggestions, etc.), which read
+    # as unreadable garbage rather than the plain "user@host> command" text
+    # a log is actually useful for; and (2) `script` fully buffers its
+    # output and only writes it out at the child process's exit — for a
+    # long-lived interactive SSH session, the log file would just sit empty
+    # for the entire session and only appear once you disconnected.
+    #
+    # The trade-off of polling VTE's buffer instead: it's not byte-for-byte
+    # lossless, since VTE's scrollback is bounded — a burst of output
+    # between two polls that pushes the *whole* diff out of scrollback
+    # before the next poll would be missed. That's a rare edge case for
+    # interactive use, and far better than an unreadable or perpetually
+    # empty log.
+
+    def on_menu_toggle_log_tab(self, action, param):
+        """Activates the terminal context menu's "Save log" checkbox item.
+        Only reachable when not already logging (see on_terminal_right_click,
+        which disables the action once a log is active)."""
+        page_widget = self.get_active_terminal_widget()
+        if page_widget is not None:
+            self._start_session_logging(page_widget)
+
+    def _start_session_logging(self, page_widget):
+        tab_info = self.tab_data.get(page_widget)
+        if tab_info is None or tab_info.get("log_path") is not None:
+            return  # already logging, or not a real tab
+        terminal, _pid = self.open_sessions.get(page_widget, (None, None))
+        if terminal is None:
+            return
+
+        config = tab_info.get("config", {})
+        log_path = self._compute_log_path(config.get("host"), config.get("name"))
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            initial_text = self._dump_terminal_text(terminal)
+            log_file = open(log_path, "w", encoding="utf-8")
+            log_file.write(initial_text)
+            log_file.flush()
+        except (OSError, GLib.GError) as e:
+            logging.error(f"Failed to start session log at {log_path}: {e}")
+            return
+
+        tab_info["log_path"] = log_path
+        tab_info["_log_file"] = log_file
+        tab_info["_log_last_text"] = initial_text
+        tab_info["_log_timeout_id"] = GLib.timeout_add(500, self._tick_session_log, page_widget)
+
+    def _dump_terminal_text(self, terminal):
+        """Current full buffer (scrollback + screen) as plain rendered text
+        (no escape sequences), with trailing blank lines stripped.
+
+        The strip matters for the tick-to-tick diffing in _tick_session_log:
+        VTE's dump always includes the cursor's current (often still-blank)
+        row, whose position shifts down as more output arrives. Left in,
+        that makes the previous dump a non-prefix of the next one purely
+        because of where the blank tail happened to fall — not because
+        anything was actually rewritten — which broke the append-only diff.
+        Stripping it keeps the comparison anchored to actual printed content
+        instead of a moving blank tail."""
+        stream = Gio.MemoryOutputStream.new_resizable()
+        terminal.write_contents_sync(stream, Vte.WriteFlags.DEFAULT)
+        stream.close(None)  # steal_as_bytes() asserts the stream is closed first
+        text = bytes(stream.steal_as_bytes().get_data()).decode("utf-8", errors="replace")
+        return text.rstrip("\n")
+
+    def _tick_session_log(self, page_widget):
+        """Recurring GLib.timeout_add callback — returning False cancels it,
+        which doubles as automatic cleanup once the tab closes (tab_data
+        stops having an entry for it, or logging was otherwise stopped)."""
+        tab_info = self.tab_data.get(page_widget)
+        if tab_info is None or tab_info.get("log_path") is None:
+            return False
+        terminal, _pid = self.open_sessions.get(page_widget, (None, None))
+        if terminal is None:
+            return False
+
+        try:
+            current_text = self._dump_terminal_text(terminal)
+        except GLib.GError as e:
+            logging.debug(f"Session log poll failed, will retry: {e}")
+            return True
+
+        last_text = tab_info.get("_log_last_text", "")
+        if current_text != last_text:
+            if current_text.startswith(last_text):
+                new_part = current_text[len(last_text):]
+            else:
+                # The common-prefix invariant broke — scrollback evicted
+                # content before we got a chance to log it. Can't recover
+                # the gap, so just note it and carry on from here.
+                new_part = "\n--- (older output lost; scrollback limit reached) ---\n" + current_text
+            log_file = tab_info.get("_log_file")
+            if log_file and new_part:
+                log_file.write(new_part)
+                log_file.flush()
+            tab_info["_log_last_text"] = current_text
+        return True
+
+    def _stop_session_logging(self, page_widget):
+        """Closes out any active log bookkeeping for page_widget. Safe to
+        call even if none was active. Does NOT touch tab_info["log_path"]
+        itself — callers that mean to fully clear logging state (as opposed
+        to e.g. replacing it on reconnect) should set that separately."""
+        tab_info = self.tab_data.get(page_widget)
+        if tab_info is None:
+            return
+        timeout_id = tab_info.pop("_log_timeout_id", None)
+        if timeout_id is not None:
+            GLib.source_remove(timeout_id)
+        log_file = tab_info.pop("_log_file", None)
+        if log_file:
+            try:
+                log_file.write("\n")
+                log_file.close()
+            except OSError:
+                pass
+        tab_info.pop("_log_last_text", None)
 
     def on_popover_terminal_closed(self, popover):
         """Gives focus back to the active terminal when the context menu is closed."""
@@ -1510,6 +1987,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         node_type = model.get_value(tree_iter, COL_TYPE)
         name = model.get_value(tree_iter, COL_NAME)
 
+        # The synthetic "local machine" row can't be deleted (it isn't part
+        # of hosts.json to begin with).
+        if node_type == "local":
+            return
+
         # Prepare default text
         heading = _("Delete {node_type} '{name}'?").format(node_type=node_type, name=name)
         body = _("This action cannot be undone.")
@@ -1564,8 +2046,25 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     # --- 6. Connection Logic (Terminal) ---
 
+    def _compute_log_path(self, host_str, name):
+        """Where a new session log should be written — directory per the
+        client.log_dir -> .config_path -> CONFIG_DIR/logs fallback chain
+        (see paths.resolve_log_dir), filename "user@hostname-YYYYMMDD-hh:mm:ss"
+        (or the host's name, for the local terminal which has no host string).
+        Takes the already-resolved host_str (with any interactively-prompted
+        username merged in) rather than a whole config dict, so callers can't
+        accidentally pass the pre-prompt version that's missing it."""
+        log_dir = resolve_log_dir(self.settings_manager.get("client.log_dir"))
+        label = (host_str or name or "session").replace("/", "_")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H:%M:%S")
+        return log_dir / f"{label}-{timestamp}"
+
     def start_session(self, config, existing_terminal_widget=None):
-        """Starts a terminal session based on the host config (SSH or Telnet)."""
+        """Starts a terminal session based on the host config (SSH, Telnet, or local)."""
+        if config.get("protocol") == "local":
+            self._continue_session(config, None, existing_terminal_widget)
+            return
+
         host_str = config.get('host')
         if not host_str:
             logging.warning("Error: host is not set in the config.")
@@ -1657,6 +2156,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             cmd.append(host_str)
             if config.get('port'):
                 cmd.append(str(config['port']))
+
+        elif protocol == "local":
+            # No remote host at all — just the user's own login shell.
+            cmd = [os.environ.get("SHELL", "/bin/bash")]
 
         else:
             logging.error(f"Unknown protocol: {protocol}")
@@ -1771,11 +2274,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 resolved_config['host'] = resolved_host_str
 
                 self.open_sessions[scrolled_term] = (terminal, pid)
-                self.tab_data[scrolled_term] = {"type": "terminal", "config": resolved_config}
+                self.tab_data[scrolled_term] = {"type": "terminal", "config": resolved_config, "log_path": None}
                 close_btn.connect("clicked", self.on_tab_close_button_clicked, scrolled_term, pid)
                 terminal.connect("child-exited", self.on_ssh_process_exited, scrolled_term)
+                if config.get("save_log", False):
+                    self._start_session_logging(scrolled_term)
             else: # This is a reconnect, just update the PID
                 self.open_sessions[existing_terminal_widget] = (terminal, pid)
+                self._stop_session_logging(existing_terminal_widget)
+                tab_info = self.tab_data.get(existing_terminal_widget)
+                if tab_info is not None:
+                    tab_info["log_path"] = None
+                    tab_info["config"]["host"] = resolved_host_str
+                if config.get("save_log", False):
+                    self._start_session_logging(existing_terminal_widget)
                 terminal.grab_focus()
 
         except Exception as e:
@@ -1828,6 +2340,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 return None
             return Gdk.ContentProvider.new_for_value(str(id(child)))
         drag_source.connect("prepare", on_drag_prepare)
+        # Without an explicit icon, GDK falls back to rendering the drag
+        # payload itself as text — since that payload is the tab's
+        # str(id(child)) string (see on_drag_prepare above), the user was
+        # seeing that numeric id instead of the tab's name/icon while
+        # dragging. Showing a snapshot of the actual label fixes that.
+        def on_drag_begin(source, drag, box=tab_label_box):
+            source.set_icon(Gtk.WidgetPaintable.new(box), 0, 0)
+        drag_source.connect("drag-begin", on_drag_begin)
         tab_label_box.add_controller(drag_source)
 
         return tab_label_box, close_btn
@@ -1847,8 +2367,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         ssh_action = self.lookup_action("open-ssh-from-tab") # For sftp -> terminal
 
         if page_widget and page_widget in self.tab_data:
-            is_sftp = self.tab_data[page_widget]["type"] == "sftp"
-            sftp_action.set_enabled(not is_sftp)
+            tab_info = self.tab_data[page_widget]
+            is_sftp = tab_info["type"] == "sftp"
+            # The local-machine tab has no remote host to open an SFTP
+            # connection to.
+            is_local = tab_info.get("config", {}).get("protocol") == "local"
+            sftp_action.set_enabled(not is_sftp and not is_local)
             ssh_action.set_enabled(is_sftp)
         else:
             sftp_action.set_enabled(False)
@@ -1861,13 +2385,68 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.popover_tab.set_pointing_to(rect)
         self.popover_tab.popup()
 
+    def _resolve_latin_letter(self, keyval, keycode):
+        """The Latin a-z letter for this physical key, even when a non-Latin
+        layout (Cyrillic, etc.) is the active one.
+
+        Ctrl+<letter> combos — both our own shortcuts below and, more
+        importantly, the raw control characters a shell/readline expects
+        (Ctrl+C, Ctrl+D for EOF/logout, Ctrl+Z, ...) — are conventionally
+        about the physical key, not whatever character the active keyboard
+        layout happens to map it to. If the current keyval already is a
+        Latin letter this is a no-op either way; if it isn't (e.g. the
+        active layout produced a Cyrillic letter), this asks GDK for every
+        other keyval this same physical key produces across all configured
+        layouts/levels and returns the first Latin one it finds."""
+        if Gdk.KEY_a <= keyval <= Gdk.KEY_z:
+            return chr(keyval)
+        if Gdk.KEY_A <= keyval <= Gdk.KEY_Z:
+            return chr(keyval).lower()
+
+        display = self.get_display()
+        if display is None:
+            return None
+        success, _keys, keyvals = display.map_keycode(keycode)
+        if not success:
+            return None
+        for kv in keyvals:
+            if Gdk.KEY_a <= kv <= Gdk.KEY_z:
+                return chr(kv)
+            if Gdk.KEY_A <= kv <= Gdk.KEY_Z:
+                return chr(kv).lower()
+        return None
+
     def on_terminal_key_pressed(self, controller, keyval, keycode, modifier):
         """Handles key presses directly on the Vte.Terminal widget."""
         is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
+        is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
+        already_latin = (Gdk.KEY_a <= keyval <= Gdk.KEY_z) or (Gdk.KEY_A <= keyval <= Gdk.KEY_Z)
+        letter = self._resolve_latin_letter(keyval, keycode) if is_ctrl else None
 
-        if is_ctrl and keyval == Gdk.KEY_w:
+        if is_ctrl and letter == "w":
             self.on_menu_close_tab(None, None)
             return True # Event handled, stop propagation
+
+        # Ctrl+Shift+C/V: Vte only binds the classic Shift+Insert/Ctrl+Insert
+        # copy-paste shortcuts itself, not this newer convention, so it has
+        # to be wired up explicitly here.
+        if is_ctrl and is_shift and letter == "c":
+            self.on_menu_copy(None, None)
+            return True
+        if is_ctrl and is_shift and letter == "v":
+            self.on_menu_paste(None, None)
+            return True
+
+        # Any other Ctrl+<letter>: only step in when the active layout's own
+        # keyval *wasn't* already Latin (i.e. only the genuinely-broken
+        # case) — when it already was, leave it alone and let Vte's own
+        # (already-correct) handling run, so there's no risk of
+        # double-sending or subtly differing from it in the common case.
+        if is_ctrl and not is_shift and letter and not already_latin:
+            terminal = controller.get_widget()
+            terminal.feed_child(bytes([ord(letter) - ord('a') + 1]))
+            return True
+
         return False # Not handled, allow terminal to process
 
     def on_terminal_scroll(self, controller, dx, dy):
@@ -1944,6 +2523,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             del self.open_sessions[widget]
 
         if widget in self.tab_data:
+            self._stop_session_logging(widget)
             del self.tab_data[widget]
 
         if widget in self.force_close_tabs:
