@@ -1,5 +1,20 @@
 # Release Notes
 
+### 🆕 What's New in 0.7.0
+
+She learned to talk back — the big one, an **AI chat panel** baked right into the app:
+
+* **AI chat panel** — a resizable side panel (opens at ~25% of the window width the first time, then remembers whatever width you drag it to) with a real markdown-rendered chat: bold/italic/inline code, fenced code blocks with their own one-click **Copy** button, and a typing indicator while a reply is on the way. Toggle it from a header-bar button per configured provider; press the active one again to collapse the panel without losing the conversation.
+* **Talk to it two ways** — pick whichever fits how you already work:
+  * **API providers**: Claude, Gemini, ChatGPT, Grok, DeepSeek, plus any number of custom OpenAI-compatible endpoints (local Ollama/LM Studio included) — just paste a key in Settings → AI → API.
+  * **CLI Client tools**: drive locally-installed agentic CLIs (Claude Code, Codex, or any custom command you point at) the same way you'd use them in a terminal — no API key needed, just whatever's already on your PATH.
+  * One shared conversation either way — switch providers mid-chat and the history carries over uninterrupted; each header button shows the provider's own icon (or a colored badge if none was available) so it's obvious who's about to answer.
+* **Terminal context, only when you ask for it** — an "attach context" button in the chat input pulls in the active terminal's current selection (or the last ~20 lines of output if nothing's selected) as a visibly-quoted block you can edit or remove before sending. Never sent automatically.
+* **One shared system prompt** for every provider (Settings → AI), pre-filled with a short "you're looking at a remote terminal, stay concise, answer in the asked language" default, with a one-click reset if you've mangled it. A single configurable request timeout applies to both API and CLI paths.
+* **Terminal: fully custom color scheme** — flip on "Custom Colors" under Settings → Terminal → Appearance to hand-pick all 16 ANSI palette colors (normal + bright, laid out the same way every other terminal emulator does it) plus background/foreground, seeded from whichever built-in template you had selected. Useful for colorblind-accessibility fixes a fixed template can't cover (a specific palette color reading as indistinguishable against the background, for instance). Saved to its own file in the config directory, and — unlike before — changing it now recolors every already-open terminal immediately instead of only the next new tab.
+* **Host search, cleaned up** — the magnifying-glass icon is gone in favor of a plain dimmed "Search" placeholder that disappears the moment you type; the match-count readout was removed entirely; the up/down step buttons are smaller, flat, circular icon buttons instead of full-size bordered ones.
+* Settings dialog reshuffled: **AI** is a single sidebar entry with its own **API** / **CLI Client** sub-tabs (not two separate top-level sections), and a layout bug that squeezed dialog content to a narrow column regardless of window size is fixed.
+
 ### 🆕 What's New in 0.6.2
 
 Quiet-console-and-find-bar release:

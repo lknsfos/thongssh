@@ -4,15 +4,59 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gdk, GObject, Pango
 import stat
 import logging
+import uuid
 
-from .constants import COL_NAME, COL_TYPE
-from .colors import COLOR_SCHEMES
+from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS
+from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
 from .settings import DEFAULT_SETTINGS
 from .launcher_icon import apply_launcher_icon
 from .keyring import KeyringManager
+from .ai_providers import DEFAULT_MODELS as AI_DEFAULT_MODELS
+from .cli_providers import is_available as cli_is_available
 
 # Placeholder for future internationalization (i18n)
 _ = lambda s: s
+
+# "custom" is driven by its own switch + color pickers, not a selectable
+# dropdown entry — the dropdown only ever lists real templates, one of
+# which acts as the base (palette + starting bg/fg) for the custom scheme.
+_BASE_SCHEME_IDS = [k for k in COLOR_SCHEMES if k != "custom"]
+
+# Standard terminal ANSI order: 8 normal colors, then their 8 "bright"
+# counterparts — matches how every other terminal emulator lays out its
+# palette editor, so this is immediately familiar rather than needing its
+# own legend.
+_ANSI_COLOR_NAMES = [
+    _("Black"), _("Red"), _("Green"), _("Yellow"), _("Blue"), _("Magenta"), _("Cyan"), _("White"),
+    _("Bright Black"), _("Bright Red"), _("Bright Green"), _("Bright Yellow"),
+    _("Bright Blue"), _("Bright Magenta"), _("Bright Cyan"), _("Bright White"),
+]
+
+
+def _rgba_to_hex(rgba):
+    """Matches the "#rrggbb" format every built-in scheme in colors.py
+    already uses, so the saved custom_color_scheme.json file stays in the
+    same human-readable shape as the rest of that module."""
+    def channel(value):
+        return format(round(max(0.0, min(1.0, value)) * 255), "02x")
+    return f"#{channel(rgba.red)}{channel(rgba.green)}{channel(rgba.blue)}"
+
+
+def _widen_preferences_clamp(widget, max_size=900):
+    """AdwPreferencesPage/AdwPreferencesGroup wrap their rows in an internal
+    AdwClamp (default maximum-size ~600px, tightening-threshold ~400px)
+    that isn't exposed via any public getter on the page/group itself —
+    walk the widget tree to find it and loosen it. Without this, the
+    settings window looks squeezed into a narrow centered column no matter
+    how wide the dialog itself is resized to."""
+    if isinstance(widget, Adw.Clamp):
+        widget.set_maximum_size(max_size)
+        widget.set_tightening_threshold(max_size)
+        return
+    child = widget.get_first_child()
+    while child is not None:
+        _widen_preferences_clamp(child, max_size)
+        child = child.get_next_sibling()
 
 
 def _populate_groups_combo(combo_group, group_iters, tree_store, active_parent_iter):
@@ -683,8 +727,9 @@ class SettingsDialog(Adw.Window):
         super().__init__(transient_for=parent_window, modal=True)
         self.parent_window = parent_window
         self.settings_manager = settings_manager
+        self.keyring = KeyringManager()
 
-        self.set_default_size(600, 450)
+        self.set_default_size(800, 620)
 
         header_bar = Adw.HeaderBar()
 
@@ -710,19 +755,104 @@ class SettingsDialog(Adw.Window):
         font_row.set_activatable_widget(self.font_button)
         group_appearance.add(font_row)
 
-        scheme_names = [v['name'] for v in COLOR_SCHEMES.values()]
+        scheme_names = [COLOR_SCHEMES[k]['name'] for k in _BASE_SCHEME_IDS]
         self.scheme_row = Adw.ComboRow(title=_("Color Scheme"), model=Gtk.StringList.new(scheme_names))
-        
-        # Find index of current scheme
+
+        # Find index of current scheme. While "custom" is active, the
+        # dropdown can't show "custom" itself (it's not one of its
+        # entries) — it shows whichever template last acted as its base.
         current_scheme_key = self.settings_manager.get("terminal.color_scheme")
-        current_scheme_name = COLOR_SCHEMES.get(current_scheme_key, {}).get('name')
+        is_custom_scheme = current_scheme_key == "custom"
+        base_scheme_key = (
+            self.settings_manager.get("terminal.custom_scheme_base") if is_custom_scheme else current_scheme_key
+        )
         try:
-            current_index = scheme_names.index(current_scheme_name)
-            self.scheme_row.set_selected(current_index)
+            self.scheme_row.set_selected(_BASE_SCHEME_IDS.index(base_scheme_key))
         except ValueError:
             self.scheme_row.set_selected(0) # Default
 
         group_appearance.add(self.scheme_row)
+
+        self.custom_scheme_switch = Adw.SwitchRow(
+            title=_("Custom Colors"),
+            subtitle=_("Manually set every color, starting from the template above"),
+        )
+        self.custom_scheme_switch.set_active(is_custom_scheme)
+        group_appearance.add(self.custom_scheme_switch)
+
+        group_custom_colors = Adw.PreferencesGroup()
+        group_custom_colors.set_title(_("Custom Colors"))
+        group_custom_colors.set_visible(is_custom_scheme)
+        page_terminal.add(group_custom_colors)
+
+        def _make_color_button(hex_value):
+            button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog())
+            rgba = Gdk.RGBA()
+            rgba.parse(hex_value)
+            button.set_rgba(rgba)
+            return button
+
+        def _add_color_row(title, hex_value):
+            row = Adw.ActionRow(title=title)
+            button = _make_color_button(hex_value)
+            row.add_suffix(button)
+            row.set_activatable_widget(button)
+            group_custom_colors.add(row)
+            return button
+
+        # Seed values: an already-saved custom scheme if one's active, else
+        # the selected template's own colors ("Default" has none, hence the
+        # xterm-classic fallback), never blank.
+        seed_colors = (get_scheme_colors("custom") if is_custom_scheme else None) or \
+            COLOR_SCHEMES.get(base_scheme_key, {}).get("colors") or DEFAULT_FALLBACK_COLORS
+
+        self.custom_bg_button = _add_color_row(_("Background"), seed_colors["background"])
+        self.custom_fg_button = _add_color_row(_("Foreground"), seed_colors["foreground"])
+
+        # The 16-color ANSI palette apps use for text formatting (e.g. "red"
+        # for errors, "green" for success) — colorblind-accessibility is
+        # exactly why this needs to be per-swatch editable rather than just
+        # inherited wholesale from the chosen template.
+        palette_row = Adw.ActionRow(title=_("Palette"))
+        palette_row.set_subtitle(_("The 16 colors terminal apps use for colored text"))
+        palette_grid = Gtk.Grid(row_spacing=4, column_spacing=4)
+        palette_grid.set_valign(Gtk.Align.CENTER)
+        self.custom_palette_buttons = []
+        for i, color_name in enumerate(_ANSI_COLOR_NAMES):
+            swatch = _make_color_button(seed_colors["palette"][i])
+            swatch.set_tooltip_text(color_name)
+            palette_grid.attach(swatch, i % 8, i // 8, 1, 1)
+            self.custom_palette_buttons.append(swatch)
+        palette_row.add_suffix(palette_grid)
+        group_custom_colors.add(palette_row)
+
+        def _seed_pickers_from(colors):
+            bg_rgba, fg_rgba = Gdk.RGBA(), Gdk.RGBA()
+            bg_rgba.parse(colors["background"])
+            fg_rgba.parse(colors["foreground"])
+            self.custom_bg_button.set_rgba(bg_rgba)
+            self.custom_fg_button.set_rgba(fg_rgba)
+            for button, hex_value in zip(self.custom_palette_buttons, colors["palette"]):
+                rgba = Gdk.RGBA()
+                rgba.parse(hex_value)
+                button.set_rgba(rgba)
+
+        def _on_custom_switch_toggled(row, _pspec):
+            active = row.get_active()
+            group_custom_colors.set_visible(active)
+            if not active:
+                return
+            # Just turned on: (re-)seed everything from whichever template
+            # is currently selected above, so the starting point is always
+            # recognizable rather than leftover from a previous toggle.
+            base_key = _BASE_SCHEME_IDS[self.scheme_row.get_selected()]
+            base_colors = COLOR_SCHEMES.get(base_key, {}).get("colors") or DEFAULT_FALLBACK_COLORS
+            _seed_pickers_from(base_colors)
+
+        # Connected after the initial set_active() above, so restoring an
+        # already-custom scheme on dialog-open doesn't get clobbered by the
+        # reseed-from-template behavior meant only for a fresh toggle.
+        self.custom_scheme_switch.connect("notify::active", _on_custom_switch_toggled)
 
         group_behavior = Adw.PreferencesGroup()
         group_behavior.set_title(_("Behavior"))
@@ -915,6 +1045,273 @@ class SettingsDialog(Adw.Window):
         self.sftp_remote_sort_dir_row.set_selected(remote_sort_dir_map.get(self.settings_manager.get("sftp.remote_default_sort_direction"), 0))
         group_sftp_remote.add(self.sftp_remote_sort_dir_row)
 
+        # --- AI Page: shared settings up top, then API/CLI Client as
+        # actual nested tabs underneath (not separate top-level sidebar
+        # entries) — Adw.PreferencesPage only accepts PreferencesGroup
+        # children, so the shared prefs live in their own PreferencesPage
+        # and the two provider-specific ones are switched via a plain
+        # Gtk.Stack + Gtk.StackSwitcher, all wrapped in one outer Gtk.Box.
+        page_ai = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
+        page_ai_shared = Adw.PreferencesPage()
+        # AdwPreferencesPage's internal ScrolledWindow defaults to
+        # vexpand=True (it's normally a whole page on its own). Left as-is
+        # here, it competed with the sub-tab Gtk.Stack below (which also
+        # needs vexpand) for space in the shared parent Gtk.Box, squeezing
+        # this page below its own content's natural height and clipping
+        # the Connection group. It only needs its own (small, fixed)
+        # natural height — all the *extra* space belongs to the sub-tabs.
+        page_ai_shared.set_vexpand(False)
+        self.page_ai_shared_widget = page_ai_shared
+
+        group_ai_prompt = Adw.PreferencesGroup(
+            title=_("System Prompt"),
+            description=_("Shared by every provider on the API and CLI Client tabs below — sent as the system/initial prompt for every conversation."),
+        )
+        page_ai_shared.add(group_ai_prompt)
+
+        self.ai_system_prompt_row = Adw.EntryRow(title=_("Initial prompt"))
+        self.ai_system_prompt_row.set_text(self.settings_manager.get("ai.system_prompt") or "")
+        reset_prompt_button = Gtk.Button(icon_name="edit-undo-symbolic")
+        reset_prompt_button.set_valign(Gtk.Align.CENTER)
+        reset_prompt_button.add_css_class("flat")
+        reset_prompt_button.set_tooltip_text(_("Reset to default"))
+        reset_prompt_button.connect(
+            "clicked",
+            lambda _b: self.ai_system_prompt_row.set_text(DEFAULT_SETTINGS["ai.system_prompt"]),
+        )
+        self.ai_system_prompt_row.add_suffix(reset_prompt_button)
+        self.ai_system_prompt_reset_button = reset_prompt_button
+        group_ai_prompt.add(self.ai_system_prompt_row)
+
+        group_ai_connection = Adw.PreferencesGroup(
+            title=_("Connection"),
+            description=_("Shared by every provider — raise it if requests to a slower/local model keep timing out."),
+        )
+        page_ai_shared.add(group_ai_connection)
+
+        self.ai_timeout_row = Adw.SpinRow(
+            title=_("Request timeout (seconds)"),
+            adjustment=Gtk.Adjustment(
+                value=self.settings_manager.get("ai.request_timeout_seconds"),
+                lower=10, upper=1800, step_increment=10,
+            ),
+        )
+        group_ai_connection.add(self.ai_timeout_row)
+
+        page_ai.append(page_ai_shared)
+
+        # --- API Page (HTTP-based AI providers) ---
+        page_api = Adw.PreferencesPage()
+        page_api.set_title(_("API"))
+        page_api.set_icon_name("network-workgroup-symbolic")
+
+        # Custom providers first — a user with only local/manual endpoints
+        # configured shouldn't have to scroll past the 5 standard ones to
+        # reach them.
+        group_ai_custom = Adw.PreferencesGroup(
+            title=_("Custom Providers"),
+            description=_("Any OpenAI-compatible chat completions endpoint (self-hosted, OpenRouter, etc.)."),
+        )
+        page_api.add(group_ai_custom)
+
+        self._ai_custom_rows = []  # [{"id", "expander", "name_row", "url_row", "key_row"}, ...]
+        self._ai_add_custom_row = None
+
+        def add_custom_provider_row(existing=None):
+            custom_id = (existing or {}).get("id") or str(uuid.uuid4())
+            expander = Adw.ExpanderRow(title=(existing or {}).get("name") or _("New Provider"))
+
+            name_row = Adw.EntryRow(title=_("Name"))
+            name_row.set_text((existing or {}).get("name", ""))
+            name_row.connect("notify::text", lambda row, _p: expander.set_title(row.get_text() or _("New Provider")))
+            expander.add_row(name_row)
+
+            url_row = Adw.EntryRow(title=_("Base URL"))
+            url_row.set_text((existing or {}).get("base_url", ""))
+            expander.add_row(url_row)
+
+            key_row = Adw.PasswordEntryRow(title=_("API Key (optional)"))
+            if existing:
+                saved_key = self.keyring.load_password(f"ai:custom:{custom_id}")
+                if saved_key:
+                    key_row.set_text(saved_key)
+            expander.add_row(key_row)
+
+            remove_button = Gtk.Button(icon_name="user-trash-symbolic")
+            remove_button.set_valign(Gtk.Align.CENTER)
+            remove_button.add_css_class("flat")
+            remove_button.set_tooltip_text(_("Remove"))
+            expander.add_suffix(remove_button)
+
+            row_state = {"id": custom_id, "expander": expander, "name_row": name_row,
+                         "url_row": url_row, "key_row": key_row}
+
+            def on_remove(_btn, state=row_state):
+                group_ai_custom.remove(state["expander"])
+                self._ai_custom_rows.remove(state)
+            remove_button.connect("clicked", on_remove)
+
+            group_ai_custom.add(expander)
+            self._ai_custom_rows.append(row_state)
+
+            # Keep the "Add" row pinned at the bottom — PreferencesGroup only
+            # appends, it has no insert-before-index API.
+            if self._ai_add_custom_row is not None:
+                group_ai_custom.remove(self._ai_add_custom_row)
+                group_ai_custom.add(self._ai_add_custom_row)
+
+        for cp in self.settings_manager.get("ai.custom_providers") or []:
+            add_custom_provider_row(cp)
+
+        add_custom_row = Adw.ActionRow(title=_("Add Custom Provider"))
+        add_custom_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
+        add_custom_row.set_activatable(True)
+        add_custom_row.connect("activated", lambda row: add_custom_provider_row())
+        group_ai_custom.add(add_custom_row)
+        self._ai_add_custom_row = add_custom_row
+
+        group_ai_standard = Adw.PreferencesGroup(
+            title=_("Providers"),
+            description=_("A header-bar button appears for each provider with a key saved here."),
+        )
+        page_api.add(group_ai_standard)
+
+        provider_model_overrides = self.settings_manager.get("ai.provider_models") or {}
+        self._ai_key_rows = {}
+        self._ai_model_rows = {}
+        for provider_id, label in AI_STANDARD_PROVIDERS:
+            expander = Adw.ExpanderRow(title=label)
+
+            key_row = Adw.PasswordEntryRow(title=_("API Key"))
+            existing_key = self.keyring.load_password(f"ai:{provider_id}")
+            if existing_key:
+                key_row.set_text(existing_key)
+            expander.add_row(key_row)
+
+            model_row = Adw.EntryRow(title=_("Model"))
+            model_row.set_text(provider_model_overrides.get(provider_id) or AI_DEFAULT_MODELS.get(provider_id, ""))
+            expander.add_row(model_row)
+
+            self._ai_key_rows[provider_id] = key_row
+            self._ai_model_rows[provider_id] = model_row
+            group_ai_standard.add(expander)
+
+        # --- CLI Client Page (local CLI tools instead of an HTTP API) ---
+        page_cli = Adw.PreferencesPage()
+        page_cli.set_title(_("CLI Client"))
+        page_cli.set_icon_name("utilities-terminal-symbolic")
+
+        group_cli_standard = Adw.PreferencesGroup(
+            title=_("Standard Tools"),
+            description=_(
+                "Runs the command fresh for every message and reads its stdout as the reply — "
+                "install the tool yourself first (npm, etc.). \"{message}\" and \"{system_prompt}\" "
+                "are each substituted with their own argument (never through a shell, so both are "
+                "always safe regardless of content) — use \"{system_prompt}\" if the tool has its own "
+                "flag for one (e.g. Claude's --append-system-prompt), otherwise it's prepended into "
+                "the message automatically."
+            ),
+        )
+        page_cli.add(group_cli_standard)
+
+        cli_command_overrides = self.settings_manager.get("cli.commands") or {}
+        self._cli_command_rows = {}
+        for cli_id, cli_label, default_command in CLI_STANDARD_PROVIDERS:
+            command = cli_command_overrides.get(cli_id) or default_command
+            expander = Adw.ExpanderRow(
+                title=cli_label,
+                subtitle=_("Found on PATH") if cli_is_available(command) else _("Not found on PATH"),
+            )
+            command_row = Adw.EntryRow(title=_("Command"))
+            command_row.set_text(command)
+            expander.add_row(command_row)
+            self._cli_command_rows[cli_id] = command_row
+            group_cli_standard.add(expander)
+
+        group_cli_custom = Adw.PreferencesGroup(
+            title=_("Custom Tools"),
+            description=_("Any other locally-installed CLI (gemini-cli, aider, ...)."),
+        )
+        page_cli.add(group_cli_custom)
+
+        self._cli_custom_rows = []  # [{"id", "expander", "name_row", "command_row"}, ...]
+        self._cli_add_custom_row = None
+
+        def add_cli_custom_row(existing=None):
+            custom_id = (existing or {}).get("id") or str(uuid.uuid4())
+            expander = Adw.ExpanderRow(title=(existing or {}).get("name") or _("New Tool"))
+
+            name_row = Adw.EntryRow(title=_("Name"))
+            name_row.set_text((existing or {}).get("name", ""))
+            name_row.connect("notify::text", lambda row, _p: expander.set_title(row.get_text() or _("New Tool")))
+            expander.add_row(name_row)
+
+            command_row = Adw.EntryRow(title=_("Command"))
+            command_row.set_text((existing or {}).get("command", ""))
+            expander.add_row(command_row)
+
+            remove_button = Gtk.Button(icon_name="user-trash-symbolic")
+            remove_button.set_valign(Gtk.Align.CENTER)
+            remove_button.add_css_class("flat")
+            remove_button.set_tooltip_text(_("Remove"))
+            expander.add_suffix(remove_button)
+
+            row_state = {"id": custom_id, "expander": expander, "name_row": name_row, "command_row": command_row}
+
+            def on_remove(_btn, state=row_state):
+                group_cli_custom.remove(state["expander"])
+                self._cli_custom_rows.remove(state)
+            remove_button.connect("clicked", on_remove)
+
+            group_cli_custom.add(expander)
+            self._cli_custom_rows.append(row_state)
+
+            if self._cli_add_custom_row is not None:
+                group_cli_custom.remove(self._cli_add_custom_row)
+                group_cli_custom.add(self._cli_add_custom_row)
+
+        for tool in self.settings_manager.get("cli.custom_tools") or []:
+            add_cli_custom_row(tool)
+
+        add_cli_row = Adw.ActionRow(title=_("Add Custom Tool"))
+        add_cli_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
+        add_cli_row.set_activatable(True)
+        add_cli_row.connect("activated", lambda row: add_cli_custom_row())
+        group_cli_custom.add(add_cli_row)
+        self._cli_add_custom_row = add_cli_row
+
+        # Nested API / CLI Client sub-tabs underneath the shared prefs.
+        ai_sub_stack = Gtk.Stack()
+        ai_sub_stack.set_vexpand(True)
+        ai_sub_stack.add_titled(page_api, "api", _("API"))
+        ai_sub_stack.add_titled(page_cli, "cli", _("CLI Client"))
+
+        ai_sub_switcher = Gtk.StackSwitcher()
+        ai_sub_switcher.set_stack(ai_sub_stack)
+        ai_sub_switcher.set_halign(Gtk.Align.CENTER)
+
+        page_ai.append(ai_sub_switcher)
+        page_ai.append(ai_sub_stack)
+
+        # page_ai is a composite (shared prefs + switcher + sub-tabs), not a
+        # single AdwPreferencesPage — when the combined content is taller
+        # than the dialog, a plain Gtk.Box's non-homogeneous layout hands
+        # every child only its *minimum* height (not natural), since the
+        # auto-created Viewport inside a ScrolledWindow defaults to
+        # requesting MINIMUM size along the scroll axis from its child (the
+        # whole point of scrolling is normally "show the minimum, scroll
+        # for the rest"). That's what was clipping the Connection group:
+        # the shared-prefs sub-page was being squeezed to its bare minimum
+        # to make room for a tall Providers list below it. Wrapping it in
+        # an explicit Viewport with vscroll-policy=NATURAL makes the
+        # Viewport request (and allocate) the *natural* height instead, so
+        # every child gets its full natural size and the excess (if any)
+        # scrolls as a single, coherent whole.
+        ai_viewport = Gtk.Viewport(child=page_ai)
+        ai_viewport.set_vscroll_policy(Gtk.ScrollablePolicy.NATURAL)
+        page_ai_scrolled = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
+        page_ai_scrolled.set_child(ai_viewport)
 
         sidebar = Gtk.ListBox()
         sidebar.set_selection_mode(Gtk.SelectionMode.SINGLE)
@@ -929,6 +1326,13 @@ class SettingsDialog(Adw.Window):
         self.stack.add_titled_with_icon(page_client, "client", _("Client Options"), "network-wired-symbolic")
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
         self.stack.add_titled_with_icon(page_interface, "interface", _("General"), "preferences-desktop-appearance-symbolic")
+        # API and CLI Client are nested tabs *inside* this one "AI" entry
+        # (see the Gtk.Stack/StackSwitcher built above) — not separate
+        # top-level sidebar entries.
+        self.stack.add_titled_with_icon(page_ai_scrolled, "ai", _("AI"), "dialog-messages-symbolic")
+
+        for page in (page_terminal, page_sftp, page_client, page_commands, page_interface, page_ai_shared, page_api, page_cli):
+            _widen_preferences_clamp(page)
 
         for page in self.stack.get_pages():
             row = Adw.ActionRow(title=page.get_title())
@@ -961,8 +1365,18 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("terminal.close_on_disconnect", self.close_on_disconnect_row.get_active())
         
         selected_idx = self.scheme_row.get_selected()
-        scheme_key = list(COLOR_SCHEMES.keys())[selected_idx]
-        self.settings_manager.set("terminal.color_scheme", scheme_key)
+        base_scheme_key = _BASE_SCHEME_IDS[selected_idx]
+        self.settings_manager.set("terminal.custom_scheme_base", base_scheme_key)
+
+        if self.custom_scheme_switch.get_active():
+            save_custom_color_scheme({
+                "background": _rgba_to_hex(self.custom_bg_button.get_rgba()),
+                "foreground": _rgba_to_hex(self.custom_fg_button.get_rgba()),
+                "palette": [_rgba_to_hex(button.get_rgba()) for button in self.custom_palette_buttons],
+            })
+            self.settings_manager.set("terminal.color_scheme", "custom")
+        else:
+            self.settings_manager.set("terminal.color_scheme", base_scheme_key)
 
         self.settings_manager.set("client.ssh_path", self.ssh_path_row.get_text())
         self.settings_manager.set("client.telnet_path", self.telnet_path_row.get_text())
@@ -997,6 +1411,60 @@ class SettingsDialog(Adw.Window):
 
         self.settings_manager.set("interface.debug_mode", self.debug_mode_row.get_active())
 
+        # --- AI ---
+        self.settings_manager.set("ai.system_prompt", self.ai_system_prompt_row.get_text().strip())
+        self.settings_manager.set("ai.request_timeout_seconds", int(self.ai_timeout_row.get_value()))
+
+        provider_model_overrides = {}
+        for provider_id, key_row in self._ai_key_rows.items():
+            key_text = key_row.get_text().strip()
+            if key_text:
+                self.keyring.save_password(f"ai:{provider_id}", key_text)
+            else:
+                self.keyring.clear_password(f"ai:{provider_id}")
+            model_text = self._ai_model_rows[provider_id].get_text().strip()
+            if model_text and model_text != AI_DEFAULT_MODELS.get(provider_id):
+                provider_model_overrides[provider_id] = model_text
+        self.settings_manager.set("ai.provider_models", provider_model_overrides)
+
+        custom_providers = []
+        for row_state in self._ai_custom_rows:
+            name = row_state["name_row"].get_text().strip()
+            base_url = row_state["url_row"].get_text().strip()
+            if not name and not base_url:
+                continue  # skip a still-blank row left over from "Add"
+            key_text = row_state["key_row"].get_text().strip()
+            custom_id = row_state["id"]
+            if key_text:
+                self.keyring.save_password(f"ai:custom:{custom_id}", key_text)
+            else:
+                self.keyring.clear_password(f"ai:custom:{custom_id}")
+            custom_providers.append({
+                "id": custom_id,
+                "name": name or _("Custom"),
+                "base_url": base_url,
+                "has_key": bool(key_text),
+            })
+        self.settings_manager.set("ai.custom_providers", custom_providers)
+
+        # --- CLI Client ---
+        cli_default_commands = {pid: cmd for pid, _label, cmd in CLI_STANDARD_PROVIDERS}
+        cli_command_overrides = {}
+        for cli_id, command_row in self._cli_command_rows.items():
+            command_text = command_row.get_text().strip()
+            if command_text and command_text != cli_default_commands.get(cli_id):
+                cli_command_overrides[cli_id] = command_text
+        self.settings_manager.set("cli.commands", cli_command_overrides)
+
+        custom_tools = []
+        for row_state in self._cli_custom_rows:
+            name = row_state["name_row"].get_text().strip()
+            command = row_state["command_row"].get_text().strip()
+            if not name and not command:
+                continue  # skip a still-blank row left over from "Add"
+            custom_tools.append({"id": row_state["id"], "name": name or _("Custom CLI"), "command": command})
+        self.settings_manager.set("cli.custom_tools", custom_tools)
+
         self.settings_manager.save()
 
         # Debug logging can take effect immediately, no restart needed.
@@ -1004,6 +1472,14 @@ class SettingsDialog(Adw.Window):
 
         # Ditto for the search bar's position in the host panel.
         self.parent_window.apply_search_bar_position()
+
+        # And for the terminal color scheme — every already-open terminal
+        # gets recolored immediately, not just the next new tab.
+        self.parent_window.apply_terminal_color_scheme_to_all()
+
+        # And for the AI header buttons — react to new/removed keys and
+        # custom providers immediately, no restart needed.
+        self.parent_window.refresh_ai_provider_buttons()
 
         # Apply the icon change immediately — the window's own icon, the
         # macOS Dock icon (About dialog just reads the setting fresh next
@@ -1067,10 +1543,11 @@ class SettingsDialog(Adw.Window):
             self.font_button.set_font(DEFAULT_SETTINGS["terminal.font"])
             
             default_scheme_key = DEFAULT_SETTINGS["terminal.color_scheme"]
-            default_scheme_name = COLOR_SCHEMES.get(default_scheme_key, {}).get('name')
-            scheme_names = [v['name'] for v in COLOR_SCHEMES.values()]
-            if default_scheme_name in scheme_names:
-                self.scheme_row.set_selected(scheme_names.index(default_scheme_name))
+            try:
+                self.scheme_row.set_selected(_BASE_SCHEME_IDS.index(default_scheme_key))
+            except ValueError:
+                self.scheme_row.set_selected(0)
+            self.custom_scheme_switch.set_active(False)
         elif current_page_name == "client":
             self.ssh_path_row.set_text(DEFAULT_SETTINGS["client.ssh_path"])
             self.telnet_path_row.set_text(DEFAULT_SETTINGS["client.telnet_path"])

@@ -15,7 +15,8 @@ import re
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio, GObject
 
-from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, resource_path, __version__
+from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, resource_path, __version__
+from .cli_providers import is_available as cli_is_available
 from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog # Removed SettingsDialog
 from .send_file import SendFileDialog, guess_remote_cwd
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
@@ -24,7 +25,9 @@ from .settings import SettingsManager
 from .launcher_icon import apply_launcher_icon
 from .keyring import KeyringManager
 from .sftp_widget import SftpWidget
-from .colors import COLOR_SCHEMES
+from .ai_panel import AiPanel
+from .provider_badges import icon_name_for as _icon_name_for, badge_family as _badge_family, badge_text as _badge_text
+from .colors import get_scheme_colors
 
 # Placeholder for future internationalization (i18n)
 _ = lambda s: s
@@ -88,16 +91,24 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         self.setup_global_menu(header_bar)
         self.main_box.append(header_bar)
+        # Kept for refresh_ai_provider_buttons(), which adds/removes
+        # per-provider toggle buttons dynamically as keys are configured.
+        self._ai_header_bar = header_bar
+        self._ai_provider_buttons = {}
 
         self.sidebar_toggle_button = Gtk.ToggleButton(icon_name="go-previous-symbolic", active=True)
         self.sidebar_toggle_button.set_tooltip_text(_("Toggle Sidebar"))
         self.sidebar_toggle_button.connect("toggled", self.on_toggle_sidebar)
         header_bar.pack_start(self.sidebar_toggle_button)
 
+        header_bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
         self.batch_command_button = Gtk.Button(icon_name="mail-send-symbolic")
         self.batch_command_button.set_tooltip_text(_("Batch Command"))
         self.batch_command_button.connect("clicked", self.on_menu_batch_command)
         header_bar.pack_start(self.batch_command_button)
+
+        header_bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
 
         self.split_vertical_btn = Gtk.Button(icon_name="view-dual-symbolic")
         self.split_vertical_btn.set_tooltip_text(_("Split view left/right"))
@@ -117,17 +128,38 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.split_grid_btn.connect("clicked", lambda w: self.on_split_button_clicked("grid"))
         header_bar.pack_start(self.split_grid_btn)
 
+        # Separator before the AI provider buttons group (see
+        # refresh_ai_provider_buttons) — kept even with zero buttons
+        # currently configured, so the layout doesn't jump around as keys
+        # are added/removed.
+        header_bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
         self.paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.paned.set_resize_start_child(False)
-        self.paned.set_shrink_start_child(False)
+        # Shrinkable (not just draggable-wider) — the old fixed 300px floor
+        # below couldn't be dragged past, which was too wide a minimum for
+        # some host lists. Real floor now just enough to keep the icon +
+        # a sliver of text visible/grabbable (see set_size_request below).
+        self.paned.set_shrink_start_child(True)
         self.paned.set_vexpand(True)
         self.main_box.append(self.paned)
 
         # --- Full Left Panel (Tree) ---
         self.left_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.left_panel.set_size_request(300, -1) # Set a default width
+        self.left_panel.set_size_request(80, -1) # Small floor only — default width is computed later (see on_first_map)
         self.paned.set_start_child(self.left_panel)
         self.left_panel.set_visible(True)
+
+        # Continuously track the last dragged width (only while the sidebar
+        # is actually visible — toggling it off via on_toggle_sidebar must
+        # never overwrite this with a collapsed/meaningless value) so it can
+        # be persisted and restored on next launch, mirroring the
+        # _last_normal_size window-geometry pattern below.
+        self._last_left_panel_width = None
+        def _track_left_panel_width(*_args):
+            if self.left_panel.get_visible():
+                self._last_left_panel_width = self.paned.get_position()
+        self.paned.connect("notify::position", _track_left_panel_width)
 
         # Permanent end child of self.paned — the actual per-split-mode
         # widget tree (see _apply_pane_layout) is swapped in and out as
@@ -137,7 +169,37 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.terminal_overlay = Gtk.Overlay()
         self.terminal_overlay.set_hexpand(True)
         self.terminal_overlay.set_vexpand(True)
-        self.paned.set_end_child(self.terminal_overlay)
+
+        # AI chat panel — hidden by default, revealed by a header-bar
+        # provider button (see refresh_ai_provider_buttons). Built once and
+        # never destroyed, so collapsing it never loses conversation state.
+        self.ai_panel = AiPanel(self, self.settings_manager, self.keyring)
+        self.ai_panel.set_visible(False)
+
+        # Nested Paned so the AI panel gets its own independent, resizable,
+        # cacheable width without disturbing self.paned (left sidebar) or
+        # the split/tab machinery, which is keyed entirely off
+        # self.terminal_overlay's own children (see _apply_pane_layout).
+        self.center_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        self.center_paned.set_start_child(self.terminal_overlay)
+        self.center_paned.set_resize_start_child(True)
+        self.center_paned.set_shrink_start_child(True)
+        self.center_paned.set_end_child(self.ai_panel)
+        self.center_paned.set_resize_end_child(False)
+        self.center_paned.set_shrink_end_child(True)
+        self.center_paned.set_vexpand(True)
+        self.center_paned.set_hexpand(True)
+
+        self._last_ai_panel_width = None
+        def _track_ai_panel_width(*_args):
+            if self.ai_panel.get_visible():
+                total = self.center_paned.get_width()
+                position = self.center_paned.get_position()
+                if total > 0:
+                    self._last_ai_panel_width = total - position
+        self.center_paned.connect("notify::position", _track_ai_panel_width)
+
+        self.paned.set_end_child(self.center_paned)
 
 
         
@@ -151,13 +213,31 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.set_hexpand(True)
+        # No magnifying-glass icon — the entry's own dimmed placeholder text
+        # already signals "this is a search box" (and disappears the moment
+        # the user types, with no filtering effect of its own), which reads
+        # cleaner than an icon competing with the host list for attention.
+        self.search_entry.set_placeholder_text(_("Search"))
+        # GtkSearchEntry's leading magnifying-glass icon is its own first
+        # child widget with no distinct style class CSS can target (min-
+        # width/opacity tricks don't shrink it — it keeps its intrinsic
+        # icon size regardless). Hiding that child directly is stable: the
+        # entry never re-toggles its visibility itself, and the trailing
+        # "clear" icon (shown once there's text) is a separate child that
+        # keeps working normally.
+        _leading_icon = self.search_entry.get_first_child()
+        if _leading_icon is not None:
+            _leading_icon.set_visible(False)
         search_box.append(self.search_entry)
-
-        self.search_nav_label = Gtk.Label(label="")
-        search_box.append(self.search_nav_label)
 
         self.search_up_button = Gtk.Button(icon_name="go-up-symbolic")
         self.search_down_button = Gtk.Button(icon_name="go-down-symbolic")
+        # "flat" + "circular" (the standard GNOME compact-icon-button combo)
+        # instead of full-size bordered buttons — these are just a pair of
+        # nav arrows next to a search box, not primary actions.
+        for _btn in (self.search_up_button, self.search_down_button):
+            _btn.add_css_class("flat")
+            _btn.add_css_class("circular")
         search_box.append(self.search_up_button)
         search_box.append(self.search_down_button)
 
@@ -308,6 +388,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         key_controller_window.connect("key-pressed", self.on_window_key_pressed)
         self.add_controller(key_controller_window)
 
+        # Build the header-bar's per-provider AI buttons now that
+        # self.keyring, self.settings_manager and self.ai_panel all exist.
+        self.refresh_ai_provider_buttons()
+
     def _load_window_state(self):
         try:
             with open(WINDOW_STATE_FILE, 'r', encoding='utf-8') as f:
@@ -398,6 +482,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             state["width"] = width
             state["height"] = height
         state["maximized"] = maximized
+        if getattr(self, "_last_left_panel_width", None):
+            state["left_panel_width"] = self._last_left_panel_width
+        if getattr(self, "_last_ai_panel_width", None):
+            state["ai_panel_width"] = self._last_ai_panel_width
         logging.debug(f"Saving window state on close: {state}")
         self._save_window_state(state)
         return False # Allow the window to close
@@ -423,6 +511,101 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                subtle hint of which pane is active, not a hard outline. */
             box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.35);
         }
+        .ai-bubble-user {
+            background-color: alpha(@accent_color, 0.12);
+            border-radius: 8px;
+            padding: 4px 8px;
+        }
+        .ai-bubble-assistant {
+            background-color: alpha(currentColor, 0.06);
+            border-radius: 8px;
+            padding: 4px 8px;
+        }
+        .ai-typing-indicator {
+            background-color: alpha(@accent_color, 0.15);
+            border-radius: 8px;
+            padding: 8px 12px;
+        }
+        /* Per-message avatar, at the start of every chat bubble — a plain
+           icon (user) or a small badge (assistant: real provider logo if
+           provider_badges.py has one, else initials). ai-avatar sizes the
+           square; ai-avatar-badge is only the text-initials fallback case,
+           tinted via whichever .ai-provider-badge-* class is also applied
+           (background-color here rides on "color" set by that class, so
+           it stays in sync with the header-bar buttons with no per-family
+           repetition needed). */
+        .ai-avatar {
+            min-width: 22px;
+            min-height: 22px;
+        }
+        .ai-avatar-user {
+            color: alpha(currentColor, 0.6);
+        }
+        .ai-avatar-badge {
+            background-color: alpha(currentColor, 0.25);
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 10px;
+        }
+        .markdown-code-block {
+            background-color: alpha(currentColor, 0.08);
+            border-radius: 6px;
+            padding: 2px 6px;
+            margin: 2px 0;
+        }
+        /* Every chat-message segment is a Gtk.TextView, whose default
+           ".view" styling paints its own input-field-like background —
+           without this override, each segment (plain text, list, code)
+           showed up as its own separate white/boxed field instead of one
+           flowing bubble. Both the "textview" node itself and its "text"
+           sub-node (where GTK4 actually paints the content background)
+           need the override. */
+        textview.markdown-plain-text,
+        textview.markdown-plain-text text {
+            background-color: transparent;
+        }
+        textview.markdown-code-text,
+        textview.markdown-code-text text {
+            background-color: transparent;
+            font-family: Monospace;
+        }
+        /* Same footprint as the plain icon buttons next to it (batch
+           command, split view, ...) — was previously sized by its text
+           label alone and looked oversized/inconsistent next to them. */
+        .ai-provider-button {
+            min-width: 22px;
+            min-height: 22px;
+            padding: 2px 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        /* Per-provider tint — some are a real logo (recolored symbolic
+           icon), some fall back to plain initials (see provider_badges.py),
+           either way just a distinguishing hue. Color-only when
+           unchecked; a background fill only appears on :checked, so pressed
+           vs. unpressed stays obvious instead of both looking identically
+           tinted (that was the "can't tell if it's pressed" bug). */
+        .ai-provider-badge-claude { color: #cc785c; }
+        .ai-provider-badge-claude:checked { background-color: alpha(#cc785c, 0.35); }
+        .ai-provider-badge-gemini { color: #4285f4; }
+        .ai-provider-badge-gemini:checked { background-color: alpha(#4285f4, 0.35); }
+        .ai-provider-badge-chatgpt { color: #10a37f; }
+        .ai-provider-badge-chatgpt:checked { background-color: alpha(#10a37f, 0.35); }
+        .ai-provider-badge-grok { color: #6b6b6b; }
+        .ai-provider-badge-grok:checked { background-color: alpha(#6b6b6b, 0.35); }
+        .ai-provider-badge-deepseek { color: #4d6bfe; }
+        .ai-provider-badge-deepseek:checked { background-color: alpha(#4d6bfe, 0.35); }
+        .ai-provider-badge-custom { color: @accent_color; }
+        .ai-provider-badge-custom:checked { background-color: alpha(@accent_color, 0.35); }
+        /* CLI-tool buttons (local subprocess, not a network API) — same
+           color language as their API counterparts, distinguished only by
+           tooltip/hue, not an extra marking on the button itself. */
+        .ai-provider-badge-cli-claude { color: #cc785c; }
+        .ai-provider-badge-cli-claude:checked { background-color: alpha(#cc785c, 0.35); }
+        .ai-provider-badge-cli-codex { color: #9b59b6; }
+        .ai-provider-badge-cli-codex:checked { background-color: alpha(#9b59b6, 0.35); }
+        .ai-provider-badge-cli-custom { color: @accent_color; }
+        .ai-provider-badge-cli-custom:checked { background-color: alpha(@accent_color, 0.35); }
         """
         css_provider.load_from_string(css_data)
         Gtk.StyleContext.add_provider_for_display(
@@ -545,10 +728,34 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                     tree_view.expand_row(path, False)
 
     def on_first_map(self, *args):
-        """Set the initial position of the paned divider."""
-        self.paned.set_position(300)
+        """Set the initial position of the paned divider: the width dragged
+        last session if one was cached, otherwise a width computed to just
+        fit the longest name currently in the host tree."""
+        state = self._load_window_state()
+        width = state.get("left_panel_width") or self._compute_default_left_panel_width()
+        self.paned.set_position(width)
         # Disconnect the handler so it only runs once
         self.disconnect_by_func(self.on_first_map)
+
+    def _compute_default_left_panel_width(self):
+        """Default sidebar width: just enough to fit the longest host/group
+        name without truncation, plus a fixed allowance for the icon column
+        and tree expander indentation. Only used when no width was dragged
+        (and thus cached) in a previous session."""
+        max_text_width = 0
+
+        def walk(tree_iter):
+            nonlocal max_text_width
+            while tree_iter is not None:
+                name = self.main_tree_store.get_value(tree_iter, COL_NAME)
+                layout = self.tree_view.create_pango_layout(name)
+                max_text_width = max(max_text_width, layout.get_pixel_size()[0])
+                walk(self.main_tree_store.iter_children(tree_iter))
+                tree_iter = self.main_tree_store.iter_next(tree_iter)
+
+        walk(self.main_tree_store.get_iter_first())
+        # Icon column + expander indent + row/window padding allowance.
+        return max(200, min(600, max_text_width + 80))
 
     # --- Split-pane layout (up to 4 independent tab notebooks) ---
     #
@@ -863,6 +1070,93 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         else:
             button.set_icon_name("go-next-symbolic")
 
+    def refresh_ai_provider_buttons(self):
+        """Rebuilds the header-bar's per-provider toggle buttons from
+        current keyring/settings state — one button per API provider with a
+        usable key, plus one per CLI tool whose binary is actually found on
+        PATH. Called once at startup and again from SettingsDialog.on_apply
+        whenever keys/commands change, so the header reacts immediately
+        with no restart needed."""
+        for btn in self._ai_provider_buttons.values():
+            self._ai_header_bar.remove(btn)
+        self._ai_provider_buttons = {}
+
+        configured = [
+            (pid, label) for pid, label in AI_STANDARD_PROVIDERS
+            if self.keyring.load_password(f"ai:{pid}")
+        ]
+        for cp in self.settings_manager.get("ai.custom_providers") or []:
+            has_key = self.keyring.load_password(f"ai:custom:{cp['id']}")
+            if has_key or not cp.get("has_key", True):
+                configured.append((f"custom:{cp['id']}", cp.get("name") or _("Custom")))
+
+        cli_overrides = self.settings_manager.get("cli.commands") or {}
+        for cli_id, cli_label, default_command in CLI_STANDARD_PROVIDERS:
+            command = cli_overrides.get(cli_id) or default_command
+            if cli_is_available(command):
+                configured.append((f"cli:{cli_id}", cli_label))
+        for tool in self.settings_manager.get("cli.custom_tools") or []:
+            if cli_is_available(tool.get("command", "")):
+                configured.append((f"cli:custom:{tool['id']}", tool.get("name") or _("Custom CLI")))
+
+        for provider_id, label in configured:
+            family = _badge_family(provider_id)
+            icon_name = _icon_name_for(provider_id)
+            if icon_name:
+                image = Gtk.Image.new_from_icon_name(icon_name)
+                image.set_pixel_size(16)  # matches the sibling icon buttons' default symbolic size
+                button = Gtk.ToggleButton(child=image)
+            else:
+                button = Gtk.ToggleButton(label=_badge_text(label))
+            # "ai-provider-button" sizes/shapes it like the plain icon
+            # buttons next to it (batch command, split view, ...); the
+            # per-family class tints it (text color for a label badge,
+            # or the recolored symbolic icon itself), and only the
+            # :checked state gets a background fill — so pressed vs.
+            # unpressed stays visually obvious instead of both looking tinted.
+            button.add_css_class("ai-provider-button")
+            button.add_css_class(f"ai-provider-badge-{family}")
+            button.set_tooltip_text(label)
+            button.set_active(self.ai_panel.get_visible() and self.ai_panel.active_provider_id == provider_id)
+            button.connect("toggled", self._on_ai_provider_button_toggled, provider_id)
+            self._ai_header_bar.pack_start(button)
+            self._ai_provider_buttons[provider_id] = button
+
+    def _on_ai_provider_button_toggled(self, button, provider_id):
+        if not button.get_active():
+            # Un-pressing the *currently active* provider's own button just
+            # collapses the panel — its conversation state is untouched.
+            if self.ai_panel.active_provider_id == provider_id:
+                self.ai_panel.set_visible(False)
+            return
+
+        # Pressing a different provider's button: un-press every other
+        # button without recursing back into this handler, then switch.
+        for pid, other_button in self._ai_provider_buttons.items():
+            if pid != provider_id and other_button.get_active():
+                other_button.handler_block_by_func(self._on_ai_provider_button_toggled)
+                other_button.set_active(False)
+                other_button.handler_unblock_by_func(self._on_ai_provider_button_toggled)
+
+        self.ai_panel.set_active_provider(provider_id)
+        self.ai_panel.set_visible(True)
+
+        # Enforce the cached/default width now that the panel is visible
+        # again — a just-shown pane with no natural size would otherwise
+        # get squeezed to a sliver (mirrors sftp_widget.py's realize-then-
+        # set_position pattern for the same problem).
+        def _apply_width():
+            total = self.center_paned.get_width()
+            if total <= 0:
+                return True  # not yet allocated — try again next idle
+            # No cached width yet (first-ever open): default to ~25% of the
+            # available space rather than a fixed pixel guess, so it scales
+            # with the user's actual window size.
+            width = self._last_ai_panel_width or int(total * 0.25)
+            self.center_paned.set_position(max(0, total - width))
+            return False
+        GLib.idle_add(_apply_width)
+
     def on_toggle_search(self, *args):
         """Moves focus into the always-visible search entry, selecting any
         existing text so typing immediately replaces it."""
@@ -1041,19 +1335,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self.tree_view.scroll_to_cell(path, None, True, 0.5, 0.0)
 
     def update_search_ui(self):
-        """Updates the state of navigation buttons and label."""
+        """Updates the state of the navigation buttons."""
         has_results = len(self.search_results) > 0
         self.search_up_button.set_sensitive(has_results)
         self.search_down_button.set_sensitive(has_results)
-
-        if has_results:
-            self.search_nav_label.set_text(f"{self.current_search_index + 1} of {len(self.search_results)}")
-        else:
-            query = self.search_entry.get_text().strip()
-            if query and not self.search_entry.get_style_context().has_class("error"):
-                self.search_nav_label.set_text(_("Not found"))
-            else:
-                self.search_nav_label.set_text("")
 
     def _on_right_press_guard(self, gesture, n_press, x, y):
         """Generic right-click press guard for terminal and tab gestures.
@@ -1785,6 +2070,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         text = bytes(stream.steal_as_bytes().get_data()).decode("utf-8", errors="replace")
         return text.rstrip("\n")
 
+    def get_terminal_context_snippet(self):
+        """Read-only helper for the AI panel's "attach context" button:
+        the active terminal's current selection if there is one, otherwise
+        the last ~20 lines of its output. Returns None if there's no active
+        terminal at all. Never called automatically — only on explicit
+        user action, so the AI never sees terminal content unasked."""
+        terminal = self.get_active_terminal()
+        if terminal is None:
+            return None
+        if terminal.get_has_selection():
+            return terminal.get_text_selected(Vte.Format.TEXT)
+        return "\n".join(self._dump_terminal_text(terminal).splitlines()[-20:])
+
     def _tick_session_log(self, page_widget):
         """Recurring GLib.timeout_add callback — returning False cancels it,
         which doubles as automatic cleanup once the tab closes (tab_data
@@ -2251,6 +2549,38 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         else:
             self._continue_session(config, None, existing_terminal_widget)
 
+    def _apply_color_scheme_to_terminal(self, terminal, scheme_key=None):
+        """Applies a color scheme (or the currently-configured one) to a
+        single Vte.Terminal. "default"/an unresolved custom scheme both
+        mean "no override" — explicitly reset to VTE's own built-in colors
+        rather than silently leaving whatever the terminal already had."""
+        if scheme_key is None:
+            scheme_key = self.settings_manager.get("terminal.color_scheme")
+        colors = get_scheme_colors(scheme_key)
+        if not colors:
+            terminal.set_colors(None, None, None)
+            return
+
+        def parse_color(spec):
+            rgba = Gdk.RGBA()
+            rgba.parse(spec)
+            return rgba
+
+        terminal.set_colors(
+            foreground=parse_color(colors["foreground"]),
+            background=parse_color(colors["background"]),
+            palette=[parse_color(c) for c in colors["palette"]],
+        )
+
+    def apply_terminal_color_scheme_to_all(self):
+        """Re-applies the current color scheme to every already-open
+        terminal — called right after Settings are applied, so a change
+        takes effect immediately instead of only affecting the next new
+        tab."""
+        scheme_key = self.settings_manager.get("terminal.color_scheme")
+        for terminal, _pid in self.open_sessions.values():
+            self._apply_color_scheme_to_terminal(terminal, scheme_key)
+
     def _continue_session(self, config, username_from_prompt, existing_terminal_widget=None):
         """Second part of the logic, called AFTER getting the username."""
 
@@ -2364,27 +2694,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             
             scrollback = self.settings_manager.get("terminal.scrollback_lines")
             font_str = self.settings_manager.get("terminal.font")
-            scheme_key = self.settings_manager.get("terminal.color_scheme")
 
             terminal.set_scrollback_lines(scrollback)
             terminal.set_font(Pango.FontDescription.from_string(font_str))
-
-            scheme = COLOR_SCHEMES.get(scheme_key)
-            if scheme and "colors" in scheme:
-                colors = scheme["colors"]
-                
-                # Helper function to correctly parse color strings
-                def parse_color(spec):
-                    rgba = Gdk.RGBA()
-                    rgba.parse(spec)
-                    return rgba
-
-                palette = [parse_color(c) for c in colors["palette"]]
-                terminal.set_colors(
-                    foreground=parse_color(colors["foreground"]),
-                    background=parse_color(colors["background"]),
-                    palette=palette
-                )
+            self._apply_color_scheme_to_terminal(terminal)
 
             success, pid = terminal.spawn_sync(
                 Vte.PtyFlags.DEFAULT,

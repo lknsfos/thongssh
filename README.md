@@ -18,9 +18,17 @@ ThongSSH is for those who love minimalism. We've got a cute host panel so you ne
 * Host dialog: Protocol, Name, Hostname/IP, and Port up top, with Authentication (username, password, key path) and Options (logging, SSH/Telnet settings) split into their own tabs.
 * A little more native on macOS — proper Dock icon, About window icon, and a system font that isn't a sad fallback serif.
 
+**AI Assistant**
+* A resizable **AI chat panel**, tucked away until you want it — toggle it from a header-bar button per configured provider, markdown replies (bold/italic/code, fenced code blocks with a one-click Copy button), typing indicator while a reply is in flight.
+* **API providers**: Claude, Gemini, ChatGPT, Grok, DeepSeek, or any number of custom OpenAI-compatible endpoints (local Ollama/LM Studio included) — paste a key in Settings → AI → API.
+* **CLI Client tools**, for talking to a locally-installed agentic CLI (Claude Code, Codex, or any custom command) exactly the way you'd drive it from a terminal, no API key required.
+* One shared conversation regardless of which provider answers — switch mid-chat and history carries over; each header button carries the provider's own icon (or a colored badge as a fallback).
+* **Terminal context, opt-in only** — an "attach context" button in the chat input pulls in the active terminal's current selection (or the last ~20 lines of output) as an editable, visibly-quoted block. Never sent automatically.
+* One shared, editable system prompt (Settings → AI) with a one-click reset to the built-in default, and a single request-timeout setting shared by every provider.
+
 **Layout**
 * **Multi-div split view** — split the tab area vertically, horizontally, or into a full 2x2 grid, each div running its own independent set of tabs. Switch between vertical/horizontal and your tabs just re-orient, no shuffling. Drag a tab from one div straight into another to rearrange. A subtle accent-colored outline shows which div is currently active.
-* Host search is always visible in the tree panel — click it or hit **Ctrl+F** from anywhere in the app (tree, terminal, wherever) to jump in and start typing.
+* Host search is always visible in the tree panel — click it or hit **Ctrl+F** from anywhere in the app (tree, terminal, wherever) to jump in and start typing. A dimmed "Search" placeholder marks it, no icon competing for attention.
 * Keyboard shortcuts (Ctrl+D, Ctrl+C, Ctrl+W, Ctrl+F, Ctrl+Shift+F, ...) fire off the physical key regardless of the active keyboard layout — switch to Cyrillic or anything else and they still work.
 * Optional alternating row tint for the host tree, if you want a bit more visual rhythm (Settings → Interface).
 * The window remembers its size and maximized state between launches. (Position can't be — GTK4 removed window-position APIs outright, since Wayland treats placement as the compositor's call, not the app's.)
@@ -28,6 +36,7 @@ ThongSSH is for those who love minimalism. We've got a cute host panel so you ne
 **Terminal**
 * **In-terminal Find** — right-click → Find..., or **Ctrl+Shift+F** from anywhere. Case-sensitive, regex, and wrap-around toggles, with up/down buttons to step through matches.
 * **Session logging** — check "Save session log" on a host and every connection is recorded to a clean, human-readable transcript in real time (not just at disconnect). Didn't turn it on up front? Right-click an open terminal and tick "Save log" to start recording from that point on. Log location is configurable in Settings → Client Options.
+* **Fully custom color scheme** — pick a built-in template, or flip on "Custom Colors" (Settings → Terminal → Appearance) to hand-edit all 16 ANSI palette colors plus background/foreground, seeded from whichever template was selected. Handy for accessibility fixes (a colorblind-unfriendly palette entry, say) a fixed template can't cover. Applies to every open terminal immediately, no reconnect needed.
 * **Batch Command** — one command, sent to every open terminal at once (or just the ones in a chosen div), via a multi-line, auto-expanding input box so a long command is actually visible instead of scrolling off-screen. Ctrl+Enter sends.
 * **Send File from a terminal tab** — right-click a terminal, pick a local file, it flies over SFTP to the remote host using whatever auth that session already trusts. A "Detect from terminal" button runs a real `pwd` over there to guess the remote directory for you.
 * SFTP panels (local and remote) support right-click **New Folder**, even on empty space.

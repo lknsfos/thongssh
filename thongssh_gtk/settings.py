@@ -14,6 +14,7 @@ DEFAULT_SETTINGS = {
     "terminal.scrollback_lines": 8192,
     "terminal.font": "Monospace 10",
     "terminal.color_scheme": "default",
+    "terminal.custom_scheme_base": "default", # which built-in template's dropdown selection/palette last seeded the custom colors — only meaningful while terminal.color_scheme == "custom"
     "client.ssh_path": shutil.which("ssh") or "/usr/bin/ssh",
     "client.telnet_path": shutil.which("telnet") or "/usr/bin/telnet",
     "client.sshpass_path": shutil.which("sshpass") or "/usr/bin/sshpass",
@@ -29,6 +30,18 @@ DEFAULT_SETTINGS = {
     "interface.tree_row_striping": False,
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default
     "interface.host_search_position": "bottom", # "top" or "bottom" — where the host-tree search bar sits
+    "ai.system_prompt": (
+        "You are connected to a remote terminal session. Do not try to run, execute, or "
+        "reproduce anything locally — only the connected remote host is relevant. Be concise "
+        "and minimal: no long explanations or preambles. Reply in the same language the "
+        "question was asked in."
+    ), # shared system/initial prompt, applies to every provider — dialogs.py's "reset to default" button reads this same DEFAULT_SETTINGS entry
+    "ai.active_provider": "", # last active provider id ("claude", "custom:<uuid>", ...), or "" if never used
+    "ai.provider_models": {}, # {provider_id: model_string} — only holds entries the user overrode from default
+    "ai.custom_providers": [], # [{"id": uuid, "name": str, "base_url": str, "has_key": bool}] — never the raw key
+    "ai.request_timeout_seconds": 120, # generous default — local/self-hosted models on modest hardware can be slow; shared by API and CLI providers alike
+    "cli.commands": {}, # {provider_id: command_template} — overrides for the standard CLI tools (claude/codex)
+    "cli.custom_tools": [], # [{"id": uuid, "name": str, "command": str}] — user-added local CLI tools
 }
 
 class SettingsManager:

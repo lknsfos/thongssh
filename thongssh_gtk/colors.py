@@ -1,5 +1,15 @@
+import json
+import logging
+
+from .paths import CONFIG_DIR
+
 # Placeholder for future internationalization (i18n)
 _ = lambda s: s
+
+# Saved separately from settings.json (not inline) so it can hold a full
+# 16-color palette + background/foreground without bloating/coupling to
+# the flat settings dict, the same way hosts.json is kept apart from it.
+CUSTOM_COLOR_SCHEME_FILE = CONFIG_DIR / "custom_color_scheme.json"
 
 # --- Color Schemes ---
 
@@ -34,6 +44,15 @@ TANGO_LIGHT = {
     "#555753", "#ef2929", "#8ae234", "#fce94f", "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec"
 ]}
 
+# Classic xterm-style 16-color palette — used only as a starting point when
+# custom colors are enabled on top of "Default" (which, unlike the other
+# templates, has no colors of its own to seed from).
+DEFAULT_FALLBACK_COLORS = {
+    "background": "#000000", "foreground": "#ffffff", "palette": [
+    "#000000", "#cc0000", "#4e9a06", "#c4a000", "#3465a4", "#75507b", "#06989a", "#d3d7cf",
+    "#555753", "#ef2929", "#8ae234", "#fce94f", "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec",
+]}
+
 COLOR_SCHEMES = {
     "default": {"name": _("Default")},
     "solarized-dark": {"name": "Solarized Dark", "colors": SOLARIZED_DARK},
@@ -41,4 +60,40 @@ COLOR_SCHEMES = {
     "gruvbox-dark": {"name": "Gruvbox Dark", "colors": GRUVBOX_DARK},
     "atom-one-light": {"name": "Atom One Light", "colors": ATOM_ONE_LIGHT},
     "tango-light": {"name": "Tango Light", "colors": TANGO_LIGHT},
+    # No static "colors" here — unlike the built-in templates above, this
+    # one's colors live in a separate user-editable file and are resolved
+    # live by get_scheme_colors(), never baked into this dict.
+    "custom": {"name": _("Custom")},
 }
+
+
+def load_custom_color_scheme():
+    """Returns the user's saved custom {"background", "foreground",
+    "palette"} dict, or None if one was never saved (or is unreadable)."""
+    try:
+        with open(CUSTOM_COLOR_SCHEME_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logging.debug(f"No usable custom color scheme at {CUSTOM_COLOR_SCHEME_FILE}: {e}")
+        return None
+
+
+def save_custom_color_scheme(colors):
+    """colors is a {"background", "foreground", "palette"} dict, same shape
+    as the built-in templates above."""
+    CUSTOM_COLOR_SCHEME_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CUSTOM_COLOR_SCHEME_FILE, "w", encoding="utf-8") as f:
+        json.dump(colors, f, indent=4)
+
+
+def get_scheme_colors(scheme_key):
+    """Returns the {"background", "foreground", "palette"} dict for a
+    scheme id, or None for "default"/an unknown id/a not-yet-saved custom
+    scheme (all of which mean "no override, leave the terminal's own
+    default colors alone"). The one live lookup: "custom" isn't in
+    COLOR_SCHEMES with real colors — it's read fresh from disk every call,
+    so a change saved from Settings takes effect without needing this
+    module reloaded."""
+    if scheme_key == "custom":
+        return load_custom_color_scheme()
+    return COLOR_SCHEMES.get(scheme_key, {}).get("colors")
