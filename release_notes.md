@@ -1,5 +1,19 @@
 # Release Notes
 
+### 🆕 What's New in 0.6.2
+
+Quiet-console-and-find-bar release:
+
+* **Debug logging, opt-in instead of always-on** — Settings → **General** (the old "Interface" page, renamed) now has an "Enable debug logging" switch, off by default. With it off, the console stays quiet (warnings/errors only); flip it on to get the full verbose trace back, no restart needed.
+* **Host search box: pick top or bottom** — same Settings → General page, a "Search bar position" dropdown moves the host panel's search box above or below the tree, live.
+* **Host search Up/Down without losing focus** — the search box's up/down match buttons now double as the actual Up/Down arrow keys while you're typing, so cycling through matches doesn't yank focus out of the search field.
+* **In-terminal Find, several fixes at once**:
+  * Fixed a bug where the highlighted match crept forward one hit per keystroke instead of staying put — typing "cadence" letter by letter used to jump from the 1st match to the 2nd to the 3rd as you typed, instead of just refining the same one.
+  * "Match case" and "Regular expression" are now real labeled checkboxes instead of cryptic "Aa" / ".*" buttons.
+  * The Find bar no longer disappears the moment you click back into the terminal — it now stays open (pinned top-right, right under the header bar) regardless of which split-view layout is active, and follows you when you switch tabs or panes instead of silently searching a terminal you've since left.
+* **Fixed a stuck-open "Local Terminal" tab** — closing it sent one SIGTERM and just waited forever; if your login shell happened to trap or ignore that signal (job control, direnv/nvm hooks, a foreground process inside it), the tab would never close. It now escalates to SIGKILL after a few seconds if the shell hasn't exited on its own.
+* Fixed a `GTK-CRITICAL` that could pop up in the console when right-clicking a terminal (a popover was being re-parented on every click instead of once).
+
 ### 🆕 What's New in 0.6.1
 
 Quick touch-up after 0.6.0:

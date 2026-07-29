@@ -27,6 +27,8 @@ DEFAULT_SETTINGS = {
     "terminal.close_on_disconnect": True, # ✨ NEW: Whether to close tab on disconnect
     "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
     "interface.tree_row_striping": False,
+    "interface.debug_mode": False, # Verbose debug logging to the console; off by default
+    "interface.host_search_position": "bottom", # "top" or "bottom" — where the host-tree search bar sits
 }
 
 class SettingsManager:

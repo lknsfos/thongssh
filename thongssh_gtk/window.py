@@ -130,6 +130,16 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.paned.set_start_child(self.left_panel)
         self.left_panel.set_visible(True)
 
+        # Permanent end child of self.paned — the actual per-split-mode
+        # widget tree (see _apply_pane_layout) is swapped in and out as
+        # *its* child, so overlaid widgets (currently just the in-terminal
+        # find bar, see _build_find_window) stay anchored to a fixed spot
+        # regardless of which split layout is showing underneath.
+        self.terminal_overlay = Gtk.Overlay()
+        self.terminal_overlay.set_hexpand(True)
+        self.terminal_overlay.set_vexpand(True)
+        self.paned.set_end_child(self.terminal_overlay)
+
 
         
         # --- SearchBar (The correct way for GTK4) ---
@@ -156,10 +166,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.search_results = []
         self.current_search_index = -1
 
-        scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.set_vexpand(True)
-        scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.left_panel.append(scrolled_window)
+        self.tree_scrolled_window = Gtk.ScrolledWindow()
+        self.tree_scrolled_window.set_vexpand(True)
+        self.tree_scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.left_panel.append(self.tree_scrolled_window)
 
         # Tree model (4 columns). Using Python types works when GObject is correctly imported.
         self.main_tree_store = Gtk.TreeStore(str, str, str, object)
@@ -213,7 +223,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         column.set_cell_data_func(renderer_text, self._tree_row_cell_data_func)
 
         self.tree_view.append_column(column)
-        scrolled_window.set_child(self.tree_view)
+        self.tree_scrolled_window.set_child(self.tree_view)
 
         # Populate the tree from the config
         self.populate_tree()
@@ -244,6 +254,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.setup_search_signals()
 
         self.left_panel.append(self.search_bar)
+        self.apply_search_bar_position()
 
         # --- (GTK4 Menu) ---
         self.setup_actions_and_popovers()
@@ -643,6 +654,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self.active_pane.remove_css_class("thongssh-active-pane")
         self.active_pane = notebook
         notebook.add_css_class("thongssh-active-pane")
+        self._sync_find_target_terminal()
 
     def _get_active_notebook(self):
         """The pane new tabs should open into / menu actions should target."""
@@ -727,8 +739,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self._set_active_pane(dest)
 
     def _detach_pane(self, notebook):
-        """Unparents a pane notebook from whatever Paned currently holds it,
-        so it can be reparented into a freshly-built layout tree."""
+        """Unparents a pane notebook from whatever Paned (or, in
+        single-pane/no-split mode, self.terminal_overlay) currently holds
+        it, so it can be reparented into a freshly-built layout tree."""
         parent = notebook.get_parent()
         if parent is None:
             return
@@ -737,6 +750,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 parent.set_start_child(None)
             elif parent.get_end_child() is notebook:
                 parent.set_end_child(None)
+        elif isinstance(parent, Gtk.Overlay):
+            if parent.get_child() is notebook:
+                parent.set_child(None)
 
     def _build_pane_layout_widget(self, mode):
         """Builds the widget tree for the tab area for a given split mode.
@@ -791,7 +807,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def _apply_pane_layout(self):
         new_root = self._build_pane_layout_widget(self.split_mode)
-        self.paned.set_end_child(new_root)
+        self.terminal_overlay.set_child(new_root)
 
     def _update_split_buttons_ui(self):
         """Highlights whichever split button matches the current mode."""
@@ -860,6 +876,31 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.search_entry.connect("search-changed", self.on_search_changed)
         self.search_up_button.connect("clicked", self.on_search_nav_up)
         self.search_down_button.connect("clicked", self.on_search_nav_down)
+
+        # Up/Down cycle search results without leaving the entry — clicking
+        # the nav buttons instead would steal keyboard focus onto the
+        # button, forcing a click back into the entry to keep typing.
+        search_entry_key_controller = Gtk.EventControllerKey.new()
+        search_entry_key_controller.connect("key-pressed", self.on_search_entry_key_pressed)
+        self.search_entry.add_controller(search_entry_key_controller)
+
+    def on_search_entry_key_pressed(self, controller, keyval, keycode, state):
+        if keyval == Gdk.KEY_Up:
+            self.on_search_nav_up(None)
+            return True
+        elif keyval == Gdk.KEY_Down:
+            self.on_search_nav_down(None)
+            return True
+        return False
+
+    def apply_search_bar_position(self):
+        """Moves the host-tree search bar above or below the tree per the
+        interface.host_search_position setting ("top" or "bottom")."""
+        position = self.settings_manager.get("interface.host_search_position")
+        if position == "top":
+            self.left_panel.reorder_child_after(self.search_bar, None)
+        else:
+            self.left_panel.reorder_child_after(self.search_bar, self.tree_scrolled_window)
 
     def on_search_changed(self, search_entry):
         """Main search logic on text change."""
@@ -1128,6 +1169,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.lookup_action("edit-rename").set_enabled(item_selected)
         self.lookup_action("delete").set_enabled(item_selected)
 
+        self._sync_find_target_terminal()
+
 
     # --- (GTK4 Menu) ---
     def setup_actions_and_popovers(self):
@@ -1251,7 +1294,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.popover_group.set_parent(self) # Set parent once to the main window
         self.popover_terminal.set_parent(self) # Attach to the main window
 
-        self._build_find_popover()
+        self._build_find_window()
 
     def on_tree_right_click(self, gesture, n_press, x, y):
         """Right-click handler: Shows PopoverMenu (100% GTK4).
@@ -1369,7 +1412,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         rect.y = int(translated_y)
         rect.width, rect.height = 1, 1
 
-        self.popover_terminal.set_parent(self)
         self.popover_terminal.set_pointing_to(rect)
         self.popover_terminal.popup()
 
@@ -1401,21 +1443,41 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     # --- In-terminal Find ---
 
-    def _build_find_popover(self):
-        """Builds the (single, reused) in-terminal find popover — same
-        approach as the other context popovers: one instance, parented to
-        the window once, repositioned and repopulated per use rather than
-        rebuilt. Vte.Terminal owns the actual search state (compiled regex,
+    def _build_find_window(self):
+        """Builds the (single, reused) in-terminal find bar as an overlay
+        pinned to the top-right of the terminal area, just under the header
+        bar — not a separate window. GTK4 gives clients no way to place a
+        top-level window at a specific spot (Wayland treats placement as
+        purely the compositor's call — see _restore_window_geometry's note
+        on the same limitation for the main window itself), so a real
+        window could never reliably land "top-right, under the header bar"
+        the way this needs to; a Gtk.Overlay child, by contrast, is just
+        anchored via halign/valign and paints above whatever's beneath it.
+        It's overlaid on self.terminal_overlay, the one Gtk.Overlay every
+        split layout (none/vertical/horizontal/grid) renders inside of
+        (see _apply_pane_layout), so its position is unaffected by which
+        split mode is active. Non-modal by construction (it's just a widget
+        in the same window, not a dialog) — no focus is ever stolen from
+        the terminal, and it stays open across tab/pane switches (see
+        _sync_find_target_terminal) until closed by hand or reopened.
+        Vte.Terminal owns the actual search state (compiled regex,
         wrap-around) so nothing here is per-tab; _find_target_terminal just
-        tracks which terminal the popover is currently acting on."""
-        self.find_popover = Gtk.Popover()
+        tracks which terminal it's currently acting on."""
+        self.find_bar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.find_bar.add_css_class("card")
+        self.find_bar.set_margin_top(8)
+        self.find_bar.set_margin_end(8)
+        self.find_bar.set_halign(Gtk.Align.END)
+        self.find_bar.set_valign(Gtk.Align.START)
+        self.find_bar.set_visible(False)
         self._find_target_terminal = None
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.set_margin_top(8)
         box.set_margin_bottom(8)
-        box.set_margin_start(8)
-        box.set_margin_end(8)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        self.find_bar.append(box)
 
         entry_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.find_entry = Gtk.SearchEntry()
@@ -1427,15 +1489,18 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.find_prev_button.set_tooltip_text(_("Previous match"))
         self.find_next_button = Gtk.Button(icon_name="go-down-symbolic")
         self.find_next_button.set_tooltip_text(_("Next match"))
+        close_button = Gtk.Button(icon_name="window-close-symbolic")
+        close_button.add_css_class("flat")
+        close_button.set_tooltip_text(_("Close"))
+        close_button.connect("clicked", lambda b: self.find_bar.set_visible(False))
         entry_row.append(self.find_prev_button)
         entry_row.append(self.find_next_button)
+        entry_row.append(close_button)
         box.append(entry_row)
 
         options_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.find_case_toggle = Gtk.ToggleButton(label=_("Aa"))
-        self.find_case_toggle.set_tooltip_text(_("Case sensitive"))
-        self.find_regex_toggle = Gtk.ToggleButton(label=".*")
-        self.find_regex_toggle.set_tooltip_text(_("Regular expression"))
+        self.find_case_toggle = Gtk.CheckButton(label=_("Case sensitive"))
+        self.find_regex_toggle = Gtk.CheckButton(label=_("Regular expression"))
         self.find_wrap_toggle = Gtk.ToggleButton(icon_name="view-refresh-symbolic")
         self.find_wrap_toggle.set_tooltip_text(_("Wrap around"))
         self.find_wrap_toggle.set_active(True)
@@ -1450,9 +1515,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         options_row.append(self.find_status_label)
         box.append(options_row)
 
-        self.find_popover.set_child(box)
-        self.find_popover.set_parent(self)
-
         self.find_entry.connect("search-changed", self._on_find_text_changed)
         self.find_entry.connect("activate", lambda e: self._find_next())
         self.find_prev_button.connect("clicked", lambda b: self._find_previous())
@@ -1461,27 +1523,42 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.find_regex_toggle.connect("toggled", lambda b: self._on_find_text_changed(self.find_entry))
         self.find_wrap_toggle.connect("toggled", lambda b: self._apply_find_wrap_option())
 
+        self.terminal_overlay.add_overlay(self.find_bar)
+
     def on_menu_find_in_terminal(self, action, param):
-        """Opens the find popover targeting the active terminal. Bound to
-        the terminal context menu's "Find..." item and to Ctrl+Shift+F."""
+        """Shows (or re-focuses, if already shown) the find bar targeting
+        the active terminal. Bound to the terminal context menu's
+        "Find..." item and to Ctrl+Shift+F."""
         terminal = self.get_active_terminal()
         if terminal is None:
             return
         self._find_target_terminal = terminal
         # Re-apply whatever's already in the entry to *this* terminal — the
-        # popover is shared across terminals, so if it's reopened with
-        # leftover text from a previous tab, that terminal has never had a
-        # regex set on it yet.
+        # bar is shared across terminals, so if it's reopened with leftover
+        # text from a previous tab, that terminal has never had a regex set
+        # on it yet.
         self._on_find_text_changed(self.find_entry)
 
-        rect = Gdk.Rectangle()
-        anchor_x, anchor_y = terminal.translate_coordinates(self, terminal.get_width() / 2, 0)
-        rect.x, rect.y = int(anchor_x), int(anchor_y)
-        rect.width, rect.height = 1, 1
-        self.find_popover.set_pointing_to(rect)
-        self.find_popover.popup()
+        self.find_bar.set_visible(True)
         self.find_entry.grab_focus()
         self.find_entry.select_region(0, -1)
+
+    def _sync_find_target_terminal(self):
+        """Keeps the find bar's target in sync with whichever terminal is
+        currently active. Needed because the find bar no longer hides
+        itself when you switch tabs/panes (see _build_find_window) —
+        without this it would keep silently searching whatever terminal was
+        active when it was opened, no matter where you'd since navigated
+        to. A no-op while the bar is hidden; on_menu_find_in_terminal
+        already re-resolves the active terminal fresh the next time it's
+        shown."""
+        if not hasattr(self, "find_bar") or not self.find_bar.get_visible():
+            return
+        terminal = self.get_active_terminal()
+        if terminal is None or terminal is self._find_target_terminal:
+            return
+        self._find_target_terminal = terminal
+        self._on_find_text_changed(self.find_entry)
 
     def _apply_find_wrap_option(self):
         if self._find_target_terminal is not None:
@@ -1530,6 +1607,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.find_entry.remove_css_class("error")
         terminal.search_set_regex(regex, 0)
         self._apply_find_wrap_option()
+        # search_find_next() resumes *after* the end of whatever's currently
+        # selected — so as the pattern grows (still matching the same spot),
+        # it skips right past that match instead of re-checking it, and the
+        # highlight creeps forward one match per keystroke. Clearing the
+        # selection first makes every keystroke re-search from the top, so
+        # it lands back on the same (nearest) match instead of marching on.
+        terminal.unselect_all()
         found = terminal.search_find_next()
         self.find_status_label.set_text("" if found else _("Not found"))
 
@@ -1777,7 +1861,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     def on_menu_settings(self, action, param):
         """Placeholder for the settings dialog."""
         from .dialogs import SettingsDialog
-        logging.info("Settings dialog called.")
+        logging.debug("Settings dialog called.")
         dialog = SettingsDialog(self, self.settings_manager)
         dialog.present()
 
@@ -2499,11 +2583,34 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         except ProcessLookupError:
             logging.debug(f"Process {pid} is already dead.")
             self.close_tab(tab_widget)
+            return
         except Exception as e:
             logging.warning(f"Error during os.kill: {e}")
             # Check if the process is alive
             if not os.path.exists(f"/proc/{pid}"):
                  self.close_tab(tab_widget)
+            return
+
+        # SIGTERM is a request, not a guarantee — a plain client (ssh,
+        # telnet) almost always dies from it right away, but the "Local
+        # Terminal" tab spawns the user's actual login shell, which can
+        # trap or ignore TERM (job control, direnv/nvm/etc. hooks, a
+        # foreground child of its own). Nothing but VTE's "child-exited"
+        # signal ever calls close_tab(), so without an escalation path a
+        # shell like that leaves the tab stuck open indefinitely. Give it a
+        # few seconds, then finish the job with SIGKILL if it's still
+        # around — that in turn fires "child-exited" normally, which closes
+        # the tab through the usual on_ssh_process_exited path.
+        def escalate_to_sigkill():
+            if tab_widget not in self.open_sessions:
+                return False  # already closed via child-exited
+            try:
+                os.kill(pid, signal.SIGKILL)
+                logging.debug(f"Process {pid} ignored SIGTERM; sent SIGKILL.")
+            except ProcessLookupError:
+                pass
+            return False
+        GLib.timeout_add_seconds(3, escalate_to_sigkill)
 
     def on_ssh_process_exited(self, terminal, status, tab_widget):
         """Handles the 'child-exited' signal from Vte.Terminal."""

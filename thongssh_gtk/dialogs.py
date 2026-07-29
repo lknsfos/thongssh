@@ -3,6 +3,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gdk, GObject, Pango
 import stat
+import logging
 
 from .constants import COL_NAME, COL_TYPE
 from .colors import COLOR_SCHEMES
@@ -826,9 +827,9 @@ class SettingsDialog(Adw.Window):
 
         group_commands.add(commands_box)
 
-        # --- Interface Page ---
+        # --- General Page (app icon, host tree look & feel, debug logging) ---
         page_interface = Adw.PreferencesPage()
-        page_interface.set_title(_("Interface"))
+        page_interface.set_title(_("General"))
         page_interface.set_icon_name("preferences-desktop-appearance-symbolic")
 
         group_logo = Adw.PreferencesGroup(title=_("Logo"))
@@ -858,6 +859,24 @@ class SettingsDialog(Adw.Window):
         )
         self.tree_row_striping_row.set_active(self.settings_manager.get("interface.tree_row_striping"))
         group_host_tree.add(self.tree_row_striping_row)
+
+        search_position_model = Gtk.StringList.new([_("Top"), _("Bottom")])
+        self.search_position_row = Adw.ComboRow(title=_("Search bar position"), model=search_position_model)
+        search_position_map = {"top": 0, "bottom": 1}
+        self.search_position_row.set_selected(
+            search_position_map.get(self.settings_manager.get("interface.host_search_position"), 1)
+        )
+        group_host_tree.add(self.search_position_row)
+
+        group_debug = Adw.PreferencesGroup(title=_("Debugging"))
+        page_interface.add(group_debug)
+
+        self.debug_mode_row = Adw.SwitchRow(
+            title=_("Enable debug logging"),
+            subtitle=_("Print verbose debug messages to the console. Leave off unless troubleshooting an issue.")
+        )
+        self.debug_mode_row.set_active(self.settings_manager.get("interface.debug_mode"))
+        group_debug.add(self.debug_mode_row)
 
         # --- SFTP Page ---
         page_sftp = Adw.PreferencesPage()
@@ -909,7 +928,7 @@ class SettingsDialog(Adw.Window):
         self.stack.add_titled_with_icon(page_sftp, "sftp", _("SFTP"), "folder-remote-symbolic")
         self.stack.add_titled_with_icon(page_client, "client", _("Client Options"), "network-wired-symbolic")
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
-        self.stack.add_titled_with_icon(page_interface, "interface", _("Interface"), "preferences-desktop-appearance-symbolic")
+        self.stack.add_titled_with_icon(page_interface, "interface", _("General"), "preferences-desktop-appearance-symbolic")
 
         for page in self.stack.get_pages():
             row = Adw.ActionRow(title=page.get_title())
@@ -918,7 +937,7 @@ class SettingsDialog(Adw.Window):
 
         split_view = Adw.NavigationSplitView(collapsed=False)
         split_view.set_sidebar(Adw.NavigationPage.new(sidebar, _("Settings")))
-        split_view.set_content(Adw.NavigationPage.new(self.stack, ""))
+        split_view.set_content(Adw.NavigationPage.new(self.stack, _("Settings")))
         split_view.set_vexpand(True)
 
         header_bar.set_title_widget(Adw.WindowTitle(title=_("Settings")))
@@ -970,7 +989,21 @@ class SettingsDialog(Adw.Window):
 
         self.settings_manager.set("interface.tree_row_striping", self.tree_row_striping_row.get_active())
 
+        search_position_map_rev = {0: "top", 1: "bottom"}
+        self.settings_manager.set(
+            "interface.host_search_position",
+            search_position_map_rev.get(self.search_position_row.get_selected(), "bottom")
+        )
+
+        self.settings_manager.set("interface.debug_mode", self.debug_mode_row.get_active())
+
         self.settings_manager.save()
+
+        # Debug logging can take effect immediately, no restart needed.
+        logging.getLogger().setLevel(logging.DEBUG if self.debug_mode_row.get_active() else logging.WARNING)
+
+        # Ditto for the search bar's position in the host panel.
+        self.parent_window.apply_search_bar_position()
 
         # Apply the icon change immediately — the window's own icon, the
         # macOS Dock icon (About dialog just reads the setting fresh next

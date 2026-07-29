@@ -81,10 +81,14 @@ class ThongSSHApp(Adw.Application):
 
 
 def main():
-    # ✨ Configure logging
-    # Use DEBUG level to see everything, or INFO for important messages only
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+    # ✨ Configure logging — level follows the "Enable debug logging" setting
+    # (Settings -> General), off by default. force=True is required since
+    # the module-level basicConfig() above already installed a handler;
+    # without it this call would be a silent no-op.
+    debug_mode = SettingsManager().get("interface.debug_mode")
+    logging.basicConfig(level=logging.DEBUG if debug_mode else logging.WARNING,
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        force=True)
 
     @atexit.register
     def kill_all_sessions():
