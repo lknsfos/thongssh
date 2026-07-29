@@ -7,7 +7,7 @@ Quiet-console-and-find-bar release:
 * **Debug logging, opt-in instead of always-on** — Settings → **General** (the old "Interface" page, renamed) now has an "Enable debug logging" switch, off by default. With it off, the console stays quiet (warnings/errors only); flip it on to get the full verbose trace back, no restart needed.
 * **Host search box: pick top or bottom** — same Settings → General page, a "Search bar position" dropdown moves the host panel's search box above or below the tree, live.
 * **Host search Up/Down without losing focus** — the search box's up/down match buttons now double as the actual Up/Down arrow keys while you're typing, so cycling through matches doesn't yank focus out of the search field.
-* **Host search now forgives a typo** — if what you typed doesn't match anything exactly, it falls back to a fuzzy pass that tolerates one missing, extra, wrong, or swapped character. Type `qb-fs21` and it'll still find `qb-fs021`; type `pmxx013` and it'll still find `pxmx013`.
+* **Host search now forgives a typo** — if what you typed doesn't match anything exactly, it falls back to a fuzzy pass that tolerates one missing, extra, wrong, or swapped character. Type `cus-fs21` and it'll still find `cus-fs021`; type `pmxx013` and it'll still find `pxmx013`.
 * **In-terminal Find, several fixes at once**:
   * Fixed a bug where the highlighted match crept forward one hit per keystroke instead of staying put — typing "cadence" letter by letter used to jump from the 1st match to the 2nd to the 3rd as you typed, instead of just refining the same one.
   * "Match case" and "Regular expression" are now real labeled checkboxes instead of cryptic "Aa" / ".*" buttons.
