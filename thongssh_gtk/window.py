@@ -46,7 +46,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     open_sessions = {}
     tab_data = {} # ✨ Store config for each tab widget
-    force_close_tabs = set() # ✨ Set of tab widgets to force close
     last_clicked_tab = None # ✨ Store the last right-clicked tab for context menu actions
 
     def __init__(self, *args, **kwargs):
@@ -902,6 +901,56 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         else:
             self.left_panel.reorder_child_after(self.search_bar, self.tree_scrolled_window)
 
+    def _fuzzy_edit_distance(self, query, text):
+        """Minimum "optimal string alignment" distance between `query` and
+        the best-matching substring of `text` — Levenshtein plus one extra
+        move (swapping two adjacent characters counts as a single edit,
+        not two substitutions), computed with free start/end alignment (the
+        first row starts at all zeros instead of 0..len(query), and the
+        answer is the smallest value seen in the last row rather than just
+        its final cell). That free start/end is what lets a short typo'd
+        query match part of a longer host name instead of only the name as
+        a whole; the transposition move is what lets one threshold value
+        cover both a single typed-out-of-order pair of letters (distance 1,
+        same as a single missing/extra/wrong character) without also
+        having to loosen the threshold to 2 — which would blur together
+        with, and match half of, any block of similarly-numbered hosts
+        (qb-fs021, qb-fs022, qb-fs023, ...)."""
+        m = len(query)
+        if m == 0:
+            return 0
+        prev2 = None
+        prev = [0] * (m + 1)
+        for j in range(1, m + 1):
+            prev[j] = j
+        best = prev[m]
+        prev_ch = None
+        for i, ch in enumerate(text):
+            curr = [0] * (m + 1)
+            for j in range(1, m + 1):
+                cost = 0 if ch == query[j - 1] else 1
+                value = min(
+                    prev[j - 1] + cost,  # match/substitute
+                    prev[j] + 1,         # skip a character of text
+                    curr[j - 1] + 1,     # skip a character of query
+                )
+                if (prev2 is not None and j > 1 and prev_ch is not None
+                        and ch == query[j - 2] and prev_ch == query[j - 1]):
+                    value = min(value, prev2[j - 2] + 1)  # transpose
+                curr[j] = value
+            best = min(best, curr[m])
+            prev2 = prev
+            prev = curr
+            prev_ch = ch
+        return best
+
+    def _fuzzy_search_threshold(self, query_len):
+        """How many typo'd/missing/extra/swapped characters to tolerate,
+        scaled to query length — 0 for very short queries (anything looser
+        would match nearly everything) up to 1 once there's enough of the
+        name typed for that to still be meaningful."""
+        return 0 if query_len <= 2 else 1
+
     def on_search_changed(self, search_entry):
         """Main search logic on text change."""
         query = search_entry.get_text().strip()
@@ -929,6 +978,27 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 self.search_results.append(path.copy())
 
         self.main_tree_store.foreach(find_matches)
+
+        if not self.search_results:
+            # No exact/regex hits — fall back to fuzzy matching, so a
+            # missing, extra, or transposed character (typing "pmxx013"
+            # for "pxmx013", or "qb-fs21" for "qb-fs021") still finds the
+            # host instead of coming up empty. Ranked by closeness so the
+            # best guess is what Enter/first-navigation lands on.
+            threshold = self._fuzzy_search_threshold(len(query))
+            if threshold > 0:
+                query_lower = query.lower()
+                scored = []
+
+                def find_fuzzy(model, path, iter):
+                    name = model.get_value(iter, COL_NAME)
+                    distance = self._fuzzy_edit_distance(query_lower, name.lower())
+                    if distance <= threshold:
+                        scored.append((distance, path.copy()))
+
+                self.main_tree_store.foreach(find_fuzzy)
+                scored.sort(key=lambda item: item[0])
+                self.search_results = [path for _distance, path in scored]
 
         if self.search_results:
             self.current_search_index = 0
@@ -2574,36 +2644,32 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     # --- 6.4. Process Management ---
     def on_tab_close_button_clicked(self, button, tab_widget, pid):
-        # ✨ Mark this tab for forced closure, so the "keep open" setting is ignored.
-        self.force_close_tabs.add(tab_widget)
+        """Closes the tab immediately, then cleans up the underlying
+        process in the background — the user shouldn't have to wait
+        however long that process takes to actually exit just to see the
+        tab go away. This matters most for the "Local Terminal" tab: it
+        runs the user's real login shell, and whether (and how fast) a
+        plain SIGTERM kills that depends entirely on their shell config
+        (traps, job control, a foreground child process) — previously the
+        tab visibly sat there the whole time that took, which in practice
+        was basically always a few seconds, not the rare edge case a
+        lightweight SSH/Telnet client would be. SSH/Telnet's own process
+        still gets signaled exactly as before; only the UI no longer
+        blocks on the result."""
+        self.close_tab(tab_widget)
 
         logging.debug(f"Sending SIGTERM to process {pid}...")
         try:
             os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
-            logging.debug(f"Process {pid} is already dead.")
-            self.close_tab(tab_widget)
-            return
-        except Exception as e:
-            logging.warning(f"Error during os.kill: {e}")
-            # Check if the process is alive
-            if not os.path.exists(f"/proc/{pid}"):
-                 self.close_tab(tab_widget)
             return
 
-        # SIGTERM is a request, not a guarantee — a plain client (ssh,
-        # telnet) almost always dies from it right away, but the "Local
-        # Terminal" tab spawns the user's actual login shell, which can
-        # trap or ignore TERM (job control, direnv/nvm/etc. hooks, a
-        # foreground child of its own). Nothing but VTE's "child-exited"
-        # signal ever calls close_tab(), so without an escalation path a
-        # shell like that leaves the tab stuck open indefinitely. Give it a
-        # few seconds, then finish the job with SIGKILL if it's still
-        # around — that in turn fires "child-exited" normally, which closes
-        # the tab through the usual on_ssh_process_exited path.
+        # SIGTERM is a request, not a guarantee. Give it a few seconds to
+        # exit cleanly on its own, then finish the job with SIGKILL if
+        # it's still around — purely a "don't leak the process" safety
+        # net at this point, invisible to the user since the tab is
+        # already gone.
         def escalate_to_sigkill():
-            if tab_widget not in self.open_sessions:
-                return False  # already closed via child-exited
             try:
                 os.kill(pid, signal.SIGKILL)
                 logging.debug(f"Process {pid} ignored SIGTERM; sent SIGKILL.")
@@ -2616,10 +2682,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Handles the 'child-exited' signal from Vte.Terminal."""
         logging.debug(f"VTE child process exited with status {status} for widget {tab_widget}.")
 
-        is_forced = tab_widget in self.force_close_tabs
+        if tab_widget not in self.tab_data:
+            return  # already closed via on_tab_close_button_clicked
 
-        if is_forced or self.settings_manager.get("terminal.close_on_disconnect"):
-            if is_forced: self.force_close_tabs.remove(tab_widget)
+        if self.settings_manager.get("terminal.close_on_disconnect"):
             self.close_tab(widget=tab_widget)
         else:
             # Keep the tab open and show a message
@@ -2632,7 +2698,15 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """
         Closes a tab, removes it from whichever pane notebook currently holds
         it, and cleans up associated resources like session data and timers.
+
+        Idempotent: closing a tab no longer waits for its process to exit
+        (see on_tab_close_button_clicked), so "child-exited" can still fire
+        later for a tab this already closed — a no-op in that case rather
+        than a stray warning.
         """
+        if widget not in self.open_sessions and widget not in self.tab_data:
+            return
+
         owner = self._find_notebook_for_page_widget(widget)
         if owner is not None:
             page_num = owner.page_num(widget)
@@ -2647,9 +2721,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if widget in self.tab_data:
             self._stop_session_logging(widget)
             del self.tab_data[widget]
-
-        if widget in self.force_close_tabs:
-            self.force_close_tabs.remove(widget)
 
         if owner is not None and owner.get_n_pages() > 0:
             def focus_active_terminal():
