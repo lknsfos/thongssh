@@ -86,7 +86,7 @@ brew install gtk4 libadwaita vte3 libsecret gobject-introspection pygobject3 pkg
 
 ### Linux
 ```bash
-git clone https://github.com/lknsfos/thongs-gtk4.dev.git
+git clone https://github.com/lknsfos/thongssh.git
 cd thongs-gtk4.dev
 python3 thongssh.py
 ```
@@ -94,7 +94,7 @@ python3 thongssh.py
 ### macOS
 Needs a venv that can still see Homebrew's PyGObject/pycairo:
 ```bash
-git clone https://github.com/lknsfos/thongs-gtk4.dev.git
+git clone https://github.com/lknsfos/thongssh.git
 cd thongs-gtk4.dev
 
 python3 -m venv --system-site-packages venv
