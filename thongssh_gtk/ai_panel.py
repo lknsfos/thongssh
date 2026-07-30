@@ -39,19 +39,35 @@ class AiPanel(Gtk.Box):
         self.add_css_class("ai-panel")
 
         # --- Header ---
+        # Provider-picker buttons live here now (moved from the main
+        # window's header bar — see window.py's refresh_ai_provider_buttons)
+        # instead of just naming the active one in a label. A FlowBox
+        # wraps onto a second row on its own once enough providers are
+        # configured to not fit one line — the header (and the row above
+        # the transcript) just grows to fit, no special-casing a specific
+        # count.
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         header.set_margin_top(6)
         header.set_margin_start(6)
         header.set_margin_end(6)
         header.set_margin_bottom(6)
-        self.provider_label = Gtk.Label(label=_("AI Chat"), xalign=0)
-        self.provider_label.add_css_class("heading")
-        self.provider_label.set_hexpand(True)
-        header.append(self.provider_label)
+
+        self.provider_button_box = Gtk.FlowBox()
+        self.provider_button_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.provider_button_box.set_hexpand(True)
+        self.provider_button_box.set_valign(Gtk.Align.CENTER)
+        self.provider_button_box.set_row_spacing(4)
+        self.provider_button_box.set_column_spacing(4)
+        self.provider_button_box.set_homogeneous(False)
+        # No artificial per-line cap — let actual available width decide
+        # when to wrap, same as any other flow layout.
+        self.provider_button_box.set_max_children_per_line(999)
+        header.append(self.provider_button_box)
 
         self.clear_chat_button = Gtk.Button(icon_name="edit-clear-all-symbolic")
         self.clear_chat_button.set_tooltip_text(_("Clear chat"))
         self.clear_chat_button.add_css_class("flat")
+        self.clear_chat_button.set_valign(Gtk.Align.START)
         self.clear_chat_button.connect("clicked", self._on_clear_chat_clicked)
         header.append(self.clear_chat_button)
 
@@ -81,8 +97,6 @@ class AiPanel(Gtk.Box):
         vadj = self.transcript_scroller.get_vadjustment()
         vadj.connect("changed", self._on_transcript_extent_changed)
         vadj.connect("value-changed", self._on_transcript_value_changed)
-        self.append(self.transcript_scroller)
-        self.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         # --- Context preview — only visible once "Attach context" is toggled on ---
         self.context_preview = Gtk.Label(xalign=0, wrap=True)
@@ -92,10 +106,10 @@ class AiPanel(Gtk.Box):
         self.context_preview.set_margin_start(6)
         self.context_preview.set_margin_end(6)
         self.context_preview.set_margin_top(6)
-        self.append(self.context_preview)
 
         # --- Input row ---
         input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        input_row.set_vexpand(True)
         input_row.set_margin_top(10)
         input_row.set_margin_bottom(6)
         input_row.set_margin_start(6)
@@ -105,15 +119,19 @@ class AiPanel(Gtk.Box):
         self.attach_context_button.set_tooltip_text(
             _("Attach terminal context (current selection, or last 20 lines of output)")
         )
+        self.attach_context_button.set_valign(Gtk.Align.END)
         self.attach_context_button.connect("toggled", self._on_attach_context_toggled)
         input_row.append(self.attach_context_button)
 
-        self.input_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True)
-        input_scroller = Gtk.ScrolledWindow(hexpand=True)
+        self.input_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True, vexpand=True)
+        input_scroller = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
         input_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         input_scroller.set_child(self.input_view)
-        input_scroller.set_max_content_height(120)
-        input_scroller.set_propagate_natural_height(True)
+        # Deliberately no set_max_content_height/set_propagate_natural_height
+        # here — the input area no longer grows with what you type. Its
+        # height is fixed at whatever the chat_paned handle below is set
+        # to (dragged by the user, or the default set right after this),
+        # and a ScrolledWindow takes over once content exceeds that.
         input_row.append(input_scroller)
 
         key_controller = Gtk.EventControllerKey.new()
@@ -122,11 +140,56 @@ class AiPanel(Gtk.Box):
 
         self.send_button = Gtk.Button(icon_name="mail-send-symbolic")
         self.send_button.set_tooltip_text(_("Send"))
-        self.send_button.add_css_class("suggested-action")
+        self.send_button.set_valign(Gtk.Align.END)
         self.send_button.connect("clicked", self._on_send_clicked)
         input_row.append(self.send_button)
 
-        self.append(input_row)
+        bottom_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        bottom_box.append(self.context_preview)
+        bottom_box.append(input_row)
+
+        # Transcript above, input below, with a draggable handle between
+        # them instead of the input area auto-growing with its content —
+        # resize it by hand if you want more room, it stays put otherwise.
+        self.chat_paned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
+        self.chat_paned.set_vexpand(True)
+        self.chat_paned.set_start_child(self.transcript_scroller)
+        self.chat_paned.set_resize_start_child(True)
+        self.chat_paned.set_shrink_start_child(True)
+        self.chat_paned.set_end_child(bottom_box)
+        self.chat_paned.set_resize_end_child(False)
+        self.chat_paned.set_shrink_end_child(False)
+        self.append(self.chat_paned)
+
+        # A fresh Paned splits 50/50 by default, which would squeeze an
+        # empty transcript down to make room for an oversized blank input
+        # area — give the input area a sensible fixed starting height
+        # instead, the first (and only the first) time the panel actually
+        # becomes visible. The panel starts hidden (see window.py) and may
+        # stay that way for the whole session, so this waits for "map"
+        # rather than trying unconditionally from __init__ — an unbounded
+        # GLib.idle_add polling a height that never becomes positive
+        # because the widget is never shown would just spin forever,
+        # pegging a CPU core. The retry-with-a-cap poll below (same
+        # pattern as _build_pane_layout_widget's try_center in window.py)
+        # is only a short-lived fallback for the rare case "map" fires a
+        # frame before the real height is settled.
+        default_input_height = 96
+        paned_position_state = {"initialized": False}
+        def _on_chat_paned_map(_widget):
+            if paned_position_state["initialized"]:
+                return
+            paned_position_state["initialized"] = True
+            attempts = [0]
+            def try_apply():
+                total = self.chat_paned.get_height()
+                if total > 0:
+                    self.chat_paned.set_position(max(0, total - default_input_height))
+                    return False
+                attempts[0] += 1
+                return attempts[0] < 30  # ~0.5s ceiling, then give up quietly
+            GLib.timeout_add(16, try_apply)
+        self.chat_paned.connect("map", _on_chat_paned_map)
 
     # --- Provider switching ---
 
@@ -135,13 +198,11 @@ class AiPanel(Gtk.Box):
         does not touch self.history — the conversation continues across
         provider switches, per the confirmed product behavior. provider_id
         prefixed "cli:" routes to a local CLI tool instead of an HTTP API
-        (see cli_providers.py)."""
+        (see cli_providers.py). Which provider is active is shown by which
+        button in provider_button_box is pressed (see
+        window.py's _on_ai_provider_button_toggled) — nothing to reflect
+        here beyond the id itself."""
         self.active_provider_id = provider_id
-        if provider_id.startswith("cli:"):
-            config = resolve_cli_config(provider_id, self.settings_manager)
-        else:
-            config = resolve_provider_config(provider_id, self.settings_manager, self.keyring)
-        self.provider_label.set_label(config["label"] if config else provider_id)
         self.settings_manager.set("ai.active_provider", provider_id)
         self.settings_manager.save()
 

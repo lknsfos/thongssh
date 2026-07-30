@@ -90,10 +90,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         header_bar.set_title_widget(title_widget)
 
         self.setup_global_menu(header_bar)
+
+        # Single toggle for the whole AI panel, next to the system menu —
+        # per-provider buttons live inside the panel's own header instead
+        # (see AiPanel.provider_button_box / refresh_ai_provider_buttons).
+        # Hidden by default; refresh_ai_provider_buttons() decides whether
+        # anything is actually configured before showing it, and it stays
+        # hidden entirely whenever Settings -> AI's "Disable AI" is on.
+        self.ai_toggle_button = Gtk.ToggleButton(label=_("AI"))
+        self.ai_toggle_button.set_tooltip_text(_("AI Chat"))
+        self.ai_toggle_button.set_visible(False)
+        self.ai_toggle_button.connect("toggled", self._on_ai_toggle_button_toggled)
+        header_bar.pack_end(self.ai_toggle_button)
+
         self.main_box.append(header_bar)
-        # Kept for refresh_ai_provider_buttons(), which adds/removes
-        # per-provider toggle buttons dynamically as keys are configured.
-        self._ai_header_bar = header_bar
         self._ai_provider_buttons = {}
 
         self.sidebar_toggle_button = Gtk.ToggleButton(icon_name="go-previous-symbolic", active=True)
@@ -110,15 +120,21 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         header_bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
 
-        self.split_vertical_btn = Gtk.Button(icon_name="view-dual-symbolic")
+        # "view-dual-symbolic" renders as a literal open-book icon on some
+        # icon themes (Yaru, at least) — no relation to splitting a view.
+        # System icon themes don't have a clean "2 equal panes" icon in the
+        # same visual language as "view-grid-symbolic" (used below for the
+        # 4-way split) — a CSS-rotated stand-in looked lopsided rotated —
+        # so these two are bundled app icons instead (icons/split-*.svg),
+        # drawn to match view-grid-symbolic's own style: same bordered-
+        # square look, just 2 cells instead of 4. No rotation trick needed
+        # since each is its own native drawing.
+        self.split_vertical_btn = Gtk.Button(icon_name="split-columns-symbolic")
         self.split_vertical_btn.set_tooltip_text(_("Split view left/right"))
         self.split_vertical_btn.connect("clicked", lambda w: self.on_split_button_clicked("vertical"))
         header_bar.pack_start(self.split_vertical_btn)
 
-        self.split_horizontal_btn = Gtk.Button()
-        horizontal_split_icon = Gtk.Image.new_from_icon_name("view-dual-symbolic")
-        horizontal_split_icon.add_css_class("thongssh-rotate-90")
-        self.split_horizontal_btn.set_child(horizontal_split_icon)
+        self.split_horizontal_btn = Gtk.Button(icon_name="split-rows-symbolic")
         self.split_horizontal_btn.set_tooltip_text(_("Split view top/bottom"))
         self.split_horizontal_btn.connect("clicked", lambda w: self.on_split_button_clicked("horizontal"))
         header_bar.pack_start(self.split_horizontal_btn)
@@ -127,12 +143,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.split_grid_btn.set_tooltip_text(_("Split view into 4"))
         self.split_grid_btn.connect("clicked", lambda w: self.on_split_button_clicked("grid"))
         header_bar.pack_start(self.split_grid_btn)
-
-        # Separator before the AI provider buttons group (see
-        # refresh_ai_provider_buttons) — kept even with zero buttons
-        # currently configured, so the layout doesn't jump around as keys
-        # are added/removed.
-        header_bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
 
         self.paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.paned.set_resize_start_child(False)
@@ -499,9 +509,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         }
         menuitem > label[label^="<b>&gt;_</b>"] {
             -gtk-icon-source: none;
-        }
-        .thongssh-rotate-90 {
-            transform: rotate(90deg);
         }
         .thongssh-active-pane {
             /* box-shadow (not border!) — a border adds to the widget's size
@@ -1071,14 +1078,16 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             button.set_icon_name("go-next-symbolic")
 
     def refresh_ai_provider_buttons(self):
-        """Rebuilds the header-bar's per-provider toggle buttons from
-        current keyring/settings state — one button per API provider with a
-        usable key, plus one per CLI tool whose binary is actually found on
-        PATH. Called once at startup and again from SettingsDialog.on_apply
-        whenever keys/commands change, so the header reacts immediately
-        with no restart needed."""
+        """Rebuilds the AI panel's per-provider toggle buttons (in its own
+        header, see AiPanel.provider_button_box) from current keyring/
+        settings state — one button per API provider with a usable key,
+        plus one per CLI tool whose binary is actually found on PATH — and
+        shows/hides the header-bar's single AI toggle button based on
+        whether anything is actually configured. Called once at startup
+        and again from SettingsDialog.on_apply whenever keys/commands
+        change, so the UI reacts immediately with no restart needed."""
         for btn in self._ai_provider_buttons.values():
-            self._ai_header_bar.remove(btn)
+            self.ai_panel.provider_button_box.remove(btn)
         self._ai_provider_buttons = {}
 
         if self.settings_manager.get("ai.disabled"):
@@ -1088,6 +1097,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             # who doesn't want the app touching AI in any way.
             if self.ai_panel.get_visible():
                 self.ai_panel.set_visible(False)
+            self.ai_toggle_button.set_visible(False)
             return
 
         configured = [
@@ -1108,6 +1118,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             if cli_is_available(tool.get("command", "")):
                 configured.append((f"cli:custom:{tool['id']}", tool.get("name") or _("Custom CLI")))
 
+        self.ai_toggle_button.set_visible(bool(configured))
+        if not configured and self.ai_panel.get_visible():
+            self.ai_panel.set_visible(False)
+
         for provider_id, label in configured:
             family = _badge_family(provider_id)
             icon_name = _icon_name_for(provider_id)
@@ -1117,26 +1131,48 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 button = Gtk.ToggleButton(child=image)
             else:
                 button = Gtk.ToggleButton(label=_badge_text(label))
-            # "ai-provider-button" sizes/shapes it like the plain icon
-            # buttons next to it (batch command, split view, ...); the
-            # per-family class tints it (text color for a label badge,
+            # "ai-provider-button" sizes/shapes it like a plain icon button;
+            # the per-family class tints it (text color for a label badge,
             # or the recolored symbolic icon itself), and only the
             # :checked state gets a background fill — so pressed vs.
             # unpressed stays visually obvious instead of both looking tinted.
             button.add_css_class("ai-provider-button")
             button.add_css_class(f"ai-provider-badge-{family}")
             button.set_tooltip_text(label)
-            button.set_active(self.ai_panel.get_visible() and self.ai_panel.active_provider_id == provider_id)
+            button.set_active(self.ai_panel.active_provider_id == provider_id)
             button.connect("toggled", self._on_ai_provider_button_toggled, provider_id)
-            self._ai_header_bar.pack_start(button)
+            self.ai_panel.provider_button_box.append(button)
             self._ai_provider_buttons[provider_id] = button
 
-    def _on_ai_provider_button_toggled(self, button, provider_id):
+        # No provider was ever active (first run) — default to the first
+        # configured one so the panel always has *something* selected the
+        # first time it's opened, rather than an empty "no provider" state.
+        if configured and self.ai_panel.active_provider_id not in self._ai_provider_buttons:
+            first_id = configured[0][0]
+            self._ai_provider_buttons[first_id].set_active(True)
+
+    def _on_ai_toggle_button_toggled(self, button):
+        """The header-bar's single AI button — shows or collapses the
+        panel. Conversation state and the active provider are untouched by
+        hiding it; the "X provider buttons in the panel header (see
+        _on_ai_provider_button_toggled) are what pick who gets the next
+        message, not this."""
+        self.ai_panel.set_visible(button.get_active())
         if not button.get_active():
-            # Un-pressing the *currently active* provider's own button just
-            # collapses the panel — its conversation state is untouched.
-            if self.ai_panel.active_provider_id == provider_id:
-                self.ai_panel.set_visible(False)
+            return
+        self._apply_ai_panel_width()
+
+    def _on_ai_provider_button_toggled(self, button, provider_id):
+        # These act as a radio group, always exactly one pressed while any
+        # provider is configured — the panel's own visibility is the
+        # header AI button's job now (_on_ai_toggle_button_toggled), not
+        # this button's. Clicking the already-active provider's button
+        # would otherwise leave it un-pressed with nothing to switch to;
+        # just force it back on instead of switching away from anything.
+        if not button.get_active():
+            button.handler_block_by_func(self._on_ai_provider_button_toggled)
+            button.set_active(True)
+            button.handler_unblock_by_func(self._on_ai_provider_button_toggled)
             return
 
         # Pressing a different provider's button: un-press every other
@@ -1148,16 +1184,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 other_button.handler_unblock_by_func(self._on_ai_provider_button_toggled)
 
         self.ai_panel.set_active_provider(provider_id)
-        self.ai_panel.set_visible(True)
 
-        # Enforce the cached/default width now that the panel is visible
-        # again — a just-shown pane with no natural size would otherwise
-        # get squeezed to a sliver (mirrors sftp_widget.py's realize-then-
-        # set_position pattern for the same problem).
+    def _apply_ai_panel_width(self):
+        """Enforces the cached/default width once the panel becomes
+        visible — a just-shown pane with no natural size would otherwise
+        get squeezed to a sliver (mirrors sftp_widget.py's realize-then-
+        set_position pattern for the same problem). Capped attempts (not
+        an unconditional retry-forever idle callback) — if the width
+        somehow never becomes positive, give up quietly instead of
+        spinning a CPU core indefinitely; see ai_panel.py's chat_paned
+        setup for a real instance of that exact bug."""
+        attempts = [0]
         def _apply_width():
             total = self.center_paned.get_width()
             if total <= 0:
-                return True  # not yet allocated — try again next idle
+                attempts[0] += 1
+                return attempts[0] < 30  # ~0.5s ceiling, then give up
             # No cached width yet (first-ever open): default to ~25% of the
             # available space rather than a fixed pixel guess, so it scales
             # with the user's actual window size.

@@ -1,5 +1,17 @@
 # Release Notes
 
+### 🆕 What's New in 0.7.2
+
+AI chat panel, round three — layout rework plus a nasty bug squashed:
+
+* **Fixed the app hanging on quit and pegging a CPU core** — a background timer meant to size the chat input on first open had no retry limit, so if the AI panel was never opened in a session it just spun forever instead of giving up. Closing the window wouldn't cleanly end the process (Ctrl+C in the terminal didn't help either) until it was killed by hand. Capped now, same as the other places in the app that poll for a widget's real size.
+* **One AI button instead of a strip of them** — a single "AI" toggle now lives next to the system menu, opening and closing the panel; it's hidden entirely whenever no provider is configured or "Disable AI" is on. Picking *which* provider answers moved into the panel's own header as a row of buttons — plenty of providers configured wraps them onto a second row automatically instead of overflowing the main window's header bar.
+* **Chat input is resizable, not auto-growing** — drag the handle above it for more room; typing a long message no longer pushes the transcript around on its own.
+* **Fixed two invisible/mismatched buttons in the chat panel** — Send and Attach-context were rendering oversized (Send was outright invisible on some themes, a flat + accent-color combination gone wrong) — both now match the plain icon buttons used everywhere else in the app (same ones as Add Host / Add Group / Remove).
+* **Fixed broken-looking icons**:
+  * The new AI button briefly shipped with an icon name that doesn't exist in most icon themes — it's a plain "AI" text label now.
+  * The split-view buttons' icon rendered as a literal open book on some icon themes (Yaru, notably) — replaced with two icons drawn in-house to match the existing 4-way split icon's style (a couple of bordered squares side by side, or stacked, instead of 4).
+
 ### 🆕 What's New in 0.7.1
 
 AI chat panel follow-up — fixes plus model picking and a hard off switch:
