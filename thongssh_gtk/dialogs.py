@@ -6,12 +6,12 @@ import stat
 import logging
 import uuid
 
-from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS
+from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS
 from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
 from .settings import DEFAULT_SETTINGS
 from .launcher_icon import apply_launcher_icon
 from .keyring import KeyringManager
-from .ai_providers import DEFAULT_MODELS as AI_DEFAULT_MODELS
+from .ai_providers import DEFAULT_MODELS as AI_DEFAULT_MODELS, DEFAULT_BASE_URLS as AI_DEFAULT_BASE_URLS, fetch_models
 from .cli_providers import is_available as cli_is_available
 
 # Placeholder for future internationalization (i18n)
@@ -1064,6 +1064,23 @@ class SettingsDialog(Adw.Window):
         page_ai_shared.set_vexpand(False)
         self.page_ai_shared_widget = page_ai_shared
 
+        # Read once up front — also gates whether the CLI tab below even
+        # bothers probing PATH for claude/codex (see cli_is_available call
+        # further down): with AI disabled, opening Settings should cause
+        # zero AI-related I/O, not just hide the result of it.
+        ai_disabled_initial = bool(self.settings_manager.get("ai.disabled"))
+
+        group_ai_master = Adw.PreferencesGroup()
+        page_ai_shared.add(group_ai_master)
+
+        self.ai_disabled_row = Adw.SwitchRow(
+            title=_("Disable AI"),
+            subtitle=_("Turns the feature off entirely: no header-bar buttons, no local CLI tool "
+                       "detection, no keyring lookups, no requests of any kind."),
+        )
+        self.ai_disabled_row.set_active(ai_disabled_initial)
+        group_ai_master.add(self.ai_disabled_row)
+
         group_ai_prompt = Adw.PreferencesGroup(
             title=_("System Prompt"),
             description=_("Shared by every provider on the API and CLI Client tabs below — sent as the system/initial prompt for every conversation."),
@@ -1106,6 +1123,10 @@ class SettingsDialog(Adw.Window):
         page_api.set_title(_("API"))
         page_api.set_icon_name("network-workgroup-symbolic")
 
+        # Read once, up here, since both the custom and standard provider
+        # loops below need it (the custom one is built first).
+        provider_model_overrides = self.settings_manager.get("ai.provider_models") or {}
+
         # Custom providers first — a user with only local/manual endpoints
         # configured shouldn't have to scroll past the 5 standard ones to
         # reach them.
@@ -1138,6 +1159,13 @@ class SettingsDialog(Adw.Window):
                     key_row.set_text(saved_key)
             expander.add_row(key_row)
 
+            model_row = Adw.EntryRow(title=_("Model"))
+            model_row.set_text(provider_model_overrides.get(f"custom:{custom_id}", ""))
+            model_row.add_suffix(self._build_fetched_model_picker_button(
+                "custom", key_row, lambda url_row=url_row: url_row.get_text().strip(), model_row
+            ))
+            expander.add_row(model_row)
+
             remove_button = Gtk.Button(icon_name="user-trash-symbolic")
             remove_button.set_valign(Gtk.Align.CENTER)
             remove_button.add_css_class("flat")
@@ -1145,7 +1173,7 @@ class SettingsDialog(Adw.Window):
             expander.add_suffix(remove_button)
 
             row_state = {"id": custom_id, "expander": expander, "name_row": name_row,
-                         "url_row": url_row, "key_row": key_row}
+                         "url_row": url_row, "key_row": key_row, "model_row": model_row}
 
             def on_remove(_btn, state=row_state):
                 group_ai_custom.remove(state["expander"])
@@ -1177,7 +1205,6 @@ class SettingsDialog(Adw.Window):
         )
         page_api.add(group_ai_standard)
 
-        provider_model_overrides = self.settings_manager.get("ai.provider_models") or {}
         self._ai_key_rows = {}
         self._ai_model_rows = {}
         for provider_id, label in AI_STANDARD_PROVIDERS:
@@ -1191,6 +1218,9 @@ class SettingsDialog(Adw.Window):
 
             model_row = Adw.EntryRow(title=_("Model"))
             model_row.set_text(provider_model_overrides.get(provider_id) or AI_DEFAULT_MODELS.get(provider_id, ""))
+            model_row.add_suffix(self._build_fetched_model_picker_button(
+                provider_id, key_row, lambda pid=provider_id: AI_DEFAULT_BASE_URLS.get(pid, ""), model_row
+            ))
             expander.add_row(model_row)
 
             self._ai_key_rows[provider_id] = key_row
@@ -1216,17 +1246,34 @@ class SettingsDialog(Adw.Window):
         page_cli.add(group_cli_standard)
 
         cli_command_overrides = self.settings_manager.get("cli.commands") or {}
+        cli_model_overrides = self.settings_manager.get("cli.provider_models") or {}
         self._cli_command_rows = {}
+        self._cli_model_rows = {}
         for cli_id, cli_label, default_command in CLI_STANDARD_PROVIDERS:
             command = cli_command_overrides.get(cli_id) or default_command
-            expander = Adw.ExpanderRow(
-                title=cli_label,
-                subtitle=_("Found on PATH") if cli_is_available(command) else _("Not found on PATH"),
-            )
+            if ai_disabled_initial:
+                subtitle = _("AI is disabled")
+            elif cli_is_available(command):
+                subtitle = _("Found on PATH")
+            else:
+                subtitle = _("Not found on PATH")
+            expander = Adw.ExpanderRow(title=cli_label, subtitle=subtitle)
             command_row = Adw.EntryRow(title=_("Command"))
             command_row.set_text(command)
             expander.add_row(command_row)
+
+            model_row = Adw.EntryRow(
+                title=_("Model"),
+                tooltip_text=_("Leave empty to use the tool's own default — no --model flag is sent at all."),
+            )
+            model_row.set_text(cli_model_overrides.get(cli_id, ""))
+            picker_button = self._build_static_model_picker_button(CLI_MODEL_PRESETS.get(cli_id, []), model_row)
+            if picker_button is not None:
+                model_row.add_suffix(picker_button)
+            expander.add_row(model_row)
+
             self._cli_command_rows[cli_id] = command_row
+            self._cli_model_rows[cli_id] = model_row
             group_cli_standard.add(expander)
 
         group_cli_custom = Adw.PreferencesGroup(
@@ -1251,13 +1298,21 @@ class SettingsDialog(Adw.Window):
             command_row.set_text((existing or {}).get("command", ""))
             expander.add_row(command_row)
 
+            model_row = Adw.EntryRow(
+                title=_("Model"),
+                tooltip_text=_("Leave empty to use the tool's own default — no --model flag is sent at all."),
+            )
+            model_row.set_text(cli_model_overrides.get(f"custom:{custom_id}", ""))
+            expander.add_row(model_row)
+
             remove_button = Gtk.Button(icon_name="user-trash-symbolic")
             remove_button.set_valign(Gtk.Align.CENTER)
             remove_button.add_css_class("flat")
             remove_button.set_tooltip_text(_("Remove"))
             expander.add_suffix(remove_button)
 
-            row_state = {"id": custom_id, "expander": expander, "name_row": name_row, "command_row": command_row}
+            row_state = {"id": custom_id, "expander": expander, "name_row": name_row,
+                         "command_row": command_row, "model_row": model_row}
 
             def on_remove(_btn, state=row_state):
                 group_cli_custom.remove(state["expander"])
@@ -1293,6 +1348,18 @@ class SettingsDialog(Adw.Window):
 
         page_ai.append(ai_sub_switcher)
         page_ai.append(ai_sub_stack)
+
+        # Grey out everything except the switch itself while AI is
+        # disabled — the settings underneath are meaningless (and, for the
+        # CLI tab, misleadingly stale) until it's turned back on.
+        def _update_ai_sensitivity(*_args):
+            enabled = not self.ai_disabled_row.get_active()
+            group_ai_prompt.set_sensitive(enabled)
+            group_ai_connection.set_sensitive(enabled)
+            ai_sub_switcher.set_sensitive(enabled)
+            ai_sub_stack.set_sensitive(enabled)
+        self.ai_disabled_row.connect("notify::active", _update_ai_sensitivity)
+        _update_ai_sensitivity()
 
         # page_ai is a composite (shared prefs + switcher + sub-tabs), not a
         # single AdwPreferencesPage — when the combined content is taller
@@ -1358,6 +1425,103 @@ class SettingsDialog(Adw.Window):
         main_box.append(split_view)
         self.set_content(main_box)
 
+    def _build_model_list_popover_button(self, populate):
+        """Shared shell for the two "pick a model" buttons below — a
+        Gtk.MenuButton whose popover is (re)filled by `populate(list_box)`
+        every time it's opened, so it always reflects whatever's currently
+        in the key/URL fields rather than a stale snapshot from when the
+        dialog was built."""
+        button = Gtk.MenuButton(icon_name="view-list-symbolic")
+        button.add_css_class("flat")
+        button.set_valign(Gtk.Align.CENTER)
+        button.set_tooltip_text(_("Choose from a list"))
+
+        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        list_box.set_margin_top(6)
+        list_box.set_margin_bottom(6)
+        list_box.set_margin_start(6)
+        list_box.set_margin_end(6)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_max_content_height(240)
+        scroller.set_propagate_natural_height(True)
+        scroller.set_child(list_box)
+
+        popover = Gtk.Popover()
+        popover.set_child(scroller)
+        popover.connect("show", lambda _p: populate(list_box, popover))
+        button.set_popover(popover)
+        return button
+
+    def _clear_box(self, box):
+        child = box.get_first_child()
+        while child is not None:
+            next_child = child.get_next_sibling()
+            box.remove(child)
+            child = next_child
+
+    def _fill_model_list_box(self, list_box, models, model_row, popover):
+        self._clear_box(list_box)
+        if not models:
+            list_box.append(Gtk.Label(label=_("No models found.")))
+            return
+        for model_id in models:
+            item_button = Gtk.Button(label=model_id)
+            item_button.add_css_class("flat")
+            item_button.get_child().set_xalign(0)
+
+            def on_pick(_b, model_id=model_id):
+                model_row.set_text(model_id)
+                popover.popdown()
+            item_button.connect("clicked", on_pick)
+            list_box.append(item_button)
+
+    def _build_static_model_picker_button(self, models, model_row):
+        """The CLI-side model picker — a fixed suggestion list (there's no
+        "list models" API for a local binary the way there is for an HTTP
+        provider), same popover shell as the API one for a consistent feel.
+        Returns None (no button at all) when there's nothing to suggest,
+        rather than showing a picker that just says "no suggestions"."""
+        if not models:
+            return None
+        def populate(list_box, popover):
+            self._fill_model_list_box(list_box, models, model_row, popover)
+        return self._build_model_list_popover_button(populate)
+
+    def _build_fetched_model_picker_button(self, family, key_row, base_url_getter, model_row):
+        """The API-side model picker — fetches the live list for whatever
+        key is *currently typed* in key_row (not necessarily saved yet) the
+        moment the popover is opened. Disabled while the key field is
+        empty; manual entry into model_row always works regardless of
+        whether fetching does."""
+        button = self._build_model_list_popover_button(
+            lambda list_box, popover: self._populate_fetched_models(
+                list_box, popover, family, key_row.get_text().strip(), base_url_getter(), model_row
+            )
+        )
+        button.set_sensitive(bool(key_row.get_text().strip()))
+        key_row.connect("notify::text", lambda row, _p: button.set_sensitive(bool(row.get_text().strip())))
+        return button
+
+    def _populate_fetched_models(self, list_box, popover, family, api_key, base_url, model_row):
+        self._clear_box(list_box)
+        list_box.append(Gtk.Label(label=_("Loading…")))
+
+        def on_models(models):
+            self._fill_model_list_box(list_box, models, model_row, popover)
+            return False
+
+        def on_error(message):
+            self._clear_box(list_box)
+            error_label = Gtk.Label(
+                label=_("Could not fetch models: {error}").format(error=message), wrap=True
+            )
+            error_label.add_css_class("error")
+            list_box.append(error_label)
+            return False
+
+        fetch_models(family, api_key, base_url, on_models, on_error)
+
     def on_apply(self, button):
         """Save settings and close the window."""
         self.settings_manager.set("terminal.font", self.font_button.get_font())
@@ -1412,6 +1576,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("interface.debug_mode", self.debug_mode_row.get_active())
 
         # --- AI ---
+        self.settings_manager.set("ai.disabled", self.ai_disabled_row.get_active())
         self.settings_manager.set("ai.system_prompt", self.ai_system_prompt_row.get_text().strip())
         self.settings_manager.set("ai.request_timeout_seconds", int(self.ai_timeout_row.get_value()))
 
@@ -1425,7 +1590,6 @@ class SettingsDialog(Adw.Window):
             model_text = self._ai_model_rows[provider_id].get_text().strip()
             if model_text and model_text != AI_DEFAULT_MODELS.get(provider_id):
                 provider_model_overrides[provider_id] = model_text
-        self.settings_manager.set("ai.provider_models", provider_model_overrides)
 
         custom_providers = []
         for row_state in self._ai_custom_rows:
@@ -1445,15 +1609,23 @@ class SettingsDialog(Adw.Window):
                 "base_url": base_url,
                 "has_key": bool(key_text),
             })
+            model_text = row_state["model_row"].get_text().strip()
+            if model_text:
+                provider_model_overrides[f"custom:{custom_id}"] = model_text
         self.settings_manager.set("ai.custom_providers", custom_providers)
+        self.settings_manager.set("ai.provider_models", provider_model_overrides)
 
         # --- CLI Client ---
         cli_default_commands = {pid: cmd for pid, _label, cmd in CLI_STANDARD_PROVIDERS}
         cli_command_overrides = {}
+        cli_model_overrides = {}
         for cli_id, command_row in self._cli_command_rows.items():
             command_text = command_row.get_text().strip()
             if command_text and command_text != cli_default_commands.get(cli_id):
                 cli_command_overrides[cli_id] = command_text
+            model_text = self._cli_model_rows[cli_id].get_text().strip()
+            if model_text:
+                cli_model_overrides[cli_id] = model_text
         self.settings_manager.set("cli.commands", cli_command_overrides)
 
         custom_tools = []
@@ -1463,7 +1635,11 @@ class SettingsDialog(Adw.Window):
             if not name and not command:
                 continue  # skip a still-blank row left over from "Add"
             custom_tools.append({"id": row_state["id"], "name": name or _("Custom CLI"), "command": command})
+            model_text = row_state["model_row"].get_text().strip()
+            if model_text:
+                cli_model_overrides[f"custom:{row_state['id']}"] = model_text
         self.settings_manager.set("cli.custom_tools", custom_tools)
+        self.settings_manager.set("cli.provider_models", cli_model_overrides)
 
         self.settings_manager.save()
 

@@ -1,7 +1,7 @@
 import sys
 import os
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 APP_ID = "com.example.thongssh"
 
@@ -52,3 +52,13 @@ CLI_STANDARD_PROVIDERS = [
     ("claude", "Claude Code", "claude -p --append-system-prompt {system_prompt} {message}"),
     ("codex", "Codex", "codex exec {message}"),
 ]
+
+# Suggested values for Settings -> AI -> CLI Client's Model picker — there's
+# no "list models" API for a local CLI tool the way there is for an HTTP
+# provider (see ai_providers.list_models), so this is just a starting point;
+# the field is always free-text too. Left empty for a tool with no confirmed
+# model aliases, rather than guessing — a wrong preset is worse than none.
+CLI_MODEL_PRESETS = {
+    "claude": ["opus", "sonnet", "haiku"],
+    "codex": [],
+}

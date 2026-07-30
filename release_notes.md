@@ -1,5 +1,18 @@
 # Release Notes
 
+### 🆕 What's New in 0.7.1
+
+AI chat panel follow-up — fixes plus model picking and a hard off switch:
+
+* **Fixed the CLI provider hanging** — the default system prompt used to tell the model "you're connected to a remote terminal session," which the Claude Code CLI (a real agentic tool with its own bash/tool-use loop) took as an actual instruction and went off trying to locate/reach that "remote host" itself instead of just answering. The prompt now explicitly says there's no shell, tool, or network access at all — analyze only what's given, never try to run or connect to anything.
+* **Fixed the code block Copy button doing nothing on Linux** — it was building the clipboard offer through GDK's automatic string-to-clipboard path, which didn't reach the system clipboard; now hands over the encoded text directly instead.
+* **Fixed the last line of a long code block being impossible to select** — GTK's floating (overlay) scrollbar had no reserved space of its own, so it sat right on top of that line instead of below it.
+* **Disable AI, completely** — a master switch at the top of Settings → AI. Flip it off and the app doesn't touch AI in any way: no header-bar buttons, no probing PATH for claude/codex, no keyring reads, no requests — for anyone who'd rather the feature not exist at all.
+* **Pick a model instead of typing it blind**:
+  * **API providers** (Claude, Gemini, ChatGPT, Grok, DeepSeek, custom): a list button next to the Model field turns on the moment you enter a key, fetches whatever models that key actually has access to, and fills the field on click. Manual typing still works exactly as before.
+  * **CLI tools**: a Model field (empty by default — no `--model` flag gets sent at all unless you set one). Claude Code gets a quick-pick list (opus/sonnet/haiku); free-text entry works for any tool either way.
+  * Custom API providers also got a Model field for the first time — previously there was no way to set one at all.
+
 ### 🆕 What's New in 0.7.0
 
 She learned to talk back — the big one, an **AI chat panel** baked right into the app:

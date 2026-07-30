@@ -259,7 +259,7 @@ class AiPanel(Gtk.Box):
             # API path already gets via list(self.history) below.
             run_cli_chat(
                 self.active_provider_id, config["command"], system_prompt, list(self.history),
-                on_success, on_error, timeout=timeout,
+                on_success, on_error, timeout=timeout, model=config.get("model"),
             )
         else:
             send_chat_request(

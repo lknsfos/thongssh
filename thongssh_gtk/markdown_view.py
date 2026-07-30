@@ -169,6 +169,14 @@ def _build_code_widget(code_content):
     code_scroller = Gtk.ScrolledWindow(hexpand=True)
     code_scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
     code_scroller.set_propagate_natural_height(True)
+    # Overlay scrollbars (GTK4's default) float on top of the content
+    # instead of taking their own strip of space — since this scroller's
+    # height is sized to exactly fit the text with no extra room, a
+    # horizontal scrollbar that appears for a long line has nowhere to sit
+    # but directly on top of that same (usually last) line, blocking
+    # clicks/drags there from reaching the text underneath. A regular,
+    # space-reserving scrollbar avoids the overlap.
+    code_scroller.set_overlay_scrolling(False)
     code_scroller.set_child(code_view)
     container.append(code_scroller)
 
@@ -176,7 +184,16 @@ def _build_code_widget(code_content):
 
 
 def _on_copy_code_clicked(button, code_content):
-    button.get_clipboard().set(code_content)
+    # Gdk.Clipboard.set() boxes the string into a GValue and relies on GDK's
+    # built-in text serializer to turn *that* into an actual text/plain
+    # clipboard offer — reported to silently not reach the system clipboard
+    # on Linux. Gdk.ContentProvider.new_for_bytes() sidesteps that path
+    # entirely: it hands the clipboard the encoded bytes directly, tagged
+    # with an explicit MIME type, with no serializer registration involved.
+    provider = Gdk.ContentProvider.new_for_bytes(
+        "text/plain;charset=utf-8", GLib.Bytes.new(code_content.encode("utf-8"))
+    )
+    button.get_clipboard().set_content(provider)
     # Brief "copied" feedback, matching the pattern most chat UIs use —
     # revert automatically rather than requiring another click to dismiss.
     button.set_icon_name("object-select-symbolic")

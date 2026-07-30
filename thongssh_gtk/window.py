@@ -1081,6 +1081,15 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self._ai_header_bar.remove(btn)
         self._ai_provider_buttons = {}
 
+        if self.settings_manager.get("ai.disabled"):
+            # Settings -> AI's master switch: no header button, no keyring
+            # lookups, no probing PATH for claude/codex — as close to "this
+            # feature doesn't exist" as the app can guarantee, for anyone
+            # who doesn't want the app touching AI in any way.
+            if self.ai_panel.get_visible():
+                self.ai_panel.set_visible(False)
+            return
+
         configured = [
             (pid, label) for pid, label in AI_STANDARD_PROVIDERS
             if self.keyring.load_password(f"ai:{pid}")

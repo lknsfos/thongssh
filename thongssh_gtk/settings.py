@@ -31,17 +31,31 @@ DEFAULT_SETTINGS = {
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default
     "interface.host_search_position": "bottom", # "top" or "bottom" — where the host-tree search bar sits
     "ai.system_prompt": (
-        "You are connected to a remote terminal session. Do not try to run, execute, or "
-        "reproduce anything locally — only the connected remote host is relevant. Be concise "
-        "and minimal: no long explanations or preambles. Reply in the same language the "
-        "question was asked in."
-    ), # shared system/initial prompt, applies to every provider — dialogs.py's "reset to default" button reads this same DEFAULT_SETTINGS entry
+        "You are a read-only analysis assistant for a terminal session. You have no shell, "
+        "tool, or network access of your own — never attempt to run, execute, connect to, "
+        "or reproduce anything, whether locally or on any remote host, real or hypothetical. "
+        "Only analyze the terminal output, commands, or context the user includes in their "
+        "message; if you need more information, ask the user to run a command and paste the "
+        "result back instead of trying to obtain it yourself. Be concise and minimal: no long "
+        "explanations or preambles. Reply in the same language the question was asked in."
+    ), # shared system/initial prompt, applies to every provider — dialogs.py's "reset to default" button reads this same DEFAULT_SETTINGS entry.
+    # The old wording ("you are connected to a remote terminal session... only the
+    # connected remote host is relevant") read as a literal task description to the
+    # Claude Code CLI specifically (constants.py's CLI_STANDARD_PROVIDERS "claude"
+    # template hands this straight to --append-system-prompt on a real agentic CLI
+    # with its own bash/tool-use loop) — it would go try to locate/reach "the
+    # connected remote host" itself instead of just answering, hanging for the
+    # full request timeout. The API providers (ai_providers.py) never had this
+    # problem since they only ever receive it as an inert prompt string with no
+    # tool-use capability behind it.
+    "ai.disabled": False, # master switch — when True, no header-bar buttons, no CLI PATH probing, no keyring reads, no requests of any kind
     "ai.active_provider": "", # last active provider id ("claude", "custom:<uuid>", ...), or "" if never used
     "ai.provider_models": {}, # {provider_id: model_string} — only holds entries the user overrode from default
     "ai.custom_providers": [], # [{"id": uuid, "name": str, "base_url": str, "has_key": bool}] — never the raw key
     "ai.request_timeout_seconds": 120, # generous default — local/self-hosted models on modest hardware can be slow; shared by API and CLI providers alike
     "cli.commands": {}, # {provider_id: command_template} — overrides for the standard CLI tools (claude/codex)
     "cli.custom_tools": [], # [{"id": uuid, "name": str, "command": str}] — user-added local CLI tools
+    "cli.provider_models": {}, # {provider_id: model_string} — empty/absent means "no --model flag at all", not an empty one
 }
 
 class SettingsManager:

@@ -26,6 +26,12 @@ _ = lambda s: s
 # take a while to respond.
 DEFAULT_REQUEST_TIMEOUT = 120
 
+# Listing models is a quick metadata call, not a generation request — always
+# a short fixed timeout regardless of the user's (possibly very generous)
+# "ai.request_timeout_seconds", which is tuned for slow local models actually
+# replying, not for this.
+MODELS_FETCH_TIMEOUT = 15
+
 # Reasonable current defaults — deliberately overridable per-provider from
 # Settings (see dialogs.py), since model names go stale and shouldn't need a
 # code change to fix.
@@ -116,11 +122,7 @@ def _dispatch(provider_id, api_key, base_url, model, system_prompt, messages, ti
     return _openai_compatible_request(base_url, api_key, model, system_prompt, messages, timeout)
 
 
-def _post_json(url, headers, body, timeout):
-    data = json.dumps(body).encode("utf-8")
-    request_headers = {"Content-Type": "application/json"}
-    request_headers.update(headers)
-    req = urllib.request.Request(url, data=data, headers=request_headers, method="POST")
+def _urlopen_json(req, timeout):
     try:
         with urllib.request.urlopen(req, timeout=timeout or DEFAULT_REQUEST_TIMEOUT) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -142,6 +144,19 @@ def _post_json(url, headers, body, timeout):
             _("Request header contains a non-ASCII character (double-check the API key was pasted "
               "correctly): {error}").format(error=e)
         ) from e
+
+
+def _post_json(url, headers, body, timeout):
+    data = json.dumps(body).encode("utf-8")
+    request_headers = {"Content-Type": "application/json"}
+    request_headers.update(headers)
+    req = urllib.request.Request(url, data=data, headers=request_headers, method="POST")
+    return _urlopen_json(req, timeout)
+
+
+def _get_json(url, headers, timeout):
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    return _urlopen_json(req, timeout)
 
 
 def _claude_request(api_key, base_url, model, system_prompt, messages, timeout):
@@ -193,3 +208,83 @@ def _openai_compatible_request(base_url, api_key, model, system_prompt, messages
         return response["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as e:
         raise ProviderError(f"Unexpected response shape: {response}") from e
+
+
+# --- Model listing (Settings -> AI's "choose from available models" picker) ---
+#
+# Best-effort: not every provider is confirmed to have a list-models
+# endpoint, and reachability/auth can fail for all sorts of reasons that have
+# nothing to do with the chat endpoint working fine. Callers always get a
+# graceful ProviderError instead of a crash either way — manual model entry
+# never depends on this succeeding.
+
+def _claude_list_models(api_key, base_url, timeout):
+    url = f"{base_url.rstrip('/')}/v1/models?limit=100"
+    headers = {"x-api-key": api_key or "", "anthropic-version": "2023-06-01"}
+    response = _get_json(url, headers, timeout)
+    try:
+        return [m["id"] for m in response.get("data", [])]
+    except (KeyError, TypeError) as e:
+        raise ProviderError(f"Unexpected models response shape: {response}") from e
+
+
+def _gemini_list_models(api_key, base_url, timeout):
+    url = f"{base_url.rstrip('/')}/v1beta/models?key={api_key or ''}&pageSize=200"
+    response = _get_json(url, {}, timeout)
+    models = []
+    try:
+        for m in response.get("models", []):
+            # Filter to text-chat-capable models — the same listing also
+            # includes embedding/vision-only/etc. models this chat panel
+            # can't use.
+            if "generateContent" not in (m.get("supportedGenerationMethods") or []):
+                continue
+            name = m.get("name", "")
+            models.append(name.split("/", 1)[1] if "/" in name else name)
+    except (KeyError, TypeError) as e:
+        raise ProviderError(f"Unexpected models response shape: {response}") from e
+    return models
+
+
+def _openai_compatible_list_models(base_url, api_key, timeout):
+    base = base_url.rstrip('/')
+    url = base if base.endswith("/models") else f"{base}/models"
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    response = _get_json(url, headers, timeout)
+    try:
+        return [m["id"] for m in response.get("data", [])]
+    except (KeyError, TypeError) as e:
+        raise ProviderError(f"Unexpected models response shape: {response}") from e
+
+
+def list_models(family, api_key, base_url, timeout=None):
+    """family is a provider id ("claude", "gemini", ...) or literally
+    "custom" — same dispatch shape as _dispatch(), minus the ":<uuid>"
+    suffix custom provider ids carry elsewhere, since the caller already
+    knows the actual base_url to use for a custom endpoint."""
+    if family == "claude":
+        return _claude_list_models(api_key, base_url, timeout)
+    if family == "gemini":
+        return _gemini_list_models(api_key, base_url, timeout)
+    return _openai_compatible_list_models(base_url, api_key, timeout)
+
+
+def fetch_models(family, api_key, base_url, on_success, on_error, timeout=None):
+    """Spawns a daemon thread to list available models. on_success(models)
+    and on_error(message) are always invoked via GLib.idle_add."""
+
+    def worker():
+        try:
+            models = list_models(family, api_key, base_url, timeout or MODELS_FETCH_TIMEOUT)
+        except ProviderError as e:
+            GLib.idle_add(on_error, str(e))
+            return
+        except Exception as e:
+            logging.error(f"Model list fetch for '{family}' failed: {e}")
+            GLib.idle_add(on_error, str(e))
+            return
+        GLib.idle_add(on_success, models)
+
+    threading.Thread(target=worker, daemon=True).start()

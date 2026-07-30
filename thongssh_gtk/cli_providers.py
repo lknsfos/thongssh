@@ -59,25 +59,37 @@ class CliError(Exception):
 
 
 def resolve_cli_config(provider_id, settings_manager):
-    """Returns {"label", "command"} for a "cli:..." provider id, resolving
-    standard ("cli:claude") vs custom ("cli:custom:<uuid>") tools
-    uniformly. Returns None if it doesn't resolve to anything configured."""
+    """Returns {"label", "command", "model"} for a "cli:..." provider id,
+    resolving standard ("cli:claude") vs custom ("cli:custom:<uuid>") tools
+    uniformly. Returns None if it doesn't resolve to anything configured.
+    "model" is "" (the default) unless the user picked one in Settings —
+    see _build_argv for what an empty model actually means (no extra flag
+    at all, not an empty --model argument)."""
     if not provider_id.startswith("cli:"):
         return None
     rest = provider_id[len("cli:"):]
+    model_overrides = settings_manager.get("cli.provider_models") or {}
 
     if rest.startswith("custom:"):
         custom_id = rest.split(":", 1)[1]
         for tool in settings_manager.get("cli.custom_tools") or []:
             if tool.get("id") == custom_id:
-                return {"label": tool.get("name") or _("Custom CLI"), "command": tool.get("command", "")}
+                return {
+                    "label": tool.get("name") or _("Custom CLI"),
+                    "command": tool.get("command", ""),
+                    "model": model_overrides.get(rest, ""),
+                }
         return None
 
     if rest not in _STANDARD_TOOLS:
         return None
     label, default_command = _STANDARD_TOOLS[rest]
     overrides = settings_manager.get("cli.commands") or {}
-    return {"label": label, "command": overrides.get(rest) or default_command}
+    return {
+        "label": label,
+        "command": overrides.get(rest) or default_command,
+        "model": model_overrides.get(rest, ""),
+    }
 
 
 def is_available(command_template):
@@ -91,15 +103,26 @@ def is_available(command_template):
     return bool(tokens) and shutil.which(tokens[0]) is not None
 
 
-def _build_argv(command_template, system_prompt, message):
-    """Builds argv from the template. Two placeholders are supported:
-    "{message}" (the outgoing text) and "{system_prompt}" (passed as its
-    own argv element — e.g. the default Claude template feeds it straight
-    to --append-system-prompt, giving it real system-level priority
-    instead of just being more text the model might deprioritize in a long
-    prompt). If a template doesn't know about "{system_prompt}" at all
-    (custom tools with no such concept), it's prepended into the message
-    text instead, same as before — nothing is silently dropped."""
+def _build_argv(command_template, system_prompt, message, model=None):
+    """Builds argv from the template. Three placeholders are supported:
+    "{message}" (the outgoing text), "{system_prompt}" (passed as its own
+    argv element — e.g. the default Claude template feeds it straight to
+    --append-system-prompt, giving it real system-level priority instead of
+    just being more text the model might deprioritize in a long prompt),
+    and "{model}". If a template doesn't know about "{system_prompt}" at
+    all (custom tools with no such concept), it's prepended into the
+    message text instead, same as before — nothing is silently dropped.
+
+    "model" (from Settings -> AI -> CLI Client's Model field, empty by
+    default) is deliberately NOT substituted into the command at all when
+    unset — that's what makes "default = no extra model flag" actually
+    true rather than passing an empty --model value that could confuse the
+    tool. If a model IS chosen and the template has no explicit "{model}"
+    placeholder, "--model <value>" is inserted right after the binary name
+    — the conventional spot for a global flag on most CLIs (works for both
+    standard tools' own --model flag). A template author who needs the
+    flag somewhere else, or a different flag name entirely, can place
+    "{model}" explicitly instead."""
     try:
         tokens = shlex.split(command_template)
     except ValueError as e:
@@ -109,6 +132,7 @@ def _build_argv(command_template, system_prompt, message):
 
     has_system_placeholder = "{system_prompt}" in tokens
     has_message_placeholder = "{message}" in tokens
+    has_model_placeholder = "{model}" in tokens
     full_message = message if (has_system_placeholder or not system_prompt) else f"{system_prompt}\n\n{message}"
 
     def substitute(token):
@@ -116,6 +140,8 @@ def _build_argv(command_template, system_prompt, message):
             return full_message
         if token == "{system_prompt}":
             return system_prompt or ""
+        if token == "{model}":
+            return model or ""
         return token
 
     argv = [substitute(t) for t in tokens]
@@ -124,6 +150,8 @@ def _build_argv(command_template, system_prompt, message):
         # argument so the template still does something useful instead of
         # silently ignoring whatever the user typed.
         argv.append(full_message)
+    if model and not has_model_placeholder:
+        argv[1:1] = ["--model", model]
     return argv
 
 
@@ -140,7 +168,8 @@ def _format_conversation(messages):
     return "\n\n".join(parts)
 
 
-def run_cli_chat(provider_id, command_template, system_prompt, messages, on_success, on_error, timeout=None):
+def run_cli_chat(provider_id, command_template, system_prompt, messages, on_success, on_error,
+                  timeout=None, model=None):
     """Spawns a daemon thread to run the command. messages is the full
     [{"role", "content"}, ...] history (including the just-added latest
     user message, same shape ai_providers.send_chat_request expects) —
@@ -152,7 +181,7 @@ def run_cli_chat(provider_id, command_template, system_prompt, messages, on_succ
     def worker():
         try:
             conversation_text = _format_conversation(messages)
-            argv = _build_argv(command_template, system_prompt, conversation_text)
+            argv = _build_argv(command_template, system_prompt, conversation_text, model=model)
             try:
                 result = subprocess.run(
                     argv, capture_output=True, text=True,
