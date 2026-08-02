@@ -1,5 +1,15 @@
 # Release Notes
 
+### 🆕 What's New in 0.7.3
+
+Chat history for the AI panel, plus a real code-block rendering bug fixed:
+
+* **AI chats now have history** — conversations save to disk (`~/.cache/thongssh/ai_chats/`) as you go, no provider involved. **New chat**/**Delete chat** buttons replace the old single "Clear chat"; a history picker under the provider row lists past chats (title + plain regexp search, no AI involved in the search itself) and reopens any of them. Each chat gets an auto-generated title after its first exchange, via a quiet one-off request to whichever provider just answered.
+* **Fixed replies landing in the wrong chat** — switching to a different chat (or starting a new one) while a reply was still in flight could deliver that reply into whatever chat happened to be on screen when it arrived, or lose track of it entirely. Every in-flight request now stays tied to the chat it was actually sent from, wherever you've since navigated.
+* **Fixed not being able to get back to a chat that was still "Thinking…"** — a brand-new chat wasn't saved to disk until its first reply landed, so navigating away before that and trying to return via history found nothing to open. It's saved the moment you send, and reopening it while still pending shows the "Thinking…" indicator again instead of looking like nothing was asked.
+* **Fixed code blocks losing content** — a code block's text could end up shorter than its actual line count, with the missing lines sitting below the visible area with no scrollbar to reach them (worst case, a block could look completely empty). Two compounding causes: a non-wrapping text view mis-measures its own height once the panel is narrower than its widest line, and separately, reserving room for a horizontal scrollbar was subtracting that space from the content twice over. Both fixed at the source instead of papering over the symptom.
+* **Fixed the provider buttons not centering** — Settings changes intended to center them (in 0.7.2) didn't actually take effect: a plain `Gtk.Box` doesn't honor a child's centering along its own axis, and separately, the row's "how many fit before wrapping" setting was making it always claim the full row width regardless. Both fixed; the buttons now sit centered as their own tight group.
+
 ### 🆕 What's New in 0.7.2
 
 AI chat panel, round three — layout rework plus a nasty bug squashed:

@@ -1144,6 +1144,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self.ai_panel.provider_button_box.append(button)
             self._ai_provider_buttons[provider_id] = button
 
+        # Gtk.FlowBox's own natural-width request scales with
+        # max-children-per-line *regardless of how many children it
+        # actually has* (confirmed: leaving it at some fixed "big enough"
+        # number like 999 made it request a natural width in the
+        # thousands of pixels even with 2 buttons) — always wider than
+        # available, so it always claimed the full row and halign=CENTER
+        # (see AiPanel.__init__) had nothing to center. Matching it to the
+        # real count keeps the natural-width request sane, while still
+        # wrapping to a second row if there's genuinely not enough width
+        # for all of them on one line.
+        if configured:
+            self.ai_panel.provider_button_box.set_max_children_per_line(len(configured))
+
         # No provider was ever active (first run) — default to the first
         # configured one so the panel always has *something* selected the
         # first time it's opened, rather than an empty "no provider" state.

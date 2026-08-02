@@ -166,17 +166,46 @@ def _build_code_widget(code_content):
     code_view.add_css_class("monospace")  # GTK's built-in monospace style class, belt-and-suspenders
     code_view.get_buffer().set_text(code_content)
 
+    # Forces a minimum width matching the widest line, computed from this
+    # (still-unrealized) view's own Pango metrics — reliable immediately,
+    # unlike measuring the view's actual *size*, which needs a real layout
+    # pass first. This is what makes propagate_natural_height below behave:
+    # asked for "natural height at width W", a WrapMode.NONE view answers
+    # correctly only for W >= its content's natural width — asked for a
+    # narrower W (e.g. this ~220px-wide AI panel against a long shell
+    # command), it collapses to a near-zero height instead of reporting
+    # "as tall as the content actually is, you'll need to scroll
+    # sideways" — leaving most of a multi-line block invisible, sitting
+    # below the sliver of allocated height with no vertical scrollbar to
+    # reach it. Pre-empting that narrower-than-natural case entirely, by
+    # never letting the view's own minimum width go below its content's
+    # width, is simpler and more reliable than reacting after the fact.
+    lines = code_content.split("\n")
+    metrics = code_view.get_pango_context().get_metrics(None, None)
+    char_width_px = metrics.get_approximate_char_width() / Pango.SCALE
+    max_line_len = max((len(line) for line in lines), default=0)
+    code_view.set_size_request(int(char_width_px * max_line_len) + 8, -1)
+
+    # Bottom padding reserved for a horizontal scrollbar that might appear
+    # — added directly on the view rather than via the scroller's own
+    # non-overlay-scrolling space reservation (Gtk.ScrolledWindow.
+    # set_overlay_scrolling(False)). That combination measures fine on its
+    # own, but with propagate_natural_height below, the reserved strip
+    # comes straight out of the view's own reported height instead of
+    # adding to it — a multi-line block loses roughly one scrollbar's
+    # worth of height off its bottom (the last line or so, cut off with no
+    # vertical scrollbar to ever reach it). A margin baked into the view's
+    # own measurement doesn't have that interaction: it's simply part of
+    # what "natural height" already means, so the reserved strip only
+    # covers blank padding, never real text, without shrinking anything.
+    _hsb_min, hsb_natural, _hsb_mb, _hsb_nb = Gtk.Scrollbar(orientation=Gtk.Orientation.HORIZONTAL).measure(
+        Gtk.Orientation.VERTICAL, -1
+    )
+    code_view.set_bottom_margin(code_view.get_bottom_margin() + hsb_natural)
+
     code_scroller = Gtk.ScrolledWindow(hexpand=True)
     code_scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
     code_scroller.set_propagate_natural_height(True)
-    # Overlay scrollbars (GTK4's default) float on top of the content
-    # instead of taking their own strip of space — since this scroller's
-    # height is sized to exactly fit the text with no extra room, a
-    # horizontal scrollbar that appears for a long line has nowhere to sit
-    # but directly on top of that same (usually last) line, blocking
-    # clicks/drags there from reaching the text underneath. A regular,
-    # space-reserving scrollbar avoids the overlap.
-    code_scroller.set_overlay_scrolling(False)
     code_scroller.set_child(code_view)
     container.append(code_scroller)
 

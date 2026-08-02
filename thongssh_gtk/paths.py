@@ -6,6 +6,16 @@ from pathlib import Path
 # Default config storage location — used unless overridden below.
 _DEFAULT_CONFIG_DIR = Path.home() / ".config" / "thongssh"
 
+# Cache storage — regenerable/lower-stakes data that doesn't belong next to
+# hosts.json/settings.json. Currently just AI chat history (see
+# ai_chat_store.py): it lives on this machine only (no provider is asked to
+# retain it, and several — CLI tools, some self-hosted endpoints — couldn't
+# even if asked), so somewhere has to. Deliberately not affected by the
+# .config_path pointer (that's about separating *configuration* between
+# checkouts, not chat history) and not platform-specific like the config
+# dir isn't either — same plain, unconditional layout on every OS.
+CACHE_DIR = Path.home() / ".cache" / "thongssh"
+
 
 def _app_root_dir():
     """Where the pointer file itself lives. Deliberately NOT inside

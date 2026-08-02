@@ -1,7 +1,7 @@
 import sys
 import os
 
-__version__ = "0.7.2"
+__version__ = "0.7.3"
 
 APP_ID = "com.example.thongssh"
 
