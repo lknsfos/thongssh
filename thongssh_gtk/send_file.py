@@ -187,7 +187,7 @@ class SendFileDialog(Adw.Window):
         remote_dir = self.remote_dir_entry.get_text().strip() or "~"
         self.send_button.set_sensitive(False)
 
-        if '@' not in self.host_config.get("host", ""):
+        if '@' not in (self.host_config.get("host") or ""):
             self._prompt_username_then_send(remote_dir)
             return
 
@@ -230,7 +230,7 @@ def _start_send(dialog, host_config, local_path, remote_dir, key_passphrase=None
 
 
 def _send_worker(dialog, host_config, local_path, remote_dir, key_passphrase, auth_password):
-    host_str = host_config.get("host", "")
+    host_str = host_config.get("host") or ""
     if '@' not in host_str:
         GLib.idle_add(_finish_with_error, dialog, _("Username missing from host config."))
         return

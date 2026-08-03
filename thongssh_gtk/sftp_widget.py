@@ -516,7 +516,7 @@ class SftpWidget(Gtk.Box):
             self._log_message(_("SFTP is disabled. Please install 'paramiko'."), is_error=True)
             return
 
-        host_str = self.host_config.get("host", "")
+        host_str = self.host_config.get("host") or ""
         if not host_str:
             self._log_message(_("Error: host is not set in the config."), is_error=True)
             return
@@ -533,7 +533,7 @@ class SftpWidget(Gtk.Box):
 
     def _start_sftp_worker_with_user(self, username_from_prompt, key_passphrase=None, auth_password=None):
         """Starts the connection thread after getting the username (if needed)."""
-        if username_from_prompt is None and '@' not in self.host_config.get("host", ""):
+        if username_from_prompt is None and '@' not in (self.host_config.get("host") or ""):
             self._log_message(_("SFTP connection canceled (no username provided)."))
             return
 

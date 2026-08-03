@@ -36,10 +36,17 @@ DEFAULT_CONFIG_DATA = {
 }
 
 # Template for migration. Add ALL new fields here!
+# "name"/"host" default to "" (not None) — every reader downstream
+# (window.py's _prepare_command/_render_template_text, sftp_widget.py,
+# send_file.py) calls .rpartition('@')/checks '@' in ... on this value, and
+# a None here throws AttributeError/TypeError deep in an otherwise-
+# successful connection (the SSH session itself can be up and working —
+# this is just a *later* step like re-applying the watermark to every open
+# tab, not the connect itself failing).
 HOST_CONFIG_TEMPLATE = {
     "protocol": "ssh",
-    "name": None,
-    "host": None,
+    "name": "",
+    "host": "",
     "port": None,
     "key_path": None,
     "compat_old_systems": False,
@@ -61,6 +68,15 @@ def _recursive_migrate(node):
         for key, default_value in HOST_CONFIG_TEMPLATE.items():
             if key not in node["config"]:
                 node["config"][key] = default_value
+                needs_save = True
+        # A *present* null "host"/"name" (e.g. migrated from an older
+        # HOST_CONFIG_TEMPLATE whose default for these was None, before
+        # they were required-non-null) isn't caught by the "key missing"
+        # check above — normalize it here too, once, instead of every
+        # reader having to guard against None on every read forever.
+        for key in ("name", "host"):
+            if node["config"].get(key) is None:
+                node["config"][key] = ""
                 needs_save = True
     elif node.get("type") == "group":
         # ✨ Add 'expanded' field for groups if it doesn't exist

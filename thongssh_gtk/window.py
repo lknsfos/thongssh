@@ -2824,11 +2824,15 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if not command_template:
             return ""
 
-        host_str = host_config.get("host", "")
+        # "host" can be a present-but-null key (not just a missing one) —
+        # e.g. a host saved with an empty hostname field, or migrated from
+        # HOST_CONFIG_TEMPLATE's own None default — so .get("host", "")'s
+        # fallback alone doesn't catch it; `or ""` does.
+        host_str = host_config.get("host") or ""
         user, _, host = host_str.rpartition('@')
 
         replacements = {
-            "$name": host_config.get("name", ""),
+            "$name": host_config.get("name") or "",
             "$host": host,
             "$user": user
         }
@@ -3268,7 +3272,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         Quickies), never a shell command line."""
         if not template:
             return ""
-        host_str = host_config.get("host", "")
+        host_str = host_config.get("host") or ""  # see _prepare_command's comment — "host" can be present-but-null
         user, _sep, host = host_str.rpartition('@')
         for placeholder, value in {"$name": host_config.get("name", "") or "", "$host": host, "$user": user}.items():
             template = template.replace(placeholder, value)
