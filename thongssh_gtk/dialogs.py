@@ -1,10 +1,12 @@
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, Gdk, GObject, Pango
+from gi.repository import Gtk, Adw, Gdk, GObject, Pango, GLib
 import stat
 import logging
 import uuid
+import re
+import datetime
 
 from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS, WATERMARK_POSITIONS
 from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
@@ -1032,12 +1034,130 @@ class SettingsDialog(Adw.Window):
         self.watermark_shrink_row.set_active(self.settings_manager.get("interface.watermark_shrink_in_splits"))
         group_watermark.add(self.watermark_shrink_row)
 
+        # --- Adaptive Watermarks: regex rules that override the plain
+        # color/opacity above when the rendered watermark text matches —
+        # e.g. red whenever it contains "root". Ordered list, topmost
+        # match wins (see _resolve_watermark_color_and_opacity in
+        # window.py) — "root@arbe-svc053" matches both a "root" rule and
+        # an "arbe" rule, but stays red if "root" is listed first. No
+        # native GTK "reorder a PreferencesGroup row" primitive exists, so
+        # moving a rule up/down just removes+re-adds every row in the new
+        # order (_rebuild_watermark_rules_group) rather than fighting for one.
+        group_watermark_rules = Adw.PreferencesGroup(
+            title=_("Adaptive Watermarks"),
+            description=_("Override the color/opacity above when the watermark text matches a pattern. "
+                           "The topmost matching rule wins — put more specific patterns above more general ones."),
+        )
+        page_terminal.add(group_watermark_rules)
+
+        self._watermark_rule_rows = []  # [{"row_widget", "pattern_row", "color_button", "opacity_spin"}, ...]
+        self._watermark_add_rule_row = None
+
+        def _validate_watermark_pattern(entry_row):
+            try:
+                re.compile(entry_row.get_text())
+                entry_row.remove_css_class("error")
+            except re.error:
+                entry_row.add_css_class("error")
+
+        def _rebuild_watermark_rules_group():
+            for state in self._watermark_rule_rows:
+                group_watermark_rules.remove(state["row_widget"])
+            if self._watermark_add_rule_row is not None:
+                group_watermark_rules.remove(self._watermark_add_rule_row)
+            for state in self._watermark_rule_rows:
+                group_watermark_rules.add(state["row_widget"])
+            if self._watermark_add_rule_row is not None:
+                group_watermark_rules.add(self._watermark_add_rule_row)
+
+        def _clear_watermark_rule_rows():
+            for state in list(self._watermark_rule_rows):
+                group_watermark_rules.remove(state["row_widget"])
+            self._watermark_rule_rows.clear()
+
+        def _move_watermark_rule(state, delta):
+            idx = self._watermark_rule_rows.index(state)
+            new_idx = idx + delta
+            if not (0 <= new_idx < len(self._watermark_rule_rows)):
+                return
+            rows = self._watermark_rule_rows
+            rows[idx], rows[new_idx] = rows[new_idx], rows[idx]
+            _rebuild_watermark_rules_group()
+
+        def add_watermark_rule_row(existing=None):
+            row = Adw.EntryRow(title=_("Pattern (regex)"))
+            row.set_text((existing or {}).get("pattern", ""))
+            row.connect("notify::text", lambda r, _p: _validate_watermark_pattern(r))
+
+            color_button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog())
+            color_button.set_valign(Gtk.Align.CENTER)
+            color_button.set_tooltip_text(_("Color"))
+            color_rgba = Gdk.RGBA()
+            color_rgba.parse((existing or {}).get("color") or "#ff0000")
+            color_button.set_rgba(color_rgba)
+            row.add_suffix(color_button)
+
+            opacity_spin = Gtk.SpinButton(
+                adjustment=Gtk.Adjustment(value=(existing or {}).get("opacity", 15), lower=1, upper=100, step_increment=1)
+            )
+            opacity_spin.set_valign(Gtk.Align.CENTER)
+            opacity_spin.set_tooltip_text(_("Opacity (%)"))
+            row.add_suffix(opacity_spin)
+
+            up_button = Gtk.Button(icon_name="go-up-symbolic")
+            up_button.add_css_class("flat")
+            up_button.set_valign(Gtk.Align.CENTER)
+            up_button.set_tooltip_text(_("Move up (higher priority)"))
+            row.add_suffix(up_button)
+
+            down_button = Gtk.Button(icon_name="go-down-symbolic")
+            down_button.add_css_class("flat")
+            down_button.set_valign(Gtk.Align.CENTER)
+            down_button.set_tooltip_text(_("Move down (lower priority)"))
+            row.add_suffix(down_button)
+
+            remove_button = Gtk.Button(icon_name="user-trash-symbolic")
+            remove_button.add_css_class("flat")
+            remove_button.set_valign(Gtk.Align.CENTER)
+            remove_button.set_tooltip_text(_("Remove"))
+            row.add_suffix(remove_button)
+
+            row_state = {"row_widget": row, "pattern_row": row, "color_button": color_button, "opacity_spin": opacity_spin}
+            up_button.connect("clicked", lambda _b: _move_watermark_rule(row_state, -1))
+            down_button.connect("clicked", lambda _b: _move_watermark_rule(row_state, 1))
+
+            def on_remove(_btn, state=row_state):
+                group_watermark_rules.remove(state["row_widget"])
+                self._watermark_rule_rows.remove(state)
+            remove_button.connect("clicked", on_remove)
+
+            self._watermark_rule_rows.append(row_state)
+            group_watermark_rules.add(row)
+            if self._watermark_add_rule_row is not None:
+                group_watermark_rules.remove(self._watermark_add_rule_row)
+                group_watermark_rules.add(self._watermark_add_rule_row)
+            _validate_watermark_pattern(row)
+
+        for rule in self.settings_manager.get("interface.watermark_rules") or []:
+            add_watermark_rule_row(rule)
+
+        add_watermark_rule_action_row = Adw.ActionRow(title=_("Add Rule"))
+        add_watermark_rule_action_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
+        add_watermark_rule_action_row.set_activatable(True)
+        add_watermark_rule_action_row.connect("activated", lambda row: add_watermark_rule_row())
+        group_watermark_rules.add(add_watermark_rule_action_row)
+        self._watermark_add_rule_row = add_watermark_rule_action_row
+        # Exposed so on_reset can clear the list back to empty without
+        # duplicating this closure's logic.
+        self._add_watermark_rule_row = add_watermark_rule_row
+        self._clear_watermark_rule_rows = _clear_watermark_rule_rows
+
         # Grey out the "how" rows while the watermark is off — same idiom
         # as _update_ai_sensitivity above, minus the enable switch itself.
         watermark_detail_widgets = [
             self.watermark_text_row, watermark_text_note, self.watermark_position_row,
             self.watermark_font_size_row, watermark_color_row, self.watermark_opacity_row,
-            self.watermark_scope_row, self.watermark_shrink_row,
+            self.watermark_scope_row, self.watermark_shrink_row, group_watermark_rules,
         ]
         def _update_watermark_sensitivity(*_args):
             enabled = self.watermark_enabled_row.get_active()
@@ -1082,6 +1202,83 @@ class SettingsDialog(Adw.Window):
         log_dir_button.connect("clicked", self.on_choose_log_dir_clicked)
         self.log_dir_row.add_suffix(log_dir_button)
         group_logging.add(self.log_dir_row)
+
+        # --- Sync Page ---
+        page_sync = Adw.PreferencesPage()
+        page_sync.set_title(_("Sync"))
+        page_sync.set_icon_name("emblem-synchronizing-symbolic")
+
+        group_sync_main = Adw.PreferencesGroup(
+            title=_("Sync"),
+            description=_("Keeps hosts/Quickies/AI chats/user commands/general/terminal settings in step "
+                           "across machines via a plain shared folder — Dropbox, iCloud, a network share, "
+                           "or just another local directory. The app never talks to any cloud API directly, "
+                           "it only reads/writes files inside whatever folder you point it at below."),
+        )
+        page_sync.add(group_sync_main)
+
+        self.sync_enabled_row = Adw.SwitchRow(title=_("Enable Sync"))
+        self.sync_enabled_row.set_active(self.settings_manager.get("sync.enabled"))
+        group_sync_main.add(self.sync_enabled_row)
+
+        self.sync_folder_row = Adw.EntryRow(title=_("Sync Folder"))
+        self.sync_folder_row.set_text(self.settings_manager.get("sync.folder"))
+        sync_folder_button = Gtk.Button(icon_name="folder-open-symbolic")
+        sync_folder_button.set_valign(Gtk.Align.CENTER)
+        sync_folder_button.set_tooltip_text(_("Choose a folder"))
+        sync_folder_button.connect("clicked", self.on_choose_sync_dir_clicked)
+        self.sync_folder_row.add_suffix(sync_folder_button)
+        group_sync_main.add(self.sync_folder_row)
+
+        self.sync_interval_row = Adw.SpinRow(
+            title=_("Sync Interval (seconds)"),
+            subtitle=_("Minimum 60 seconds"),
+            adjustment=Gtk.Adjustment(
+                value=self.settings_manager.get("sync.interval_seconds"), lower=60, upper=86400, step_increment=30
+            ),
+        )
+        group_sync_main.add(self.sync_interval_row)
+
+        group_sync_categories = Adw.PreferencesGroup(title=_("What to Sync"))
+        page_sync.add(group_sync_categories)
+
+        self.sync_hosts_row = Adw.SwitchRow(title=_("Hosts"))
+        self.sync_hosts_row.set_active(self.settings_manager.get("sync.sync_hosts"))
+        group_sync_categories.add(self.sync_hosts_row)
+
+        self.sync_quickies_row = Adw.SwitchRow(title=_("Quickies"))
+        self.sync_quickies_row.set_active(self.settings_manager.get("sync.sync_quickies"))
+        group_sync_categories.add(self.sync_quickies_row)
+
+        self.sync_ai_chats_row = Adw.SwitchRow(title=_("AI Chats"))
+        self.sync_ai_chats_row.set_active(self.settings_manager.get("sync.sync_ai_chats"))
+        group_sync_categories.add(self.sync_ai_chats_row)
+
+        self.sync_user_commands_row = Adw.SwitchRow(title=_("User Commands"))
+        self.sync_user_commands_row.set_active(self.settings_manager.get("sync.sync_user_commands"))
+        group_sync_categories.add(self.sync_user_commands_row)
+
+        self.sync_general_row = Adw.SwitchRow(title=_("General"))
+        self.sync_general_row.set_active(self.settings_manager.get("sync.sync_general"))
+        group_sync_categories.add(self.sync_general_row)
+
+        self.sync_terminal_row = Adw.SwitchRow(title=_("Terminal Settings"), subtitle=_("Colors, watermarks"))
+        self.sync_terminal_row.set_active(self.settings_manager.get("sync.sync_terminal"))
+        group_sync_categories.add(self.sync_terminal_row)
+
+        group_sync_status = Adw.PreferencesGroup()
+        page_sync.add(group_sync_status)
+
+        sync_status_row = Adw.ActionRow(title=_("Force Sync Now"))
+        self.sync_status_label = Gtk.Label(xalign=1)
+        self.sync_status_label.add_css_class("dim-label")
+        sync_status_row.add_suffix(self.sync_status_label)
+        force_sync_button = Gtk.Button(label=_("Sync Now"), css_classes=["suggested-action"])
+        force_sync_button.set_valign(Gtk.Align.CENTER)
+        force_sync_button.connect("clicked", self.on_force_sync_clicked)
+        sync_status_row.add_suffix(force_sync_button)
+        group_sync_status.add(sync_status_row)
+        self._refresh_sync_status_label()
 
         # --- User Commands Page (Placeholder) ---
         page_commands = Adw.PreferencesPage()
@@ -1156,6 +1353,14 @@ class SettingsDialog(Adw.Window):
             quickies_position_map.get(self.settings_manager.get("quickies.position"), 1)
         )
         group_quickies_settings.add(self.quickies_position_row)
+
+        quickies_search_position_model = Gtk.StringList.new([_("Top"), _("Bottom")])
+        self.quickies_search_position_row = Adw.ComboRow(title=_("Search bar position"), model=quickies_search_position_model)
+        quickies_search_position_map = {"top": 0, "bottom": 1}
+        self.quickies_search_position_row.set_selected(
+            quickies_search_position_map.get(self.settings_manager.get("quickies.search_position"), 1)
+        )
+        group_quickies_settings.add(self.quickies_search_position_row)
 
         group_quickies_items = Adw.PreferencesGroup(title=_("Snippets"))
         page_quickies.add(group_quickies_items)
@@ -1641,8 +1846,9 @@ class SettingsDialog(Adw.Window):
         # (see the Gtk.Stack/StackSwitcher built above) — not separate
         # top-level sidebar entries.
         self.stack.add_titled_with_icon(page_ai_scrolled, "ai", _("AI"), "dialog-messages-symbolic")
+        self.stack.add_titled_with_icon(page_sync, "sync", _("Sync"), "emblem-synchronizing-symbolic")
 
-        for page in (page_terminal, page_sftp, page_client, page_commands, page_interface, page_ai_shared, page_api, page_cli):
+        for page in (page_terminal, page_sftp, page_client, page_commands, page_interface, page_ai_shared, page_api, page_cli, page_sync):
             _widen_preferences_clamp(page)
 
         for page in self.stack.get_pages():
@@ -1804,6 +2010,11 @@ class SettingsDialog(Adw.Window):
             "quickies.position",
             quickies_position_map_rev.get(self.quickies_position_row.get_selected(), "below")
         )
+        quickies_search_position_map_rev = {0: "top", 1: "bottom"}
+        self.settings_manager.set(
+            "quickies.search_position",
+            quickies_search_position_map_rev.get(self.quickies_search_position_row.get_selected(), "bottom")
+        )
         quickies_items = []
         for row in self.quickies_store:
             quickies_items.append({"name": row[0], "text": row[1]})
@@ -1846,6 +2057,18 @@ class SettingsDialog(Adw.Window):
             watermark_scope_map_rev.get(self.watermark_scope_row.get_selected(), "active")
         )
         self.settings_manager.set("interface.watermark_shrink_in_splits", self.watermark_shrink_row.get_active())
+
+        watermark_rules = []
+        for state in self._watermark_rule_rows:
+            pattern = state["pattern_row"].get_text().strip()
+            if not pattern:
+                continue  # skip a still-blank row left over from "Add"
+            watermark_rules.append({
+                "pattern": pattern,
+                "color": _rgba_to_hex(state["color_button"].get_rgba()),
+                "opacity": int(state["opacity_spin"].get_value()),
+            })
+        self.settings_manager.set("interface.watermark_rules", watermark_rules)
 
         # --- AI ---
         self.settings_manager.set("ai.disabled", self.ai_disabled_row.get_active())
@@ -1913,6 +2136,16 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("cli.custom_tools", custom_tools)
         self.settings_manager.set("cli.provider_models", cli_model_overrides)
 
+        self.settings_manager.set("sync.enabled", self.sync_enabled_row.get_active())
+        self.settings_manager.set("sync.folder", self.sync_folder_row.get_text().strip())
+        self.settings_manager.set("sync.interval_seconds", int(self.sync_interval_row.get_value()))
+        self.settings_manager.set("sync.sync_hosts", self.sync_hosts_row.get_active())
+        self.settings_manager.set("sync.sync_quickies", self.sync_quickies_row.get_active())
+        self.settings_manager.set("sync.sync_ai_chats", self.sync_ai_chats_row.get_active())
+        self.settings_manager.set("sync.sync_user_commands", self.sync_user_commands_row.get_active())
+        self.settings_manager.set("sync.sync_general", self.sync_general_row.get_active())
+        self.settings_manager.set("sync.sync_terminal", self.sync_terminal_row.get_active())
+
         self.settings_manager.save()
 
         # Debug logging can take effect immediately, no restart needed.
@@ -1940,6 +2173,11 @@ class SettingsDialog(Adw.Window):
         # And for the AI header buttons — react to new/removed keys and
         # custom providers immediately, no restart needed.
         self.parent_window.refresh_ai_provider_buttons()
+
+        # And for sync — show/hide the header button and (re)start the
+        # timer at whatever interval/enabled-state was just saved.
+        self.parent_window.refresh_sync_button_visibility()
+        self.parent_window.restart_sync_timer()
 
         # Apply the icon change immediately — the window's own icon, the
         # macOS Dock icon (About dialog just reads the setting fresh next
@@ -1976,6 +2214,65 @@ class SettingsDialog(Adw.Window):
             if gfile:
                 self.log_dir_row.set_text(gfile.get_path())
         dialog.destroy()
+
+    def on_choose_sync_dir_clicked(self, button):
+        """Shows a native folder chooser for the sync folder setting —
+        same pattern as on_choose_log_dir_clicked above."""
+        file_chooser = Gtk.FileChooserDialog(
+            title=_("Select Sync Folder"),
+            transient_for=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER
+        )
+        file_chooser.add_button(_("Select"), Gtk.ResponseType.OK)
+        file_chooser.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        file_chooser.connect("response", self.on_sync_dir_chosen)
+        file_chooser.present()
+
+    def on_sync_dir_chosen(self, dialog, response):
+        if response == Gtk.ResponseType.OK:
+            gfile = dialog.get_file()
+            if gfile:
+                self.sync_folder_row.set_text(gfile.get_path())
+        dialog.destroy()
+
+    def _refresh_sync_status_label(self):
+        last_sync_at = self.settings_manager.get("sync.last_sync_at")
+        last_error = self.settings_manager.get("sync.last_sync_error")
+        if last_error:
+            self.sync_status_label.set_text(_("Last attempt failed: {error}").format(error=last_error))
+        elif last_sync_at:
+            when = datetime.datetime.fromtimestamp(last_sync_at).strftime("%Y-%m-%d %H:%M:%S")
+            self.sync_status_label.set_text(_("Last synced: {time}").format(time=when))
+        else:
+            self.sync_status_label.set_text(_("Never synced"))
+
+    def on_force_sync_clicked(self, button):
+        """Saves the sync settings first (folder/what-to-sync must be
+        current for the sync that's about to run to pick them up — Apply
+        hasn't necessarily been clicked yet) and triggers an immediate
+        sync on the parent window, then polls briefly (capped, same
+        give-up-quietly pattern used elsewhere in this app for "wait for
+        an async result") to refresh the status line once it's done."""
+        self.settings_manager.set("sync.folder", self.sync_folder_row.get_text().strip())
+        self.settings_manager.set("sync.sync_hosts", self.sync_hosts_row.get_active())
+        self.settings_manager.set("sync.sync_quickies", self.sync_quickies_row.get_active())
+        self.settings_manager.set("sync.sync_ai_chats", self.sync_ai_chats_row.get_active())
+        self.settings_manager.set("sync.sync_user_commands", self.sync_user_commands_row.get_active())
+        self.settings_manager.set("sync.sync_general", self.sync_general_row.get_active())
+        self.settings_manager.set("sync.sync_terminal", self.sync_terminal_row.get_active())
+        self.settings_manager.save()
+
+        self.parent_window.force_sync_now()
+        self.sync_status_label.set_text(_("Syncing…"))
+
+        attempts = [0]
+        def poll():
+            if self.parent_window.sync_in_progress:
+                attempts[0] += 1
+                return attempts[0] < 200  # ~20s ceiling, then give up quietly
+            self._refresh_sync_status_label()
+            return False
+        GLib.timeout_add(100, poll)
 
     def on_command_edited(self, widget, path, text, column_index):
         """Saves the edited text in the user commands ListStore."""
@@ -2039,6 +2336,9 @@ class SettingsDialog(Adw.Window):
             self.watermark_opacity_row.set_value(DEFAULT_SETTINGS["interface.watermark_opacity"])
             self.watermark_scope_row.set_selected({"active": 0, "all": 1}.get(DEFAULT_SETTINGS["interface.watermark_scope"], 0))
             self.watermark_shrink_row.set_active(DEFAULT_SETTINGS["interface.watermark_shrink_in_splits"])
+            self._clear_watermark_rule_rows()
+            for rule in DEFAULT_SETTINGS.get("interface.watermark_rules", []):
+                self._add_watermark_rule_row(rule)
         elif current_page_name == "client":
             self.ssh_path_row.set_text(DEFAULT_SETTINGS["client.ssh_path"])
             self.telnet_path_row.set_text(DEFAULT_SETTINGS["client.telnet_path"])
@@ -2052,6 +2352,7 @@ class SettingsDialog(Adw.Window):
         elif current_page_name == "quickies":
             self.quickies_enabled_row.set_active(DEFAULT_SETTINGS["quickies.enabled"])
             self.quickies_position_row.set_selected({"above": 0, "below": 1}.get(DEFAULT_SETTINGS["quickies.position"], 1))
+            self.quickies_search_position_row.set_selected({"top": 0, "bottom": 1}.get(DEFAULT_SETTINGS["quickies.search_position"], 1))
             self.quickies_store.clear()
             for quicky in DEFAULT_SETTINGS.get("quickies.items", []):
                 self.quickies_store.append([quicky.get("name", ""), quicky.get("text", "")])
@@ -2063,6 +2364,16 @@ class SettingsDialog(Adw.Window):
             self.sftp_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.local_default_sort_direction"], 0))
             self.sftp_remote_sort_col_row.set_selected(sort_col_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_column"], 0))
             self.sftp_remote_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_direction"], 0))
+        elif current_page_name == "sync":
+            self.sync_enabled_row.set_active(DEFAULT_SETTINGS["sync.enabled"])
+            self.sync_folder_row.set_text(DEFAULT_SETTINGS["sync.folder"])
+            self.sync_interval_row.set_value(DEFAULT_SETTINGS["sync.interval_seconds"])
+            self.sync_hosts_row.set_active(DEFAULT_SETTINGS["sync.sync_hosts"])
+            self.sync_quickies_row.set_active(DEFAULT_SETTINGS["sync.sync_quickies"])
+            self.sync_ai_chats_row.set_active(DEFAULT_SETTINGS["sync.sync_ai_chats"])
+            self.sync_user_commands_row.set_active(DEFAULT_SETTINGS["sync.sync_user_commands"])
+            self.sync_general_row.set_active(DEFAULT_SETTINGS["sync.sync_general"])
+            self.sync_terminal_row.set_active(DEFAULT_SETTINGS["sync.sync_terminal"])
 
 
 class BatchCommandDialog(Adw.Window):

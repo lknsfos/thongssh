@@ -38,9 +38,11 @@ DEFAULT_SETTINGS = {
     "interface.watermark_opacity": 15, # percent, 1-100
     "interface.watermark_scope": "active", # "active" (focused terminal only) or "all" (every open pane)
     "interface.watermark_shrink_in_splits": True, # halve the font size while any split layout is active
+    "interface.watermark_rules": [], # [{"pattern": regex_str, "color": "#rrggbb", "opacity": int(1-100)}, ...], ordered — first (topmost) match against the rendered watermark text wins, overriding watermark_color/watermark_opacity above; no match falls back to those global defaults
     "quickies.enabled": False, # mirrored by the header toggle button, not a Settings-page-only switch
     "quickies.position": "below", # "above" or "below" the host tree, within the left panel
     "quickies.items": [], # [{"name": str, "text": str}, ...] — inserted (not executed) into the active terminal
+    "quickies.search_position": "bottom", # "top" or "bottom" — where the Quickies search box sits, relative to the snippet list
     "ai.system_prompt": (
         "You are a read-only analysis assistant for a terminal session. You have no shell, "
         "tool, or network access of your own — never attempt to run, execute, connect to, "
@@ -67,6 +69,17 @@ DEFAULT_SETTINGS = {
     "cli.commands": {}, # {provider_id: command_template} — overrides for the standard CLI tools (claude/codex)
     "cli.custom_tools": [], # [{"id": uuid, "name": str, "command": str}] — user-added local CLI tools
     "cli.provider_models": {}, # {provider_id: model_string} — empty/absent means "no --model flag at all", not an empty one
+    "sync.enabled": False, # master switch — mirrors the header sync button's visibility, not just a Settings-page toggle
+    "sync.folder": "", # any plain directory — a Dropbox/iCloud/local-network folder, or just a local path; the app never talks to a cloud API directly
+    "sync.interval_seconds": 300, # enforced minimum of 60 both in the Settings SpinRow and defensively wherever the timer is (re)started
+    "sync.sync_hosts": True,
+    "sync.sync_quickies": True,
+    "sync.sync_ai_chats": True,
+    "sync.sync_user_commands": True,
+    "sync.sync_general": True,
+    "sync.sync_terminal": True, # color scheme (incl. custom_color_scheme.json) + watermark settings
+    "sync.last_sync_at": 0, # epoch seconds; 0 = never synced yet
+    "sync.last_sync_error": "", # empty = last sync attempt was clean
 }
 
 class SettingsManager:

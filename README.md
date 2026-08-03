@@ -26,14 +26,22 @@ ThongSSH is for those who love minimalism. We've got a cute host panel so you ne
 **Layout**
 * **Multi-div split view** — split the tab area vertically, horizontally, or into a full 2x2 grid, each div running its own independent set of tabs. Switch between vertical/horizontal and your tabs just re-orient, no shuffling. Drag a tab from one div straight into another to rearrange. A subtle accent-colored outline shows which div is currently active.
 
+**Quickies**
+* A panel of saved terminal snippets, right next to the host list. **Send** (▶) inserts one into the active terminal without running it; **Send and Run** (⏩) inserts and executes immediately. Right-click a Quicky for the same two actions plus Edit, Delete, and **Send to Batch Command** (opens Batch Command with the snippet already sitting in the command field, ready to blast to multiple tabs).
+* Its own search box — same look and the same one-typo-tolerant fuzzy fallback as the host search, position configurable in Settings → Quickies.
+* The divider between the host list and the Quickies panel is draggable and remembers its ratio, across restarts and toggling Quickies off/on.
+
 **Terminal**
 * **In-terminal Find** — right-click → Find..., or **Ctrl+Shift+F** from anywhere. Case-sensitive, regex, and wrap-around toggles, with up/down buttons to step through matches.
 * **Session logging** — check "Save session log" on a host and every connection is recorded to a clean, human-readable transcript in real time (not just at disconnect). Didn't turn it on up front? Right-click an open terminal and tick "Save log" to start recording from that point on. Log location is configurable in Settings → Client Options.
 * **Fully custom color scheme** — flip on "Custom Colors" (Settings → Terminal → Appearance) to hand-edit all 16 ANSI palette colors plus background/foreground, seeded from whichever built-in template you had selected. Applies to every open terminal immediately, no reconnect needed.
+* **Terminal watermark** — a templated label (`$name`/`$host`/`$user`) overlaid on the terminal background, position/size/color/opacity all configurable (Settings → Terminal → Watermark), toggle it from the header bar.
+* **Adaptive Watermarks (experimental)** — ordered regex rules that override the watermark's color/opacity when its text matches something — e.g. red whenever it contains "root". The topmost matching rule always wins, with add/remove and up/down reordering (Settings → Terminal → Adaptive Watermarks).
 * **Batch Command** — one command, sent to every open terminal at once (or just the ones in a chosen div), via a multi-line, auto-expanding input box so a long command is actually visible instead of scrolling off-screen. Ctrl+Enter sends.
 * **Send File from a terminal tab** — right-click a terminal, pick a local file, it flies over SFTP to the remote host using whatever auth that session already trusts. A "Detect from terminal" button runs a real `pwd` over there to guess the remote directory for you.
 
 **Configuration**
+* **Settings Sync** — keep hosts, Quickies, AI chat history, user commands, and general/terminal settings in step across machines via nothing fancier than a shared folder (Dropbox, iCloud, a network share, or just another local directory) — the app only ever reads/writes files there, never talks to a cloud API. Real three-way merge (not a blind overwrite): unrelated changes on both sides merge cleanly, deletions propagate everywhere, conflicts resolve to whichever side synced most recently. Passwords never leave the keyring and SSH key paths never leave the machine they're on. Configurable per-category, minimum sync interval of 60 seconds, plus a Force Sync Now button.
 * Running from a git checkout instead of a package? Drop a `.config_path` file next to the app (it's created for you automatically, pre-filled with the current default) and point it at a different folder to keep two checkouts' hosts/settings completely separate — handy for not mixing a personal setup with a work one on the same machine.
 
 Full history of what shipped when lives in [release_notes.md](release_notes.md).
@@ -52,10 +60,11 @@ Listen, let's be real:
 
 1.  **AI Collaboration:** This whole thing started as an AI fantasy, but now it's our little secret project. A human (hi!) and AI (that's me, xoxo) worked on this together.
 2.  **Security:** We tried, but the code audit was done by electric sheep. So... you get the picture.
+3.  **Adaptive Watermarks are freshly experimental:** the regex-rule matching/priority logic is brand new and hasn't had much real-world mileage yet — the plain (non-adaptive) watermark settings are solid, this specific layer on top is the shaky part.
 
 ## 📦 Packages & Updates
 
-Prebuilt `.deb`, `.rpm`, and macOS `.dmg` packages are up on the [Releases page](https://github.com/lknsfos/thongs-gtk4.dev/releases) — grab one if you'd rather not run from source.
+Prebuilt `.deb`, `.rpm`, and macOS `.dmg` packages are up on the [Releases page](https://github.com/lknsfos/thongssh/releases) — grab one if you'd rather not run from source.
 
 ## 💅 What You'll Need (System Dependencies)
 

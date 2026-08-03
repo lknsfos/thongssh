@@ -1,5 +1,22 @@
 # Release Notes
 
+### 🆕 What's New in 0.8.0
+
+The big one — Quickies grew up, settings can now follow you across machines, and watermarks got smart (if experimental):
+
+* **Quickies, rebuilt** — the snippet row now has three purpose-built actions instead of one risky one:
+  * **Send** (▶) inserts the snippet into the active terminal without running it (same as double-click always did); **Send and Run** (⏩) inserts *and* executes immediately. The old one-click **Delete** button is gone entirely — a stray misclick used to silently drop a saved Quicky with zero confirmation — deleting now lives in a **right-click context menu** alongside Send/Send and Run/Edit and a new **Send to Batch Command**, which opens the Batch Command dialog with the (template-rendered) snippet already sitting in the command field.
+  * Rows are genuinely compact now: tiny icon buttons sized to the text line instead of stretching it, minimal padding, no more accidental full-height suffix buttons.
+  * **Search box** for the snippet list — same look as the host search (no magnifying-glass icon, dimmed placeholder), position configurable (Settings → Quickies → top/bottom), and forgives one typo/missing/extra/swapped character exactly like host search already did, falling back to fuzzy matching only when nothing matches exactly.
+  * The divider between the host list and the Quickies panel is properly draggable now and remembers its ratio — across toggling Quickies off/on *and* across restarts.
+* **Settings Sync** — keep hosts, Quickies, AI chat history, user commands, and general/terminal settings in step across machines via nothing fancier than a shared folder (Dropbox, iCloud, a network share, or just another local directory — the app never talks to any cloud API itself, only reads/writes files wherever you point it).
+  * Real three-way merge (a local-only "what did I last see" snapshot, compared against current local state and the shared file), not a blind overwrite: unrelated changes on both sides merge cleanly, deletions propagate to every machine, and a genuine same-item conflict is resolved by whichever side has the newer synced file — never silent data loss, never duplicate entries.
+  * Passwords never leave the keyring and never touch the shared file (they never touched `hosts.json` either, so nothing new here); each host's SSH key path is stripped on the way out and left untouched locally on the way in, since it's always machine-specific.
+  * The shared file is versioned by timestamp and sha256-hashed for integrity — a corrupted or mid-write file aborts that sync pass cleanly instead of merging against garbage.
+  * Settings → Sync: enable switch, folder picker, sync interval (minimum 60 seconds, enforced), a checkbox per category, and a Force Sync Now button. A sync icon appears in the header bar next to AI whenever sync is enabled — click it to sync on demand.
+* **Adaptive Watermarks (experimental)** — Settings → Terminal → Adaptive Watermarks lets you define ordered regex rules that override the watermark's color/opacity when its text matches — e.g. red whenever it contains "root", blue whenever it contains a specific host prefix. The topmost matching rule always wins (so `root@arbe-svc053` stays red if a "root" rule sits above an "arbe" rule, even though both match), with add/remove and up/down reordering. Marked experimental — the matching/priority behavior is new and hasn't seen much real-world mileage yet.
+* **Smaller fixes bundled in**: the terminal panel's bottom corners now round to match native macOS window chrome instead of showing whatever's behind the app through the corners; the host search box lost its magnifying-glass icon in favor of a plain dimmed "Search" placeholder; the AI panel's first-ever open now sizes to ~25% of the window instead of a fixed pixel guess; terminal color schemes gained a full "Custom" mode with all 16 ANSI palette colors editable, not just background/foreground; the header bar's watermark/Quickies/sync buttons now sit grouped next to Batch Command instead of scattered among the split-view buttons.
+
 ### 🆕 What's New in 0.7.3
 
 Chat history for the AI panel, plus a real code-block rendering bug fixed:

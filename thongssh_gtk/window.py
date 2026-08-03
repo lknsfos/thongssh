@@ -28,6 +28,8 @@ from .sftp_widget import SftpWidget
 from .ai_panel import AiPanel
 from .provider_badges import icon_name_for as _icon_name_for, badge_family as _badge_family, badge_text as _badge_text
 from .colors import get_scheme_colors
+from . import settings_sync
+import threading
 
 # Placeholder for future internationalization (i18n)
 _ = lambda s: s
@@ -64,6 +66,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     open_sessions = {}
     tab_data = {} # ✨ Store config for each tab widget
     last_clicked_tab = None # ✨ Store the last right-clicked tab for context menu actions
+    last_clicked_quicky_index = None # Store the last right-clicked Quicky's index for its context menu actions
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -117,6 +120,16 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.ai_toggle_button.connect("toggled", self._on_ai_toggle_button_toggled)
         header_bar.pack_end(self.ai_toggle_button)
 
+        # Plain button, not a toggle — every click just force-syncs. Hidden
+        # entirely unless Settings -> Sync has it enabled (see
+        # refresh_sync_button_visibility, called once here and again from
+        # Settings' on_apply).
+        self.sync_button = Gtk.Button(icon_name="emblem-synchronizing-symbolic")
+        self.sync_button.set_tooltip_text(_("Sync now"))
+        self.sync_button.set_visible(False)
+        self.sync_button.connect("clicked", self.on_sync_button_clicked)
+        header_bar.pack_end(self.sync_button)
+
         self.main_box.append(header_bar)
         self._ai_provider_buttons = {}
 
@@ -131,6 +144,21 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.batch_command_button.set_tooltip_text(_("Batch Command"))
         self.batch_command_button.connect("clicked", self.on_menu_batch_command)
         header_bar.pack_start(self.batch_command_button)
+
+        # Grouped with Batch Command, not the split-view buttons below —
+        # all three (send a command, watermark, Quickies) act on/around the
+        # terminal's content, whereas split-view is purely about layout.
+        self.watermark_toggle_button = Gtk.ToggleButton(icon_name="insert-image-symbolic")
+        self.watermark_toggle_button.set_tooltip_text(_("Toggle terminal watermark"))
+        self.watermark_toggle_button.set_active(self.settings_manager.get("interface.watermark_enabled"))
+        self.watermark_toggle_button.connect("toggled", self.on_watermark_toggle_clicked)
+        header_bar.pack_start(self.watermark_toggle_button)
+
+        self.quickies_toggle_button = Gtk.ToggleButton(icon_name="media-seek-forward-symbolic")
+        self.quickies_toggle_button.set_tooltip_text(_("Toggle Quickies panel"))
+        self.quickies_toggle_button.set_active(self.settings_manager.get("quickies.enabled"))
+        self.quickies_toggle_button.connect("toggled", self.on_quickies_toggle_clicked)
+        header_bar.pack_start(self.quickies_toggle_button)
 
         header_bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
 
@@ -158,20 +186,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.split_grid_btn.connect("clicked", lambda w: self.on_split_button_clicked("grid"))
         header_bar.pack_start(self.split_grid_btn)
 
-        header_bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
-
-        self.watermark_toggle_button = Gtk.ToggleButton(icon_name="insert-image-symbolic")
-        self.watermark_toggle_button.set_tooltip_text(_("Toggle terminal watermark"))
-        self.watermark_toggle_button.set_active(self.settings_manager.get("interface.watermark_enabled"))
-        self.watermark_toggle_button.connect("toggled", self.on_watermark_toggle_clicked)
-        header_bar.pack_start(self.watermark_toggle_button)
-
-        self.quickies_toggle_button = Gtk.ToggleButton(icon_name="edit-paste-symbolic")
-        self.quickies_toggle_button.set_tooltip_text(_("Toggle Quickies panel"))
-        self.quickies_toggle_button.set_active(self.settings_manager.get("quickies.enabled"))
-        self.quickies_toggle_button.connect("toggled", self.on_quickies_toggle_clicked)
-        header_bar.pack_start(self.quickies_toggle_button)
-
         self.paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.paned.set_resize_start_child(False)
         # Shrinkable (not just draggable-wider) — the old fixed 300px floor
@@ -198,6 +212,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # "self.tree_scrolled_window = Gtk.ScrolledWindow()" below.
         self.hosts_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self._left_panel_root = None
+
+        # Ratio (not raw pixels — this Paned's own height varies with the
+        # window) of the hosts/Quickies divider, tracked continuously below
+        # and restored both across a Quickies off/on toggle (the Paned
+        # itself is rebuilt from scratch each time — see
+        # _build_left_panel_root/_apply_left_panel_layout) and across app
+        # restarts (see _on_close_request/_load_window_state).
+        self._last_quickies_split_ratio = self._load_window_state().get("quickies_split_ratio")
 
         # Continuously track the last dragged width (only while the sidebar
         # is actually visible — toggling it off via on_toggle_sidebar must
@@ -390,17 +412,27 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         button_box.set_halign(Gtk.Align.CENTER)
+        # hosts_box's own spacing=6 only inserts a gap *between* siblings, so
+        # this (the LAST child) naturally gets a 6px gap above it (from
+        # search_bar before it) but 0px below (nothing after it to space
+        # against) — it visually hugs the Paned divider on one side only.
+        # Mirroring that same 6px below makes it sit centered between the
+        # divider above and the one below, instead of pinned to the latter.
+        button_box.set_margin_bottom(6)
 
         add_host_btn = Gtk.Button(icon_name="list-add-symbolic")
         add_host_btn.set_tooltip_text(_("Add Host"))
+        add_host_btn.set_valign(Gtk.Align.CENTER)
         add_host_btn.connect("clicked", self.on_add_host_clicked)
 
         add_group_btn = Gtk.Button(icon_name="folder-new-symbolic")
         add_group_btn.set_tooltip_text(_("Create Group"))
+        add_group_btn.set_valign(Gtk.Align.CENTER)
         add_group_btn.connect("clicked", self.on_add_group_clicked)
 
         remove_btn = Gtk.Button(icon_name="list-remove-symbolic")
         remove_btn.set_tooltip_text(_("Remove Selected"))
+        remove_btn.set_valign(Gtk.Align.CENTER)
         remove_btn.connect("clicked", self.on_remove_selected_clicked, None)
 
         button_box.append(add_host_btn)
@@ -443,6 +475,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # Build the header-bar's per-provider AI buttons now that
         # self.keyring, self.settings_manager and self.ai_panel all exist.
         self.refresh_ai_provider_buttons()
+
+        self.sync_timer_id = None
+        self.sync_in_progress = False
+        self.refresh_sync_button_visibility()
+        self.restart_sync_timer()
 
     def _load_window_state(self):
         try:
@@ -538,6 +575,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             state["left_panel_width"] = self._last_left_panel_width
         if getattr(self, "_last_ai_panel_width", None):
             state["ai_panel_width"] = self._last_ai_panel_width
+        if getattr(self, "_last_quickies_split_ratio", None):
+            state["quickies_split_ratio"] = self._last_quickies_split_ratio
         logging.debug(f"Saving window state on close: {state}")
         self._save_window_state(state)
         return False # Allow the window to close
@@ -663,7 +702,29 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         .ai-provider-badge-cli-codex:checked { background-color: alpha(#9b59b6, 0.35); }
         .ai-provider-badge-cli-custom { color: @accent_color; }
         .ai-provider-badge-cli-custom:checked { background-color: alpha(@accent_color, 0.35); }
+        /* Quickies' Edit/Delete buttons — "flat" alone still keeps the
+           theme's normal button min-size (taller than a plain text line);
+           this shrinks the clickable box itself down to match. */
+        .quicky-tiny-button {
+            min-width: 20px;
+            min-height: 20px;
+            padding: 2px;
+        }
         """
+        if sys.platform == "darwin":
+            # Modern macOS clips every NSWindow to a rounded rect on all
+            # four corners (not just the top, unlike GNOME's traditional
+            # CSD convention) — GTK's own painted background only rounds
+            # the top two by default, so its square bottom corners fall
+            # outside the OS's rounded mask and get cut away, letting
+            # whatever's behind the window show through underneath. Rounding
+            # the bottom here too keeps GTK's own background inside that
+            # native mask everywhere, not just at the top.
+            css_data += """
+            window.background {
+                border-radius: 10px;
+            }
+            """
         css_provider.load_from_string(css_data)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
@@ -1137,6 +1198,78 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         else:
             button.set_icon_name("go-next-symbolic")
 
+    def refresh_sync_button_visibility(self):
+        """Shows/hides the header-bar sync button based on Settings ->
+        Sync's enable switch. Called once at startup and again from
+        SettingsDialog.on_apply, matching refresh_ai_provider_buttons'
+        convention below."""
+        self.sync_button.set_visible(bool(self.settings_manager.get("sync.enabled")))
+
+    def restart_sync_timer(self):
+        """(Re)starts the periodic sync timer at the configured interval
+        (clamped to a 60s floor regardless of what's in settings — belt
+        and suspenders alongside the Settings UI's own SpinRow floor).
+        Safe to call anytime settings change; always cancels any existing
+        timer first so repeated calls (e.g. from Settings' on_apply) never
+        stack up duplicate timers. Same shape as sftp_widget.py's
+        connection_check_timer_id — GLib.timeout_add_seconds, callback
+        returns True to keep repeating, GLib.source_remove to cancel."""
+        if self.sync_timer_id is not None:
+            GLib.source_remove(self.sync_timer_id)
+            self.sync_timer_id = None
+        if not self.settings_manager.get("sync.enabled"):
+            return
+        interval = max(60, int(self.settings_manager.get("sync.interval_seconds") or 60))
+        self.sync_timer_id = GLib.timeout_add_seconds(interval, self._on_sync_timer_tick)
+
+    def _on_sync_timer_tick(self):
+        self.force_sync_now()
+        return True  # keep repeating
+
+    def on_sync_button_clicked(self, button):
+        self.force_sync_now()
+
+    def force_sync_now(self):
+        """Runs one sync pass on a background thread (file I/O against a
+        possibly cloud-synced folder shouldn't block the UI) and marshals
+        the resulting UI refresh back via GLib.idle_add — same shape as
+        ai_providers.send_chat_request. A pass already in flight is never
+        overlapped with another one."""
+        if self.sync_in_progress:
+            return
+        self.sync_in_progress = True
+        self.sync_button.set_sensitive(False)
+        self.sync_button.set_tooltip_text(_("Syncing…"))
+
+        config_data = self.config_data
+
+        def worker():
+            result = settings_sync.perform_sync(self.settings_manager, config_data)
+            GLib.idle_add(self._on_sync_finished, result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_sync_finished(self, result):
+        self.sync_in_progress = False
+        self.sync_button.set_sensitive(True)
+        if result.ok:
+            when = datetime.datetime.fromtimestamp(self.settings_manager.get("sync.last_sync_at")).strftime("%H:%M:%S")
+            self.sync_button.set_tooltip_text(_("Sync now (last: {time})").format(time=when))
+        else:
+            self.sync_button.set_tooltip_text(_("Sync failed: {error}").format(error=result.error))
+            logging.error(f"Sync failed: {result.error}")
+
+        if result.new_config_data is not None:
+            self.config_data = result.new_config_data
+            self.populate_tree()
+        if "quickies" in result.changed_categories:
+            self.refresh_quickies_panel()
+        if "terminal" in result.changed_categories:
+            self.apply_terminal_color_scheme_to_all()
+        if "terminal" in result.changed_categories or "general" in result.changed_categories:
+            self.apply_watermark_settings_to_all()
+        return False
+
     def refresh_ai_provider_buttons(self):
         """Rebuilds the AI panel's per-provider toggle buttons (in its own
         header, see AiPanel.provider_button_box) from current keyring/
@@ -1319,6 +1452,53 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         else:
             self.hosts_box.reorder_child_after(self.search_bar, self.tree_scrolled_window)
 
+    def apply_quickies_search_position(self):
+        """Moves the Quickies search box above or below the snippet list
+        per quickies.search_position ("top"/"bottom") — same idea as
+        apply_search_bar_position above, just relative to
+        quickies_scroller instead of tree_scrolled_window. The header row
+        (title + Add button) always stays first regardless."""
+        position = self.settings_manager.get("quickies.search_position")
+        if position == "top":
+            self.quickies_box.reorder_child_after(self.quickies_search_entry, self.quickies_header_row)
+        else:
+            self.quickies_box.reorder_child_after(self.quickies_search_entry, self.quickies_scroller)
+
+    def on_quickies_search_changed(self, entry):
+        """Exact substring match (name or text, case-insensitive) first;
+        only falls back to the one-typo-tolerant fuzzy match (on the name)
+        if NOTHING in the list matched exactly — same two-tier approach as
+        the host tree search, just evaluated per-row via GtkListBox's own
+        filter mechanism instead of walking a tree."""
+        query = entry.get_text().strip()
+        self._quickies_search_query = query
+        if query:
+            query_lower = query.lower()
+            self._quickies_search_use_fuzzy = not any(
+                query_lower in f"{q.get('name', '')} {q.get('text', '')}".lower()
+                for q in self.quickies_items
+            )
+        else:
+            self._quickies_search_use_fuzzy = False
+        self.quickies_listbox.invalidate_filter()
+
+    def _quickies_filter_func(self, row):
+        query = getattr(self, "_quickies_search_query", "")
+        if not query:
+            return True
+        index = row.get_index()
+        if index < 0 or index >= len(self.quickies_items):
+            return True
+        quicky = self.quickies_items[index]
+        query_lower = query.lower()
+        if query_lower in f"{quicky.get('name', '')} {quicky.get('text', '')}".lower():
+            return True
+        if getattr(self, "_quickies_search_use_fuzzy", False):
+            threshold = self._fuzzy_search_threshold(len(query))
+            if threshold > 0 and self._fuzzy_edit_distance(query_lower, quicky.get("name", "").lower()) <= threshold:
+                return True
+        return False
+
     def _build_quickies_box(self):
         """The 'Quickies' section — a header row (label + Add button) above
         a scrollable list of pre-written snippets; clicking one inserts it
@@ -1329,29 +1509,77 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.quickies_box.set_vexpand(True)
 
         header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        # Mirror image of button_box's fix above: as quickies_box's FIRST
+        # child, this naturally gets 0px gap from the Paned divider above it
+        # (box spacing only applies *between* siblings) but a real 6px gap
+        # below it (from quickies_box's own spacing, before the scroller) —
+        # so it visually hugs the divider. Matching that same 6px on top
+        # centers it the same way.
+        header_row.set_margin_top(6)
         quickies_label = Gtk.Label(label=_("Quickies"), xalign=0)
         quickies_label.set_hexpand(True)
         header_row.append(quickies_label)
         add_quicky_btn = Gtk.Button(icon_name="list-add-symbolic")
         add_quicky_btn.set_tooltip_text(_("Add Quicky"))
+        add_quicky_btn.set_valign(Gtk.Align.CENTER)
         add_quicky_btn.connect("clicked", self.on_add_quicky_clicked)
         header_row.append(add_quicky_btn)
+        self.quickies_header_row = header_row
         self.quickies_box.append(header_row)
+
+        # Same look as the host search box: no magnifying-glass icon (its
+        # own dimmed placeholder is cue enough), position configurable
+        # (see apply_quickies_search_position), one-typo-tolerant fuzzy
+        # fallback (see _quickies_filter_func) — same fuzzy helpers the
+        # host tree search already uses.
+        self.quickies_search_entry = Gtk.SearchEntry()
+        self.quickies_search_entry.set_placeholder_text(_("Search"))
+        _quickies_search_leading_icon = self.quickies_search_entry.get_first_child()
+        if _quickies_search_leading_icon is not None:
+            _quickies_search_leading_icon.set_visible(False)
+        self.quickies_search_entry.connect("search-changed", self.on_quickies_search_changed)
+        self.quickies_box.append(self.quickies_search_entry)
 
         self.quickies_listbox = Gtk.ListBox()
         self.quickies_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         self.quickies_listbox.connect("row-activated", self.on_quicky_row_activated)
+        self.quickies_listbox.set_filter_func(self._quickies_filter_func)
 
-        quickies_scroller = Gtk.ScrolledWindow()
-        quickies_scroller.set_vexpand(True)
-        quickies_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        quickies_scroller.set_child(self.quickies_listbox)
-        self.quickies_box.append(quickies_scroller)
+        self.quickies_scroller = Gtk.ScrolledWindow()
+        self.quickies_scroller.set_vexpand(True)
+        self.quickies_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.quickies_scroller.set_child(self.quickies_listbox)
+        self.quickies_box.append(self.quickies_scroller)
 
         self._refresh_quickies_listbox()
+        self.apply_quickies_search_position()
+
+    def _build_tiny_quicky_button(self, icon_name, tooltip):
+        """A genuinely small icon button — "flat" alone (or even
+        "flat"+"circular") still keeps GtkButton/Adwaita's normal min-size
+        padding, taller than a plain text line. Building the child image
+        directly (with an explicitly small pixel_size) and constraining the
+        button itself via CSS is what actually shrinks it down to sit
+        beside the Quicky name line instead of stretching that line to
+        match the button."""
+        button = Gtk.Button()
+        button.add_css_class("flat")
+        button.add_css_class("quicky-tiny-button")
+        image = Gtk.Image.new_from_icon_name(icon_name)
+        image.set_pixel_size(12)
+        button.set_child(image)
+        button.set_valign(Gtk.Align.CENTER)
+        button.set_tooltip_text(tooltip)
+        return button
 
     def _refresh_quickies_listbox(self):
-        """Rebuilds quickies_listbox's rows from self.quickies_items."""
+        """Rebuilds quickies_listbox's rows from self.quickies_items. A
+        plain Gtk.ListBoxRow with a hand-built child, not Adw.ActionRow —
+        ActionRow always sizes its suffix buttons to the full row height
+        (title+subtitle combined), and the ask here is specifically for the
+        Edit/Delete buttons to sit compact, matching just the name line,
+        with the command preview as its own full-width line underneath
+        both the name AND the buttons."""
         child = self.quickies_listbox.get_first_child()
         while child is not None:
             next_child = child.get_next_sibling()
@@ -1360,31 +1588,69 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         for index, quicky in enumerate(self.quickies_items):
             preview = quicky.get("text", "").replace("\n", " ").strip()
-            row = Adw.ActionRow(title=quicky.get("name", ""), subtitle=preview)
-            # Not set by default (Adw.ActionRow.activatable is False unless
-            # an activatable_widget is assigned) — needed so clicking the
-            # row body (not the suffix buttons below) fires row-activated.
+
+            name_line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+
+            name_label = Gtk.Label(label=quicky.get("name", ""), xalign=0)
+            name_label.set_hexpand(True)
+            name_label.set_wrap(True)
+            name_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            name_label.add_css_class("heading")
+            name_line.append(name_label)
+
+            # No Delete button here on purpose — a single misclick would
+            # silently drop a saved Quicky with no confirmation. Deleting is
+            # still available, just moved to the right-click menu (see
+            # on_quicky_right_click) instead of a one-click button.
+            edit_btn = self._build_tiny_quicky_button("document-edit-symbolic", _("Edit"))
+            edit_btn.connect("clicked", self.on_edit_quicky_clicked, index)
+            name_line.append(edit_btn)
+
+            # "Double" play icon (two triangles, like a fast-forward glyph)
+            # for the send-AND-run action — visually distinct at a glance
+            # from the single-triangle "just send" button next to it.
+            run_btn = self._build_tiny_quicky_button("media-seek-forward-symbolic", _("Send and Run"))
+            run_btn.connect("clicked", self.on_run_quicky_clicked, index)
+            name_line.append(run_btn)
+
+            insert_btn = self._build_tiny_quicky_button("media-playback-start-symbolic", _("Send"))
+            insert_btn.connect("clicked", self.on_insert_quicky_clicked, index)
+            name_line.append(insert_btn)
+
+            row_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            row_box.set_margin_top(2)
+            row_box.set_margin_bottom(2)
+            row_box.set_margin_start(12)
+            row_box.set_margin_end(12)
+            row_box.append(name_line)
+
+            if preview:
+                preview_label = Gtk.Label(label=preview, xalign=0)
+                preview_label.set_wrap(True)
+                preview_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+                preview_label.add_css_class("caption")
+                preview_label.add_css_class("dim-label")
+                row_box.append(preview_label)
+
+            row = Gtk.ListBoxRow()
+            row.set_child(row_box)
             row.set_activatable(True)
 
-            edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
-            edit_btn.add_css_class("flat")
-            edit_btn.set_valign(Gtk.Align.CENTER)
-            edit_btn.set_tooltip_text(_("Edit"))
-            edit_btn.connect("clicked", self.on_edit_quicky_clicked, index)
-            row.add_suffix(edit_btn)
-
-            delete_btn = Gtk.Button(icon_name="edit-delete-symbolic")
-            delete_btn.add_css_class("flat")
-            delete_btn.set_valign(Gtk.Align.CENTER)
-            delete_btn.set_tooltip_text(_("Delete"))
-            delete_btn.connect("clicked", self.on_delete_quicky_clicked, index)
-            row.add_suffix(delete_btn)
+            right_click_gesture = Gtk.GestureClick.new()
+            right_click_gesture.set_button(Gdk.BUTTON_SECONDARY)
+            right_click_gesture.connect("pressed", self._on_right_press_guard)
+            right_click_gesture.connect("released", self.on_quicky_right_click)
+            row.add_controller(right_click_gesture)
 
             self.quickies_listbox.append(row)
 
     def _build_left_panel_root(self):
         """hosts_box alone if Quickies is off; otherwise a Gtk.Paned(VERTICAL)
-        with hosts_box/quickies_box ordered per quickies.position."""
+        with hosts_box/quickies_box ordered per quickies.position. The
+        divider is freely draggable; its ratio is tracked continuously and
+        restored (see self._last_quickies_split_ratio) both here — since
+        this whole Paned is rebuilt from scratch on every Quickies off/on
+        toggle, see _apply_left_panel_layout — and across app restarts."""
         if not self.settings_manager.get("quickies.enabled"):
             return self.hosts_box
 
@@ -1400,6 +1666,35 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         paned.set_resize_end_child(True)
         paned.set_shrink_start_child(True)
         paned.set_shrink_end_child(True)
+
+        def _track_quickies_split_ratio(*_args):
+            total = paned.get_height()
+            if total > 0:
+                self._last_quickies_split_ratio = paned.get_position() / total
+        paned.connect("notify::position", _track_quickies_split_ratio)
+
+        ratio = self._last_quickies_split_ratio
+        if ratio is not None:
+            # Same capped-retry-on-"map" pattern as ai_panel.py's
+            # chat_paned uses for the identical "wait for a real height"
+            # problem — an unbounded poll would spin a CPU core forever if
+            # this Paned somehow never gets mapped.
+            map_state = {"started": False}
+            def _on_map(_widget):
+                if map_state["started"]:
+                    return
+                map_state["started"] = True
+                attempts = [0]
+                def try_apply():
+                    total = paned.get_height()
+                    if total > 0:
+                        paned.set_position(int(total * ratio))
+                        return False
+                    attempts[0] += 1
+                    return attempts[0] < 30  # ~0.5s ceiling, then give up quietly
+                GLib.timeout_add(16, try_apply)
+            paned.connect("map", _on_map)
+
         return paned
 
     def _apply_left_panel_layout(self):
@@ -1421,6 +1716,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def on_add_quicky_clicked(self, button):
         self._open_quicky_dialog(None)
+
+    def on_insert_quicky_clicked(self, button, index):
+        self._insert_quicky_into_terminal(index, run=False)
+
+    def on_run_quicky_clicked(self, button, index):
+        self._insert_quicky_into_terminal(index, run=True)
 
     def on_edit_quicky_clicked(self, button, index):
         self._open_quicky_dialog(index)
@@ -1455,7 +1756,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self._refresh_quickies_listbox()
 
     def on_quicky_row_activated(self, listbox, row):
-        index = row.get_index()
+        self._insert_quicky_into_terminal(row.get_index(), run=False)
+
+    def _insert_quicky_into_terminal(self, index, run):
+        """Shared by double-click (row-activated, run=False — same as
+        before) and the row's Insert/Run buttons and context-menu entries.
+        run=True appends "\\n" so the command is fed to the shell and
+        executes immediately, instead of just sitting in the prompt."""
         if index < 0 or index >= len(self.quickies_items):
             return
         terminal = self.get_active_terminal()
@@ -1464,7 +1771,59 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         scrolled_term = self.get_active_terminal_widget()
         host_config = self.tab_data.get(scrolled_term, {}).get("config", {})
         text = self._render_template_text(self.quickies_items[index].get("text", ""), host_config)
-        terminal.feed_child(text.encode("utf-8"))  # no "\n" — insert, don't execute
+        if run:
+            text += "\n"
+        terminal.feed_child(text.encode("utf-8"))
+
+    def on_quicky_right_click(self, gesture, n_press, x, y):
+        """Shows the Quicky context menu — Insert/Run/Edit/Delete plus
+        "Send to Batch Command". Connected to 'released', same as the tab
+        and tree context menus, so the button is already up when the
+        popover grabs it."""
+        row = gesture.get_widget()
+        index = row.get_index()
+        if index < 0 or index >= len(self.quickies_items):
+            return
+        self.last_clicked_quicky_index = index
+
+        translated_x, translated_y = row.translate_coordinates(self, x, y)
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(translated_x), int(translated_y), 1, 1
+        self.popover_quicky.set_pointing_to(rect)
+        self.popover_quicky.popup()
+
+    def on_menu_quicky_insert(self, action, param):
+        if self.last_clicked_quicky_index is not None:
+            self._insert_quicky_into_terminal(self.last_clicked_quicky_index, run=False)
+
+    def on_menu_quicky_run(self, action, param):
+        if self.last_clicked_quicky_index is not None:
+            self._insert_quicky_into_terminal(self.last_clicked_quicky_index, run=True)
+
+    def on_menu_quicky_edit(self, action, param):
+        if self.last_clicked_quicky_index is not None:
+            self._open_quicky_dialog(self.last_clicked_quicky_index)
+
+    def on_menu_quicky_delete(self, action, param):
+        if self.last_clicked_quicky_index is not None:
+            self.on_delete_quicky_clicked(None, self.last_clicked_quicky_index)
+
+    def on_menu_quicky_send_to_batch(self, action, param):
+        """Opens Batch Command with this Quicky's (template-rendered)
+        command already sitting in the command field, ready to send —
+        rather than the user having to retype or copy-paste it there."""
+        if self.last_clicked_quicky_index is None:
+            return
+        if not (0 <= self.last_clicked_quicky_index < len(self.quickies_items)):
+            return
+        scrolled_term = self.get_active_terminal_widget()
+        host_config = self.tab_data.get(scrolled_term, {}).get("config", {})
+        text = self._render_template_text(
+            self.quickies_items[self.last_clicked_quicky_index].get("text", ""), host_config
+        )
+        dialog = BatchCommandDialog(self)
+        dialog.command_buffer.set_text(text)
+        dialog.present()
 
     def on_quickies_toggle_clicked(self, button):
         self.settings_manager.set("quickies.enabled", button.get_active())
@@ -1476,6 +1835,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         enabled change — rebuilds the live listbox and left_panel layout."""
         self.quickies_items = list(self.settings_manager.get("quickies.items") or [])
         self._refresh_quickies_listbox()
+        self.apply_quickies_search_position()
         self._apply_left_panel_layout()
 
     def _fuzzy_edit_distance(self, query, text):
@@ -1890,6 +2250,30 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_tab_duplicate.connect("activate", self.on_menu_tab_duplicate)
         self.add_action(action_tab_duplicate)
 
+        # Quicky row context menu — acts on self.last_clicked_quicky_index
+        # (see on_quicky_right_click), same "shared popover + last-clicked"
+        # idiom as the tab context menu above.
+        action_quicky_insert = Gio.SimpleAction.new("quicky-insert", None)
+        action_quicky_insert.connect("activate", self.on_menu_quicky_insert)
+        self.add_action(action_quicky_insert)
+
+        action_quicky_run = Gio.SimpleAction.new("quicky-run", None)
+        action_quicky_run.connect("activate", self.on_menu_quicky_run)
+        self.add_action(action_quicky_run)
+
+        action_quicky_edit = Gio.SimpleAction.new("quicky-edit", None)
+        action_quicky_edit.connect("activate", self.on_menu_quicky_edit)
+        self.add_action(action_quicky_edit)
+
+        action_quicky_send_to_batch = Gio.SimpleAction.new("quicky-send-to-batch", None)
+        action_quicky_send_to_batch.connect("activate", self.on_menu_quicky_send_to_batch)
+        self.add_action(action_quicky_send_to_batch)
+
+        action_quicky_delete = Gio.SimpleAction.new("quicky-delete", None)
+        action_quicky_delete.connect("activate", self.on_menu_quicky_delete)
+        self.add_action(action_quicky_delete)
+
+        self.last_clicked_quicky_index = None
 
         # 2. Create GMenu (models)
         # Menu for a HOST
@@ -1921,14 +2305,23 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         tab_menu.append(_("Connect SFTP"), "win.open-sftp") # Re-use existing action
         tab_menu.append(_("Connect SSH"), "win.open-ssh-from-tab")
 
+        quicky_menu = Gio.Menu()
+        quicky_menu.append(_("Insert into Terminal"), "win.quicky-insert")
+        quicky_menu.append(_("Run"), "win.quicky-run")
+        quicky_menu.append(_("Edit..."), "win.quicky-edit")
+        quicky_menu.append(_("Send to Batch Command"), "win.quicky-send-to-batch")
+        quicky_menu.append(_("Delete"), "win.quicky-delete")
+
         # 3. Create Popover (widgets)
         self.popover_host = Gtk.PopoverMenu.new_from_model(host_menu)
         self.popover_group = Gtk.PopoverMenu.new_from_model(group_menu)
         self.popover_terminal = Gtk.PopoverMenu.new_from_model(terminal_menu)
         self.popover_tab = Gtk.PopoverMenu.new_from_model(tab_menu)
+        self.popover_quicky = Gtk.PopoverMenu.new_from_model(quicky_menu)
         self.popover_host.set_parent(self) # Set parent once to the main window
         self.popover_terminal.connect("closed", self.on_popover_terminal_closed)
         self.popover_tab.set_parent(self)
+        self.popover_quicky.set_parent(self)
         self.popover_group.set_parent(self) # Set parent once to the main window
         self.popover_terminal.set_parent(self) # Attach to the main window
 
@@ -2921,8 +3314,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if self.settings_manager.get("interface.watermark_shrink_in_splits") and self.split_mode is not None:
             font_size = max(1, font_size // 2)
 
+        color, opacity = self._resolve_watermark_color_and_opacity(text)
+
         rgba = Gdk.RGBA()
-        rgba.parse(self.settings_manager.get("interface.watermark_color"))
+        rgba.parse(color)
         attrs = Pango.AttrList()
         attrs.insert(Pango.attr_size_new(font_size * Pango.SCALE))
         attrs.insert(Pango.attr_foreground_new(
@@ -2930,8 +3325,31 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         ))
         label.set_attributes(attrs)
         label.set_text(text)
-        label.set_opacity(self.settings_manager.get("interface.watermark_opacity") / 100)
+        label.set_opacity(opacity / 100)
         label.set_visible(True)
+
+    def _resolve_watermark_color_and_opacity(self, text):
+        """Adaptive watermarks: interface.watermark_rules is an ORDERED
+        list of {"pattern", "color", "opacity"} — the first (topmost) rule
+        whose regex matches the rendered watermark text wins, overriding
+        the global watermark_color/watermark_opacity. E.g. a rule matching
+        "root" ranked above one matching "arbe" means "root@arbe-svc053"
+        (which matches both) still comes out red, not blue — priority is
+        purely list order, not specificity. No match (or no rules at all)
+        falls back to the plain global settings, same as before this
+        feature existed. Malformed regex in a rule is skipped silently
+        rather than breaking every watermark in the app."""
+        for rule in self.settings_manager.get("interface.watermark_rules") or []:
+            pattern = rule.get("pattern")
+            if not pattern:
+                continue
+            try:
+                if re.search(pattern, text):
+                    return rule.get("color") or self.settings_manager.get("interface.watermark_color"), \
+                        rule.get("opacity") or self.settings_manager.get("interface.watermark_opacity")
+            except re.error:
+                continue
+        return self.settings_manager.get("interface.watermark_color"), self.settings_manager.get("interface.watermark_opacity")
 
     def apply_watermark_settings_to_all(self):
         """Mirrors apply_terminal_color_scheme_to_all above — re-applies
