@@ -62,3 +62,12 @@ CLI_MODEL_PRESETS = {
     "claude": ["opus", "sonnet", "haiku"],
     "codex": [],
 }
+
+# The terminal watermark's 9 anchor points (id, display label) — id is what's
+# stored in interface.watermark_position; window.py maps id -> a
+# (Gtk.Align, Gtk.Align) pair for actually positioning the overlay label.
+WATERMARK_POSITIONS = [
+    ("top-left", "Top Left"), ("top-center", "Top Center"), ("top-right", "Top Right"),
+    ("center-left", "Center Left"), ("center", "Center"), ("center-right", "Center Right"),
+    ("bottom-left", "Bottom Left"), ("bottom-center", "Bottom Center"), ("bottom-right", "Bottom Right"),
+]

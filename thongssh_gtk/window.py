@@ -15,9 +15,9 @@ import re
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio, GObject
 
-from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, resource_path, __version__
+from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, WATERMARK_POSITIONS, resource_path, __version__
 from .cli_providers import is_available as cli_is_available
-from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog # Removed SettingsDialog
+from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog, QuickyDialog # Removed SettingsDialog
 from .send_file import SendFileDialog, guess_remote_cwd
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
 from .paths import resolve_log_dir
@@ -43,6 +43,20 @@ WINDOW_STATE_FILE = CONFIG_DIR / "window_state.json"
 # pcre2.h and are part of PCRE2's stable ABI.
 _PCRE2_CASELESS = 0x00000008
 _PCRE2_MULTILINE = 0x00000400
+
+# WATERMARK_POSITIONS (constants.py) ids -> (halign, valign) for the
+# terminal watermark overlay — every id there must have an entry here.
+_WATERMARK_ALIGN = {
+    "top-left": (Gtk.Align.START, Gtk.Align.START),
+    "top-center": (Gtk.Align.CENTER, Gtk.Align.START),
+    "top-right": (Gtk.Align.END, Gtk.Align.START),
+    "center-left": (Gtk.Align.START, Gtk.Align.CENTER),
+    "center": (Gtk.Align.CENTER, Gtk.Align.CENTER),
+    "center-right": (Gtk.Align.END, Gtk.Align.CENTER),
+    "bottom-left": (Gtk.Align.START, Gtk.Align.END),
+    "bottom-center": (Gtk.Align.CENTER, Gtk.Align.END),
+    "bottom-right": (Gtk.Align.END, Gtk.Align.END),
+}
 
 # --- Main Window ---
 class ThongSSHWindow(Adw.ApplicationWindow):
@@ -144,6 +158,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.split_grid_btn.connect("clicked", lambda w: self.on_split_button_clicked("grid"))
         header_bar.pack_start(self.split_grid_btn)
 
+        header_bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
+        self.watermark_toggle_button = Gtk.ToggleButton(icon_name="insert-image-symbolic")
+        self.watermark_toggle_button.set_tooltip_text(_("Toggle terminal watermark"))
+        self.watermark_toggle_button.set_active(self.settings_manager.get("interface.watermark_enabled"))
+        self.watermark_toggle_button.connect("toggled", self.on_watermark_toggle_clicked)
+        header_bar.pack_start(self.watermark_toggle_button)
+
+        self.quickies_toggle_button = Gtk.ToggleButton(icon_name="edit-paste-symbolic")
+        self.quickies_toggle_button.set_tooltip_text(_("Toggle Quickies panel"))
+        self.quickies_toggle_button.set_active(self.settings_manager.get("quickies.enabled"))
+        self.quickies_toggle_button.connect("toggled", self.on_quickies_toggle_clicked)
+        header_bar.pack_start(self.quickies_toggle_button)
+
         self.paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.paned.set_resize_start_child(False)
         # Shrinkable (not just draggable-wider) — the old fixed 300px floor
@@ -154,11 +182,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.paned.set_vexpand(True)
         self.main_box.append(self.paned)
 
-        # --- Full Left Panel (Tree) ---
+        # --- Full Left Panel (Tree [+ optional Quickies]) ---
+        # left_panel always holds exactly one direct child — either
+        # hosts_box alone, or a Gtk.Paned(VERTICAL) of hosts_box/quickies_box
+        # (see _build_left_panel_root/_apply_left_panel_layout) — so
+        # on_toggle_sidebar and the width-tracking below, which only ever
+        # touch left_panel as a whole, need no changes for Quickies.
         self.left_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.left_panel.set_size_request(80, -1) # Small floor only — default width is computed later (see on_first_map)
         self.paned.set_start_child(self.left_panel)
         self.left_panel.set_visible(True)
+
+        # Everything that used to be appended straight into left_panel now
+        # goes into hosts_box instead — see the block starting at
+        # "self.tree_scrolled_window = Gtk.ScrolledWindow()" below.
+        self.hosts_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self._left_panel_root = None
 
         # Continuously track the last dragged width (only while the sidebar
         # is actually visible — toggling it off via on_toggle_sidebar must
@@ -258,7 +297,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.tree_scrolled_window = Gtk.ScrolledWindow()
         self.tree_scrolled_window.set_vexpand(True)
         self.tree_scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.left_panel.append(self.tree_scrolled_window)
+        self.hosts_box.append(self.tree_scrolled_window)
 
         # Tree model (4 columns). Using Python types works when GObject is correctly imported.
         self.main_tree_store = Gtk.TreeStore(str, str, str, object)
@@ -342,7 +381,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         self.setup_search_signals()
 
-        self.left_panel.append(self.search_bar)
+        self.hosts_box.append(self.search_bar)
         self.apply_search_bar_position()
 
         # --- (GTK4 Menu) ---
@@ -368,7 +407,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         button_box.append(add_group_btn)
         button_box.append(remove_btn)
         # The collapse button is now in the HeaderBar
-        self.left_panel.append(button_box)
+        self.hosts_box.append(button_box)
+
+        self._build_quickies_box()
+        self._apply_left_panel_layout()
 
         # --- Right Panel (Tabs, with up to 4-way split support) ---
         # Four persistent Gtk.Notebook "panes" are created up front and never
@@ -517,6 +559,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                Kept thin and low-opacity on purpose — this is meant to be a
                subtle hint of which pane is active, not a hard outline. */
             box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.35);
+        }
+        .terminal-watermark {
+            /* Color/size/opacity are set per-label from Settings (they're
+               dynamic values, not fixed classes) — this just keeps the text
+               from picking up any background/border a plain label might
+               otherwise inherit. */
+            font-weight: 600;
+            background: none;
         }
         .ai-bubble-user {
             background-color: alpha(@accent_color, 0.12);
@@ -788,6 +838,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # ✨ Add a small margin to prevent accidentally grabbing a paned handle
         notebook.set_margin_start(6)
         notebook.connect("notify::page", self.update_menu_sensitivity)
+        # Switching tabs within a pane can change which terminal is "the
+        # active terminal" for watermark scope="active", independently of
+        # _set_active_pane (which only tracks the active *pane*).
+        notebook.connect("notify::page", lambda nb, p: self.apply_watermark_settings_to_all())
 
         # Cross-pane tab movement is a fully custom drag: a Gtk.DragSource on
         # each tab label (added in _create_tab_label) hands off a plain
@@ -868,6 +922,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.active_pane = notebook
         notebook.add_css_class("thongssh-active-pane")
         self._sync_find_target_terminal()
+        # Guarded: this fires once during __init__ (line ~381) before the
+        # watermark toggle button exists yet, and open_sessions is always
+        # empty at that point anyway.
+        if hasattr(self, "watermark_toggle_button"):
+            self.apply_watermark_settings_to_all()
 
     def _get_active_notebook(self):
         """The pane new tabs should open into / menu actions should target."""
@@ -1067,6 +1126,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self._apply_pane_layout()
         self._update_split_buttons_ui()
         self.update_menu_sensitivity()
+        self.apply_watermark_settings_to_all()  # split_mode changed — re-check "shrink in splits"
 
     def on_toggle_sidebar(self, button):
         """Collapses or expands the left sidebar."""
@@ -1255,9 +1315,168 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         interface.host_search_position setting ("top" or "bottom")."""
         position = self.settings_manager.get("interface.host_search_position")
         if position == "top":
-            self.left_panel.reorder_child_after(self.search_bar, None)
+            self.hosts_box.reorder_child_after(self.search_bar, None)
         else:
-            self.left_panel.reorder_child_after(self.search_bar, self.tree_scrolled_window)
+            self.hosts_box.reorder_child_after(self.search_bar, self.tree_scrolled_window)
+
+    def _build_quickies_box(self):
+        """The 'Quickies' section — a header row (label + Add button) above
+        a scrollable list of pre-written snippets; clicking one inserts it
+        into the active terminal (see on_quicky_row_activated)."""
+        self.quickies_items = list(self.settings_manager.get("quickies.items") or [])
+
+        self.quickies_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.quickies_box.set_vexpand(True)
+
+        header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        quickies_label = Gtk.Label(label=_("Quickies"), xalign=0)
+        quickies_label.set_hexpand(True)
+        header_row.append(quickies_label)
+        add_quicky_btn = Gtk.Button(icon_name="list-add-symbolic")
+        add_quicky_btn.set_tooltip_text(_("Add Quicky"))
+        add_quicky_btn.connect("clicked", self.on_add_quicky_clicked)
+        header_row.append(add_quicky_btn)
+        self.quickies_box.append(header_row)
+
+        self.quickies_listbox = Gtk.ListBox()
+        self.quickies_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.quickies_listbox.connect("row-activated", self.on_quicky_row_activated)
+
+        quickies_scroller = Gtk.ScrolledWindow()
+        quickies_scroller.set_vexpand(True)
+        quickies_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        quickies_scroller.set_child(self.quickies_listbox)
+        self.quickies_box.append(quickies_scroller)
+
+        self._refresh_quickies_listbox()
+
+    def _refresh_quickies_listbox(self):
+        """Rebuilds quickies_listbox's rows from self.quickies_items."""
+        child = self.quickies_listbox.get_first_child()
+        while child is not None:
+            next_child = child.get_next_sibling()
+            self.quickies_listbox.remove(child)
+            child = next_child
+
+        for index, quicky in enumerate(self.quickies_items):
+            preview = quicky.get("text", "").replace("\n", " ").strip()
+            row = Adw.ActionRow(title=quicky.get("name", ""), subtitle=preview)
+            # Not set by default (Adw.ActionRow.activatable is False unless
+            # an activatable_widget is assigned) — needed so clicking the
+            # row body (not the suffix buttons below) fires row-activated.
+            row.set_activatable(True)
+
+            edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
+            edit_btn.add_css_class("flat")
+            edit_btn.set_valign(Gtk.Align.CENTER)
+            edit_btn.set_tooltip_text(_("Edit"))
+            edit_btn.connect("clicked", self.on_edit_quicky_clicked, index)
+            row.add_suffix(edit_btn)
+
+            delete_btn = Gtk.Button(icon_name="edit-delete-symbolic")
+            delete_btn.add_css_class("flat")
+            delete_btn.set_valign(Gtk.Align.CENTER)
+            delete_btn.set_tooltip_text(_("Delete"))
+            delete_btn.connect("clicked", self.on_delete_quicky_clicked, index)
+            row.add_suffix(delete_btn)
+
+            self.quickies_listbox.append(row)
+
+    def _build_left_panel_root(self):
+        """hosts_box alone if Quickies is off; otherwise a Gtk.Paned(VERTICAL)
+        with hosts_box/quickies_box ordered per quickies.position."""
+        if not self.settings_manager.get("quickies.enabled"):
+            return self.hosts_box
+
+        paned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
+        paned.set_vexpand(True)
+        if self.settings_manager.get("quickies.position") == "above":
+            paned.set_start_child(self.quickies_box)
+            paned.set_end_child(self.hosts_box)
+        else:
+            paned.set_start_child(self.hosts_box)
+            paned.set_end_child(self.quickies_box)
+        paned.set_resize_start_child(True)
+        paned.set_resize_end_child(True)
+        paned.set_shrink_start_child(True)
+        paned.set_shrink_end_child(True)
+        return paned
+
+    def _apply_left_panel_layout(self):
+        """Rebuilds left_panel's single child from current Quickies
+        settings — called on init, from the header toggle, and from
+        Settings' on_apply. Same swap-the-child-tree idiom as
+        _apply_pane_layout uses for the terminal split panes."""
+        if self._left_panel_root is not None:
+            if isinstance(self._left_panel_root, Gtk.Paned):
+                # Detach both children first — otherwise they'd still be
+                # parented to the about-to-be-discarded Paned and couldn't
+                # be reused in the next root.
+                self._left_panel_root.set_start_child(None)
+                self._left_panel_root.set_end_child(None)
+            self.left_panel.remove(self._left_panel_root)
+
+        self._left_panel_root = self._build_left_panel_root()
+        self.left_panel.append(self._left_panel_root)
+
+    def on_add_quicky_clicked(self, button):
+        self._open_quicky_dialog(None)
+
+    def on_edit_quicky_clicked(self, button, index):
+        self._open_quicky_dialog(index)
+
+    def on_delete_quicky_clicked(self, button, index):
+        del self.quickies_items[index]
+        self._save_quickies()
+
+    def _open_quicky_dialog(self, index):
+        existing = self.quickies_items[index] if index is not None else None
+        dialog = QuickyDialog(self, existing)
+
+        def on_response(dialog, response):
+            if response == Gtk.ResponseType.OK:
+                name, text = dialog.get_data()
+                if name:
+                    if index is None:
+                        self.quickies_items.append({"name": name, "text": text})
+                    else:
+                        self.quickies_items[index] = {"name": name, "text": text}
+                    self._save_quickies()
+
+        dialog.connect("response", on_response)
+        dialog.present()
+
+    def _save_quickies(self):
+        """Persists immediately — Quickies edited from the panel take
+        effect right away, no separate Settings 'Apply' step (same as the
+        header toggle buttons)."""
+        self.settings_manager.set("quickies.items", self.quickies_items)
+        self.settings_manager.save()
+        self._refresh_quickies_listbox()
+
+    def on_quicky_row_activated(self, listbox, row):
+        index = row.get_index()
+        if index < 0 or index >= len(self.quickies_items):
+            return
+        terminal = self.get_active_terminal()
+        if terminal is None:
+            return
+        scrolled_term = self.get_active_terminal_widget()
+        host_config = self.tab_data.get(scrolled_term, {}).get("config", {})
+        text = self._render_template_text(self.quickies_items[index].get("text", ""), host_config)
+        terminal.feed_child(text.encode("utf-8"))  # no "\n" — insert, don't execute
+
+    def on_quickies_toggle_clicked(self, button):
+        self.settings_manager.set("quickies.enabled", button.get_active())
+        self.settings_manager.save()
+        self._apply_left_panel_layout()
+
+    def refresh_quickies_panel(self):
+        """Called by Settings' on_apply after quickies.items/position/
+        enabled change — rebuilds the live listbox and left_panel layout."""
+        self.quickies_items = list(self.settings_manager.get("quickies.items") or [])
+        self._refresh_quickies_listbox()
+        self._apply_left_panel_layout()
 
     def _fuzzy_edit_distance(self, query, text):
         """Minimum "optimal string alignment" distance between `query` and
@@ -2645,6 +2864,83 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         for terminal, _pid in self.open_sessions.values():
             self._apply_color_scheme_to_terminal(terminal, scheme_key)
 
+    def on_watermark_toggle_clicked(self, button):
+        self.settings_manager.set("interface.watermark_enabled", button.get_active())
+        self.settings_manager.save()
+        self.apply_watermark_settings_to_all()
+
+    def _render_template_text(self, template, host_config):
+        """Same $name/$host/$user substitution as _prepare_command, minus
+        its shlex.quote — used for plain text (watermark labels, inserted
+        Quickies), never a shell command line."""
+        if not template:
+            return ""
+        host_str = host_config.get("host", "")
+        user, _sep, host = host_str.rpartition('@')
+        for placeholder, value in {"$name": host_config.get("name", "") or "", "$host": host, "$user": user}.items():
+            template = template.replace(placeholder, value)
+        return template
+
+    def _update_watermark_for_tab(self, scrolled_term):
+        """Refreshes one terminal tab's watermark label — text, position,
+        styling, and visibility — from current settings."""
+        tab_info = self.tab_data.get(scrolled_term)
+        if not tab_info or tab_info.get("type") != "terminal":
+            return
+        label = tab_info.get("watermark_label")
+        if label is None:
+            return
+
+        if not self.watermark_toggle_button.get_active():
+            label.set_visible(False)
+            return
+
+        if self.settings_manager.get("interface.watermark_scope") == "active" \
+                and scrolled_term is not self.get_active_terminal_widget():
+            label.set_visible(False)
+            return
+
+        text = self._render_template_text(
+            self.settings_manager.get("interface.watermark_text"), tab_info["config"]
+        )
+        if not text:
+            label.set_visible(False)
+            return
+
+        halign, valign = _WATERMARK_ALIGN.get(
+            self.settings_manager.get("interface.watermark_position"), (Gtk.Align.CENTER, Gtk.Align.CENTER)
+        )
+        label.set_halign(halign)
+        label.set_valign(valign)
+        label.set_margin_start(12)
+        label.set_margin_end(12)
+        label.set_margin_top(12)
+        label.set_margin_bottom(12)
+
+        font_size = self.settings_manager.get("interface.watermark_font_size")
+        if self.settings_manager.get("interface.watermark_shrink_in_splits") and self.split_mode is not None:
+            font_size = max(1, font_size // 2)
+
+        rgba = Gdk.RGBA()
+        rgba.parse(self.settings_manager.get("interface.watermark_color"))
+        attrs = Pango.AttrList()
+        attrs.insert(Pango.attr_size_new(font_size * Pango.SCALE))
+        attrs.insert(Pango.attr_foreground_new(
+            int(rgba.red * 65535), int(rgba.green * 65535), int(rgba.blue * 65535)
+        ))
+        label.set_attributes(attrs)
+        label.set_text(text)
+        label.set_opacity(self.settings_manager.get("interface.watermark_opacity") / 100)
+        label.set_visible(True)
+
+    def apply_watermark_settings_to_all(self):
+        """Mirrors apply_terminal_color_scheme_to_all above — re-applies
+        watermark settings to every open tab immediately, whether it's the
+        toggle button, a Settings change, or the active pane/tab/split
+        layout changing which tab(s) should show one."""
+        for scrolled_term in list(self.open_sessions.keys()):
+            self._update_watermark_for_tab(scrolled_term)
+
     def _continue_session(self, config, username_from_prompt, existing_terminal_widget=None):
         """Second part of the logic, called AFTER getting the username."""
 
@@ -2803,10 +3099,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 scroll_controller.connect("scroll", self.on_terminal_scroll)
                 terminal.add_controller(scroll_controller)
 
+                # The watermark label sits in its own Gtk.Overlay above the
+                # terminal, not inside the ScrolledWindow's scrolled content —
+                # so it stays fixed in the viewport instead of scrolling away
+                # with the terminal's own content. can_target(False) makes it
+                # click-through: pointer events fall straight to the terminal.
+                watermark_label = Gtk.Label()
+                watermark_label.set_can_target(False)
+                watermark_label.add_css_class("terminal-watermark")
+                term_overlay = Gtk.Overlay()
+                term_overlay.set_child(terminal)
+                term_overlay.add_overlay(watermark_label)
+
                 scrolled_term = Gtk.ScrolledWindow()
                 # ✨ This ensures the terminal gets the correct size allocation
                 scrolled_term.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-                scrolled_term.set_child(terminal)
+                scrolled_term.set_child(term_overlay)
 
                 tab_label_box, close_btn = self._create_tab_label("utilities-terminal-symbolic", config['name'])
 
@@ -2820,11 +3128,15 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 resolved_config['host'] = resolved_host_str
 
                 self.open_sessions[scrolled_term] = (terminal, pid)
-                self.tab_data[scrolled_term] = {"type": "terminal", "config": resolved_config, "log_path": None}
+                self.tab_data[scrolled_term] = {
+                    "type": "terminal", "config": resolved_config, "log_path": None,
+                    "watermark_label": watermark_label,
+                }
                 close_btn.connect("clicked", self.on_tab_close_button_clicked, scrolled_term, pid)
                 terminal.connect("child-exited", self.on_ssh_process_exited, scrolled_term)
                 if config.get("save_log", False):
                     self._start_session_logging(scrolled_term)
+                self.apply_watermark_settings_to_all()
             else: # This is a reconnect, just update the PID
                 self.open_sessions[existing_terminal_widget] = (terminal, pid)
                 self._stop_session_logging(existing_terminal_widget)
@@ -2835,6 +3147,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 if config.get("save_log", False):
                     self._start_session_logging(existing_terminal_widget)
                 terminal.grab_focus()
+                self.apply_watermark_settings_to_all()
 
         except Exception as e:
             logging.critical(f"Critical error spawning VTE: {e}")

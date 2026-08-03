@@ -80,24 +80,38 @@ def _finalize_segment(in_code, buf):
     return ("code" if in_code else "text", "\n".join(buf))
 
 
-def render_markdown_into_box(box: Gtk.Box, markdown_text: str):
+def render_markdown_into_box(box: Gtk.Box, markdown_text: str, leading_widget=None):
     """Replaces box's children with markdown_text, rendered as one widget
     per segment (plain-text Gtk.TextView, or a code-block widget with a
-    Copy button)."""
+    Copy button). leading_widget, if given (the chat avatar), is anchored
+    inline as the very first character of the very first text segment —
+    see _build_text_widget — so it flows with the text like any other
+    glyph instead of claiming a row/column of its own."""
     child = box.get_first_child()
     while child is not None:
         next_child = child.get_next_sibling()
         box.remove(child)
         child = next_child
 
-    for kind, content in _split_segments(markdown_text):
+    segments = _split_segments(markdown_text)
+    used_leading = False
+    for kind, content in segments:
         if kind == "code":
+            if leading_widget is not None and not used_leading:
+                # A code block can't hold the anchor itself (see
+                # _build_code_widget) — give the avatar its own otherwise-
+                # empty text line right before it instead of dropping it.
+                box.append(_build_text_widget("", leading_widget=leading_widget))
+                used_leading = True
             box.append(_build_code_widget(content))
         elif content.strip():
-            box.append(_build_text_widget(content))
+            box.append(_build_text_widget(content, leading_widget=None if used_leading else leading_widget))
+            used_leading = used_leading or leading_widget is not None
+    if leading_widget is not None and not used_leading:
+        box.append(_build_text_widget("", leading_widget=leading_widget))
 
 
-def _build_text_widget(text_content):
+def _build_text_widget(text_content, leading_widget=None):
     text_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
     text_view.set_editable(False)
     text_view.set_cursor_visible(False)
@@ -115,6 +129,15 @@ def _build_text_widget(text_content):
     text_view.add_css_class("markdown-plain-text")
     buffer = Gtk.TextBuffer(tag_table=_get_tag_table())
     text_view.set_buffer(buffer)
+
+    if leading_widget is not None:
+        # A child anchor makes the avatar an inline "character" in the text
+        # flow itself — it sits at the start of line one, and if that line
+        # wraps, the continuation goes back to the left margin like it
+        # would after any other letter, not hanging-indented under it.
+        anchor = buffer.create_child_anchor(buffer.get_start_iter())
+        text_view.add_child_at_anchor(leading_widget, anchor)
+        buffer.insert(buffer.get_end_iter(), " ")
 
     for line in text_content.split("\n"):
         list_match = _LIST_ITEM_RE.match(line)

@@ -6,7 +6,7 @@ import stat
 import logging
 import uuid
 
-from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS
+from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS, WATERMARK_POSITIONS
 from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
 from .settings import DEFAULT_SETTINGS
 from .launcher_icon import apply_launcher_icon
@@ -720,6 +720,94 @@ class GroupDialog(ResponseDialog):
         return new_name, parent_iter
 
 
+class QuickyDialog(ResponseDialog):
+    """Add/edit a single Quicky: a name + a multi-line text snippet that
+    gets inserted — not executed — into the active terminal (see
+    ThongSSHWindow.on_quicky_row_activated)."""
+    def __init__(self, parent_window, existing=None):
+        super().__init__(transient_for=parent_window, modal=True)
+        self.set_default_size(420, 320)
+        is_edit_mode = existing is not None
+
+        header_bar = Adw.HeaderBar()
+        header_bar.set_title_widget(Adw.WindowTitle(
+            title=_("Edit Quicky") if is_edit_mode else _("Add Quicky")
+        ))
+
+        self.ok_button = Gtk.Button(label=_("Save") if is_edit_mode else _("Add"))
+        self.ok_button.add_css_class("suggested-action")
+        self.ok_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.OK))
+        header_bar.pack_end(self.ok_button)
+
+        cancel_button = Gtk.Button(label=_("Cancel"))
+        cancel_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.CANCEL))
+        header_bar.pack_start(cancel_button)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main_box.append(header_bar)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                               margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        main_box.append(content_box)
+        self.set_content(main_box)
+
+        self.name_entry = Gtk.Entry(text=existing.get("name", "") if existing else "")
+        self.name_entry.set_placeholder_text(_("Name"))
+        self.name_entry.connect("changed", self.on_validate)
+        content_box.append(self.name_entry)
+
+        # Multi-line, Ctrl+Enter-to-save — same pattern as
+        # BatchCommandDialog.command_view: plain Enter just inserts a
+        # newline, since a Quicky's own text can legitimately span lines.
+        self.text_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        self.text_view.add_css_class("card")
+        self.text_view.set_top_margin(6)
+        self.text_view.set_bottom_margin(6)
+        self.text_view.set_left_margin(8)
+        self.text_view.set_right_margin(8)
+        self.text_buffer = self.text_view.get_buffer()
+        if existing:
+            self.text_buffer.set_text(existing.get("text", ""))
+
+        text_key_controller = Gtk.EventControllerKey.new()
+        text_key_controller.connect("key-pressed", self.on_text_key_pressed)
+        self.text_view.add_controller(text_key_controller)
+
+        text_scroller = Gtk.ScrolledWindow()
+        text_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        text_scroller.set_min_content_height(80)
+        text_scroller.set_max_content_height(200)
+        text_scroller.set_propagate_natural_height(True)
+        text_scroller.set_vexpand(True)
+        text_scroller.set_child(self.text_view)
+        content_box.append(text_scroller)
+
+        hint_label = Gtk.Label(
+            label=_("Available variables: $name, $host, $user"),
+            xalign=0, wrap=True, css_classes=["dim-label", "caption"]
+        )
+        content_box.append(hint_label)
+
+        self.on_validate()
+        self.name_entry.grab_focus()
+
+    def on_validate(self, *_args):
+        self.ok_button.set_sensitive(len(self.name_entry.get_text().strip()) > 0)
+
+    def on_text_key_pressed(self, controller, keyval, keycode, modifier):
+        is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
+        if is_ctrl and keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            if self.ok_button.get_sensitive():
+                self.response(Gtk.ResponseType.OK)
+            return True
+        return False
+
+    def get_data(self):
+        name = self.name_entry.get_text().strip()
+        start, end = self.text_buffer.get_bounds()
+        text = self.text_buffer.get_text(start, end, False)
+        return name, text
+
 
 # --- CLASS: Settings Dialog ---
 class SettingsDialog(Adw.Window):
@@ -871,6 +959,93 @@ class SettingsDialog(Adw.Window):
         )
         self.close_on_disconnect_row.set_active(self.settings_manager.get("terminal.close_on_disconnect"))
         group_behavior.add(self.close_on_disconnect_row)
+
+        # --- Watermark (the header-bar button next to the split buttons is
+        # the same live on/off switch as the row below — either one flips
+        # interface.watermark_enabled, so they never fall out of sync) ---
+        group_watermark = Adw.PreferencesGroup(title=_("Watermark"))
+        page_terminal.add(group_watermark)
+
+        self.watermark_enabled_row = Adw.SwitchRow(
+            title=_("Enabled on start"),
+            subtitle=_("Whether the watermark is on when the app launches — same switch as the header-bar button")
+        )
+        self.watermark_enabled_row.set_active(self.settings_manager.get("interface.watermark_enabled"))
+        group_watermark.add(self.watermark_enabled_row)
+
+        self.watermark_text_row = Adw.EntryRow(title=_("Text"))
+        self.watermark_text_row.set_text(self.settings_manager.get("interface.watermark_text"))
+        watermark_text_note = Gtk.Label(
+            label=_("Available variables: $name, $host, $user"),
+            xalign=0, wrap=True, css_classes=["dim-label", "caption"]
+        )
+        group_watermark.add(self.watermark_text_row)
+        group_watermark.add(watermark_text_note)
+
+        self._watermark_position_ids = [pos_id for pos_id, _label in WATERMARK_POSITIONS]
+        position_model = Gtk.StringList.new([label for _pos_id, label in WATERMARK_POSITIONS])
+        self.watermark_position_row = Adw.ComboRow(title=_("Position"), model=position_model)
+        try:
+            current_position_index = self._watermark_position_ids.index(
+                self.settings_manager.get("interface.watermark_position")
+            )
+        except ValueError:
+            current_position_index = 0
+        self.watermark_position_row.set_selected(current_position_index)
+        group_watermark.add(self.watermark_position_row)
+
+        self.watermark_font_size_row = Adw.SpinRow(
+            title=_("Font Size"),
+            adjustment=Gtk.Adjustment(lower=6, upper=96, step_increment=1)
+        )
+        self.watermark_font_size_row.set_value(self.settings_manager.get("interface.watermark_font_size"))
+        group_watermark.add(self.watermark_font_size_row)
+
+        watermark_color_row = Adw.ActionRow(title=_("Color"))
+        self.watermark_color_button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog())
+        watermark_color_rgba = Gdk.RGBA()
+        watermark_color_rgba.parse(self.settings_manager.get("interface.watermark_color"))
+        self.watermark_color_button.set_rgba(watermark_color_rgba)
+        watermark_color_row.add_suffix(self.watermark_color_button)
+        watermark_color_row.set_activatable_widget(self.watermark_color_button)
+        group_watermark.add(watermark_color_row)
+
+        self.watermark_opacity_row = Adw.SpinRow(
+            title=_("Opacity (%)"),
+            adjustment=Gtk.Adjustment(lower=1, upper=100, step_increment=1)
+        )
+        self.watermark_opacity_row.set_value(self.settings_manager.get("interface.watermark_opacity"))
+        group_watermark.add(self.watermark_opacity_row)
+
+        watermark_scope_model = Gtk.StringList.new([_("Active terminal only"), _("All panes")])
+        self.watermark_scope_row = Adw.ComboRow(title=_("Show on"), model=watermark_scope_model)
+        watermark_scope_map = {"active": 0, "all": 1}
+        self.watermark_scope_row.set_selected(
+            watermark_scope_map.get(self.settings_manager.get("interface.watermark_scope"), 0)
+        )
+        group_watermark.add(self.watermark_scope_row)
+
+        self.watermark_shrink_row = Adw.SwitchRow(
+            title=_("Shrink in split view"),
+            subtitle=_("Halve the size while any split layout is active")
+        )
+        self.watermark_shrink_row.set_active(self.settings_manager.get("interface.watermark_shrink_in_splits"))
+        group_watermark.add(self.watermark_shrink_row)
+
+        # Grey out the "how" rows while the watermark is off — same idiom
+        # as _update_ai_sensitivity above, minus the enable switch itself.
+        watermark_detail_widgets = [
+            self.watermark_text_row, watermark_text_note, self.watermark_position_row,
+            self.watermark_font_size_row, watermark_color_row, self.watermark_opacity_row,
+            self.watermark_scope_row, self.watermark_shrink_row,
+        ]
+        def _update_watermark_sensitivity(*_args):
+            enabled = self.watermark_enabled_row.get_active()
+            for widget in watermark_detail_widgets:
+                widget.set_sensitive(enabled)
+        self.watermark_enabled_row.connect("notify::active", _update_watermark_sensitivity)
+        _update_watermark_sensitivity()
+
         # --- Client Options Page ---
         page_client = Adw.PreferencesPage()
         page_client.set_title(_("Client Options"))
@@ -956,6 +1131,74 @@ class SettingsDialog(Adw.Window):
         commands_box.append(note_label)
 
         group_commands.add(commands_box)
+
+        # --- Quickies Page (insert-not-execute text snippets — the header-
+        # bar button next to the split/watermark buttons is the same live
+        # on/off switch as the row below, same pairing as the watermark) ---
+        page_quickies = Adw.PreferencesPage()
+        page_quickies.set_title(_("Quickies"))
+        page_quickies.set_icon_name("insert-text-symbolic")
+
+        group_quickies_settings = Adw.PreferencesGroup(title=_("Panel"))
+        page_quickies.add(group_quickies_settings)
+
+        self.quickies_enabled_row = Adw.SwitchRow(
+            title=_("Enabled on start"),
+            subtitle=_("Whether the Quickies panel is shown when the app launches — same switch as the header-bar button")
+        )
+        self.quickies_enabled_row.set_active(self.settings_manager.get("quickies.enabled"))
+        group_quickies_settings.add(self.quickies_enabled_row)
+
+        quickies_position_model = Gtk.StringList.new([_("Above hosts"), _("Below hosts")])
+        self.quickies_position_row = Adw.ComboRow(title=_("Position"), model=quickies_position_model)
+        quickies_position_map = {"above": 0, "below": 1}
+        self.quickies_position_row.set_selected(
+            quickies_position_map.get(self.settings_manager.get("quickies.position"), 1)
+        )
+        group_quickies_settings.add(self.quickies_position_row)
+
+        group_quickies_items = Adw.PreferencesGroup(title=_("Snippets"))
+        page_quickies.add(group_quickies_items)
+
+        quickies_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        quickies_scrolled_view = Gtk.ScrolledWindow(vexpand=True)
+
+        self.quickies_store = Gtk.ListStore(str, str)
+        for quicky in self.settings_manager.get("quickies.items"):
+            self.quickies_store.append([quicky.get("name", ""), quicky.get("text", "")])
+
+        self.quickies_view = Gtk.TreeView(model=self.quickies_store)
+
+        renderer_quicky_name = Gtk.CellRendererText(editable=True)
+        renderer_quicky_name.connect("edited", self.on_quicky_row_edited, 0)
+        col_quicky_name = Gtk.TreeViewColumn(_("Name"), renderer_quicky_name, text=0)
+        self.quickies_view.append_column(col_quicky_name)
+
+        renderer_quicky_text = Gtk.CellRendererText(editable=True)
+        renderer_quicky_text.connect("edited", self.on_quicky_row_edited, 1)
+        col_quicky_text = Gtk.TreeViewColumn(_("Text"), renderer_quicky_text, text=1)
+        self.quickies_view.append_column(col_quicky_text)
+
+        quickies_scrolled_view.set_child(self.quickies_view)
+        quickies_box.append(quickies_scrolled_view)
+
+        quickies_buttons_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.START)
+        quickies_add_button = Gtk.Button(icon_name="list-add-symbolic")
+        quickies_add_button.connect("clicked", self.on_add_quicky_row)
+        quickies_remove_button = Gtk.Button(icon_name="list-remove-symbolic")
+        quickies_remove_button.connect("clicked", self.on_remove_quicky_row)
+        quickies_buttons_box.append(quickies_add_button)
+        quickies_buttons_box.append(quickies_remove_button)
+        quickies_box.append(quickies_buttons_box)
+
+        quickies_note_label = Gtk.Label(
+            label=_("Inserted into the active terminal, not executed.\nAvailable variables: $name, $host, $user"),
+            halign=Gtk.Align.START,
+            css_classes=["dim-label"]
+        )
+        quickies_box.append(quickies_note_label)
+
+        group_quickies_items.add(quickies_box)
 
         # --- General Page (app icon, host tree look & feel, debug logging) ---
         page_interface = Adw.PreferencesPage()
@@ -1392,6 +1635,7 @@ class SettingsDialog(Adw.Window):
         self.stack.add_titled_with_icon(page_sftp, "sftp", _("SFTP"), "folder-remote-symbolic")
         self.stack.add_titled_with_icon(page_client, "client", _("Client Options"), "network-wired-symbolic")
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
+        self.stack.add_titled_with_icon(page_quickies, "quickies", _("Quickies"), "insert-text-symbolic")
         self.stack.add_titled_with_icon(page_interface, "interface", _("General"), "preferences-desktop-appearance-symbolic")
         # API and CLI Client are nested tabs *inside* this one "AI" entry
         # (see the Gtk.Stack/StackSwitcher built above) — not separate
@@ -1553,6 +1797,18 @@ class SettingsDialog(Adw.Window):
             user_commands.append({"name": row[0], "command": row[1]})
         self.settings_manager.set("user_commands", user_commands)
 
+        # Quickies
+        self.settings_manager.set("quickies.enabled", self.quickies_enabled_row.get_active())
+        quickies_position_map_rev = {0: "above", 1: "below"}
+        self.settings_manager.set(
+            "quickies.position",
+            quickies_position_map_rev.get(self.quickies_position_row.get_selected(), "below")
+        )
+        quickies_items = []
+        for row in self.quickies_store:
+            quickies_items.append({"name": row[0], "text": row[1]})
+        self.settings_manager.set("quickies.items", quickies_items)
+
         self.settings_manager.set("sftp.local_default_path", self.sftp_path_row.get_text())
         sort_col_map_rev = {0: "name", 1: "size", 2: "date"}
         self.settings_manager.set("sftp.local_default_sort_column", sort_col_map_rev.get(self.sftp_sort_col_row.get_selected(), "name"))
@@ -1574,6 +1830,22 @@ class SettingsDialog(Adw.Window):
         )
 
         self.settings_manager.set("interface.debug_mode", self.debug_mode_row.get_active())
+
+        self.settings_manager.set("interface.watermark_enabled", self.watermark_enabled_row.get_active())
+        self.settings_manager.set("interface.watermark_text", self.watermark_text_row.get_text())
+        self.settings_manager.set(
+            "interface.watermark_position",
+            self._watermark_position_ids[self.watermark_position_row.get_selected()]
+        )
+        self.settings_manager.set("interface.watermark_font_size", int(self.watermark_font_size_row.get_value()))
+        self.settings_manager.set("interface.watermark_color", _rgba_to_hex(self.watermark_color_button.get_rgba()))
+        self.settings_manager.set("interface.watermark_opacity", int(self.watermark_opacity_row.get_value()))
+        watermark_scope_map_rev = {0: "active", 1: "all"}
+        self.settings_manager.set(
+            "interface.watermark_scope",
+            watermark_scope_map_rev.get(self.watermark_scope_row.get_selected(), "active")
+        )
+        self.settings_manager.set("interface.watermark_shrink_in_splits", self.watermark_shrink_row.get_active())
 
         # --- AI ---
         self.settings_manager.set("ai.disabled", self.ai_disabled_row.get_active())
@@ -1653,6 +1925,18 @@ class SettingsDialog(Adw.Window):
         # gets recolored immediately, not just the next new tab.
         self.parent_window.apply_terminal_color_scheme_to_all()
 
+        # And for the watermark — sync the header-bar toggle's visual state
+        # to the "Enabled on start" row (same underlying setting, either
+        # control can flip it), then every already-open terminal tab picks
+        # up the new enabled/text/position/size/color/opacity/scope state.
+        self.parent_window.watermark_toggle_button.set_active(self.watermark_enabled_row.get_active())
+        self.parent_window.apply_watermark_settings_to_all()
+
+        # And for Quickies — same sync as the watermark above, then rebuild
+        # the live panel's listbox and left-panel layout from the new items/position.
+        self.parent_window.quickies_toggle_button.set_active(self.quickies_enabled_row.get_active())
+        self.parent_window.refresh_quickies_panel()
+
         # And for the AI header buttons — react to new/removed keys and
         # custom providers immediately, no restart needed.
         self.parent_window.refresh_ai_provider_buttons()
@@ -1708,6 +1992,21 @@ class SettingsDialog(Adw.Window):
         if tree_iter:
             model.remove(tree_iter)
 
+    def on_quicky_row_edited(self, widget, path, text, column_index):
+        """Saves the edited text in the Quickies ListStore."""
+        self.quickies_store[path][column_index] = text
+
+    def on_add_quicky_row(self, button):
+        """Adds a new empty row to the Quickies list."""
+        self.quickies_store.append([_("New Quicky"), ""])
+
+    def on_remove_quicky_row(self, button):
+        """Removes the selected row from the Quickies list."""
+        selection = self.quickies_view.get_selection()
+        model, tree_iter = selection.get_selected()
+        if tree_iter:
+            model.remove(tree_iter)
+
 
     def on_reset(self, button):
         """Reset the settings on the current page to their default values."""
@@ -1724,6 +2023,22 @@ class SettingsDialog(Adw.Window):
             except ValueError:
                 self.scheme_row.set_selected(0)
             self.custom_scheme_switch.set_active(False)
+
+            self.watermark_enabled_row.set_active(DEFAULT_SETTINGS["interface.watermark_enabled"])
+            self.watermark_text_row.set_text(DEFAULT_SETTINGS["interface.watermark_text"])
+            try:
+                self.watermark_position_row.set_selected(
+                    self._watermark_position_ids.index(DEFAULT_SETTINGS["interface.watermark_position"])
+                )
+            except ValueError:
+                self.watermark_position_row.set_selected(0)
+            self.watermark_font_size_row.set_value(DEFAULT_SETTINGS["interface.watermark_font_size"])
+            default_watermark_rgba = Gdk.RGBA()
+            default_watermark_rgba.parse(DEFAULT_SETTINGS["interface.watermark_color"])
+            self.watermark_color_button.set_rgba(default_watermark_rgba)
+            self.watermark_opacity_row.set_value(DEFAULT_SETTINGS["interface.watermark_opacity"])
+            self.watermark_scope_row.set_selected({"active": 0, "all": 1}.get(DEFAULT_SETTINGS["interface.watermark_scope"], 0))
+            self.watermark_shrink_row.set_active(DEFAULT_SETTINGS["interface.watermark_shrink_in_splits"])
         elif current_page_name == "client":
             self.ssh_path_row.set_text(DEFAULT_SETTINGS["client.ssh_path"])
             self.telnet_path_row.set_text(DEFAULT_SETTINGS["client.telnet_path"])
@@ -1734,6 +2049,12 @@ class SettingsDialog(Adw.Window):
             default_commands = DEFAULT_SETTINGS.get("user_commands", [])
             for cmd in default_commands:
                 self.commands_store.append([cmd.get("name", ""), cmd.get("command", "")])
+        elif current_page_name == "quickies":
+            self.quickies_enabled_row.set_active(DEFAULT_SETTINGS["quickies.enabled"])
+            self.quickies_position_row.set_selected({"above": 0, "below": 1}.get(DEFAULT_SETTINGS["quickies.position"], 1))
+            self.quickies_store.clear()
+            for quicky in DEFAULT_SETTINGS.get("quickies.items", []):
+                self.quickies_store.append([quicky.get("name", ""), quicky.get("text", "")])
         elif current_page_name == "sftp":
             self.sftp_path_row.set_text(DEFAULT_SETTINGS["sftp.local_default_path"])
             sort_col_map = {"name": 0, "size": 1, "date": 2}

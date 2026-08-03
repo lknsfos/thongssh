@@ -676,23 +676,26 @@ class AiPanel(Gtk.Box):
         return avatar
 
     def _append_bubble(self, role, content, provider_id=None):
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        row.set_valign(Gtk.Align.START)
-        avatar = self._build_avatar(role, provider_id)
-        avatar.set_valign(Gtk.Align.START)
-        row.append(avatar)
-
+        # The avatar used to sit in its own column to the left of the
+        # bubble (min 22px + 8px spacing) — a fixed ~30px tax on every
+        # single message in a panel that's often only ~220px wide to
+        # begin with. It's now anchored inline as the first character of
+        # the message's own first line (see render_markdown_into_box's
+        # leading_widget), so it costs neither an extra column nor an
+        # extra row — text wraps back to the left margin exactly as it
+        # would after any other leading character.
         bubble = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         bubble.set_hexpand(True)
         bubble.add_css_class("ai-bubble-user" if role == "user" else "ai-bubble-assistant")
-        render_markdown_into_box(bubble, content)
-        row.append(bubble)
 
-        self.transcript_box.append(row)
-        # "map" fires exactly when GTK first gives this row a real
+        avatar = self._build_avatar(role, provider_id)
+        render_markdown_into_box(bubble, content, leading_widget=avatar)
+
+        self.transcript_box.append(bubble)
+        # "map" fires exactly when GTK first gives this bubble a real
         # allocation — a more precisely-timed hook than guessing a delay,
         # on top of the belt-and-suspenders polling in _scroll_to_bottom.
-        row.connect("map", self._on_new_message_mapped)
+        bubble.connect("map", self._on_new_message_mapped)
         self._force_relayout()
         self._scroll_to_bottom()
 

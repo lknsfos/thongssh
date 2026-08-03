@@ -30,6 +30,17 @@ DEFAULT_SETTINGS = {
     "interface.tree_row_striping": False,
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default
     "interface.host_search_position": "bottom", # "top" or "bottom" — where the host-tree search bar sits
+    "interface.watermark_enabled": False, # mirrored by the header toggle button, not a Settings-page switch
+    "interface.watermark_text": "$user@$host", # see constants.py's _prepare_command note: $name, $host, $user
+    "interface.watermark_position": "center", # one of constants.WATERMARK_POSITIONS' ids
+    "interface.watermark_font_size": 24,
+    "interface.watermark_color": "#ffffff",
+    "interface.watermark_opacity": 15, # percent, 1-100
+    "interface.watermark_scope": "active", # "active" (focused terminal only) or "all" (every open pane)
+    "interface.watermark_shrink_in_splits": True, # halve the font size while any split layout is active
+    "quickies.enabled": False, # mirrored by the header toggle button, not a Settings-page-only switch
+    "quickies.position": "below", # "above" or "below" the host tree, within the left panel
+    "quickies.items": [], # [{"name": str, "text": str}, ...] — inserted (not executed) into the active terminal
     "ai.system_prompt": (
         "You are a read-only analysis assistant for a terminal session. You have no shell, "
         "tool, or network access of your own — never attempt to run, execute, connect to, "
