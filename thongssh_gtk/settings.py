@@ -34,10 +34,11 @@ DEFAULT_SETTINGS = {
     "interface.watermark_text": "$user@$host", # see constants.py's _prepare_command note: $name, $host, $user
     "interface.watermark_position": "center", # one of constants.WATERMARK_POSITIONS' ids
     "interface.watermark_font_size": 24,
+    "interface.watermark_font_family": "Sans", # deliberately excluded from Sync — see settings_sync.py's TERMINAL_SETTINGS_KEYS, same reasoning as terminal.font (a font on one machine often just isn't installed on another)
     "interface.watermark_color": "#ffffff",
     "interface.watermark_opacity": 15, # percent, 1-100
     "interface.watermark_scope": "active", # "active" (focused terminal only) or "all" (every open pane)
-    "interface.watermark_shrink_in_splits": True, # halve the font size while any split layout is active
+    "interface.watermark_shrink_percent": 100, # 100 = off (no shrink); 90/80/.../10 = shrink to that % of the base size while any split layout is active
     "interface.watermark_rules": [], # [{"pattern": regex_str, "color": "#rrggbb", "opacity": int(1-100)}, ...], ordered — first (topmost) match against the rendered watermark text wins, overriding watermark_color/watermark_opacity above; no match falls back to those global defaults
     "quickies.enabled": False, # mirrored by the header toggle button, not a Settings-page-only switch
     "quickies.position": "below", # "above" or "below" the host tree, within the left panel

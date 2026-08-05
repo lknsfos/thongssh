@@ -3363,8 +3363,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         label.set_margin_bottom(12)
 
         font_size = self.settings_manager.get("interface.watermark_font_size")
-        if self.settings_manager.get("interface.watermark_shrink_in_splits") and self.split_mode is not None:
-            font_size = max(1, font_size // 2)
+        shrink_percent = self.settings_manager.get("interface.watermark_shrink_percent") or 100
+        if shrink_percent < 100 and self.split_mode is not None:
+            font_size = max(1, int(font_size * shrink_percent / 100))
 
         color, opacity = self._resolve_watermark_color_and_opacity(text)
 
@@ -3372,6 +3373,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         rgba.parse(color)
         attrs = Pango.AttrList()
         attrs.insert(Pango.attr_size_new(font_size * Pango.SCALE))
+        font_family = self.settings_manager.get("interface.watermark_font_family")
+        if font_family:
+            attrs.insert(Pango.attr_family_new(font_family))
         attrs.insert(Pango.attr_foreground_new(
             int(rgba.red * 65535), int(rgba.green * 65535), int(rgba.blue * 65535)
         ))

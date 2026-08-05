@@ -69,10 +69,16 @@ def reset_sync_state():
 HOST_FIELDS_TO_SYNC = [f for f in hosts_config.HOST_CONFIG_TEMPLATE if f != "key_path"]
 
 TERMINAL_SETTINGS_KEYS = [
-    "terminal.scrollback_lines", "terminal.font", "terminal.color_scheme", "terminal.custom_scheme_base",
+    # terminal.font and interface.watermark_font_family are both
+    # deliberately excluded — a font installed on one machine (say, macOS)
+    # often just doesn't exist on another (Ubuntu, Arch, ...), so syncing
+    # it meant every pass was a fight over which machine's locally-
+    # available font "wins", with no value on the losing side. Both stay
+    # purely per-machine now, like client.ssh_path etc. already do.
+    "terminal.scrollback_lines", "terminal.color_scheme", "terminal.custom_scheme_base",
     "interface.watermark_enabled", "interface.watermark_text", "interface.watermark_position",
     "interface.watermark_font_size", "interface.watermark_color", "interface.watermark_opacity",
-    "interface.watermark_scope", "interface.watermark_shrink_in_splits", "interface.watermark_rules",
+    "interface.watermark_scope", "interface.watermark_shrink_percent", "interface.watermark_rules",
 ]
 GENERAL_SETTINGS_KEYS = [
     "interface.icon", "interface.tree_row_striping", "interface.debug_mode", "interface.host_search_position",

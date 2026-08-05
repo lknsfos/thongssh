@@ -1003,6 +1003,23 @@ class SettingsDialog(Adw.Window):
         self.watermark_font_size_row.set_value(self.settings_manager.get("interface.watermark_font_size"))
         group_watermark.add(self.watermark_font_size_row)
 
+        # Family only (Gtk.FontLevel.FAMILY) — size is the SpinRow above,
+        # weight/style would just get overridden by the plain Pango
+        # attributes _update_watermark_for_tab already sets. Deliberately
+        # excluded from Sync (see settings_sync.py) for the same reason as
+        # terminal.font: a family on one machine often isn't installed on
+        # another.
+        watermark_font_family_row = Adw.ActionRow(title=_("Font"))
+        self.watermark_font_family_button = Gtk.FontDialogButton(dialog=Gtk.FontDialog())
+        self.watermark_font_family_button.set_level(Gtk.FontLevel.FAMILY)
+        self.watermark_font_family_button.set_valign(Gtk.Align.CENTER)
+        self.watermark_font_family_button.set_font_desc(
+            Pango.FontDescription.from_string(self.settings_manager.get("interface.watermark_font_family"))
+        )
+        watermark_font_family_row.add_suffix(self.watermark_font_family_button)
+        watermark_font_family_row.set_activatable_widget(self.watermark_font_family_button)
+        group_watermark.add(watermark_font_family_row)
+
         watermark_color_row = Adw.ActionRow(title=_("Color"))
         self.watermark_color_button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog())
         watermark_color_rgba = Gdk.RGBA()
@@ -1027,11 +1044,25 @@ class SettingsDialog(Adw.Window):
         )
         group_watermark.add(self.watermark_scope_row)
 
-        self.watermark_shrink_row = Adw.SwitchRow(
-            title=_("Shrink in split view"),
-            subtitle=_("Halve the size while any split layout is active")
+        # 100 ("Off") first, then 90..10 — index into this list IS the
+        # percentage to multiply the base font size by while any split
+        # layout is active; 100 means "don't shrink at all".
+        self._watermark_shrink_percents = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
+        watermark_shrink_model = Gtk.StringList.new(
+            [_("Off")] + [f"{p}%" for p in self._watermark_shrink_percents[1:]]
         )
-        self.watermark_shrink_row.set_active(self.settings_manager.get("interface.watermark_shrink_in_splits"))
+        self.watermark_shrink_row = Adw.ComboRow(
+            title=_("Shrink in split view"),
+            subtitle=_("Scale the size down to this percent while any split layout is active"),
+            model=watermark_shrink_model,
+        )
+        try:
+            shrink_index = self._watermark_shrink_percents.index(
+                self.settings_manager.get("interface.watermark_shrink_percent")
+            )
+        except ValueError:
+            shrink_index = 0
+        self.watermark_shrink_row.set_selected(shrink_index)
         group_watermark.add(self.watermark_shrink_row)
 
         # --- Adaptive Watermarks: regex rules that override the plain
@@ -1156,8 +1187,9 @@ class SettingsDialog(Adw.Window):
         # as _update_ai_sensitivity above, minus the enable switch itself.
         watermark_detail_widgets = [
             self.watermark_text_row, watermark_text_note, self.watermark_position_row,
-            self.watermark_font_size_row, watermark_color_row, self.watermark_opacity_row,
-            self.watermark_scope_row, self.watermark_shrink_row, group_watermark_rules,
+            self.watermark_font_size_row, watermark_font_family_row, watermark_color_row,
+            self.watermark_opacity_row, self.watermark_scope_row, self.watermark_shrink_row,
+            group_watermark_rules,
         ]
         def _update_watermark_sensitivity(*_args):
             enabled = self.watermark_enabled_row.get_active()
@@ -2082,6 +2114,9 @@ class SettingsDialog(Adw.Window):
             self._watermark_position_ids[self.watermark_position_row.get_selected()]
         )
         self.settings_manager.set("interface.watermark_font_size", int(self.watermark_font_size_row.get_value()))
+        self.settings_manager.set(
+            "interface.watermark_font_family", self.watermark_font_family_button.get_font_desc().get_family()
+        )
         self.settings_manager.set("interface.watermark_color", _rgba_to_hex(self.watermark_color_button.get_rgba()))
         self.settings_manager.set("interface.watermark_opacity", int(self.watermark_opacity_row.get_value()))
         watermark_scope_map_rev = {0: "active", 1: "all"}
@@ -2089,7 +2124,10 @@ class SettingsDialog(Adw.Window):
             "interface.watermark_scope",
             watermark_scope_map_rev.get(self.watermark_scope_row.get_selected(), "active")
         )
-        self.settings_manager.set("interface.watermark_shrink_in_splits", self.watermark_shrink_row.get_active())
+        self.settings_manager.set(
+            "interface.watermark_shrink_percent",
+            self._watermark_shrink_percents[self.watermark_shrink_row.get_selected()]
+        )
 
         watermark_rules = []
         for state in self._watermark_rule_rows:
@@ -2368,12 +2406,20 @@ class SettingsDialog(Adw.Window):
             except ValueError:
                 self.watermark_position_row.set_selected(0)
             self.watermark_font_size_row.set_value(DEFAULT_SETTINGS["interface.watermark_font_size"])
+            self.watermark_font_family_button.set_font_desc(
+                Pango.FontDescription.from_string(DEFAULT_SETTINGS["interface.watermark_font_family"])
+            )
             default_watermark_rgba = Gdk.RGBA()
             default_watermark_rgba.parse(DEFAULT_SETTINGS["interface.watermark_color"])
             self.watermark_color_button.set_rgba(default_watermark_rgba)
             self.watermark_opacity_row.set_value(DEFAULT_SETTINGS["interface.watermark_opacity"])
             self.watermark_scope_row.set_selected({"active": 0, "all": 1}.get(DEFAULT_SETTINGS["interface.watermark_scope"], 0))
-            self.watermark_shrink_row.set_active(DEFAULT_SETTINGS["interface.watermark_shrink_in_splits"])
+            try:
+                self.watermark_shrink_row.set_selected(
+                    self._watermark_shrink_percents.index(DEFAULT_SETTINGS["interface.watermark_shrink_percent"])
+                )
+            except ValueError:
+                self.watermark_shrink_row.set_selected(0)
             self._clear_watermark_rule_rows()
             for rule in DEFAULT_SETTINGS.get("interface.watermark_rules", []):
                 self._add_watermark_rule_row(rule)
