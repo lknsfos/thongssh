@@ -124,11 +124,27 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # entirely unless Settings -> Sync has it enabled (see
         # refresh_sync_button_visibility, called once here and again from
         # Settings' on_apply).
-        self.sync_button = Gtk.Button(icon_name="emblem-synchronizing-symbolic")
+        # Adw.SplitButton, not a plain Gtk.Button: the main face is still a
+        # single click = "sync now" (unchanged), but the small attached
+        # arrow opens a menu for the rarer "Reset Sync State" action (see
+        # win.sync-reset in setup_global_menu) — pointing sync.folder at a
+        # genuinely new/empty share and wanting to seed it from this
+        # machine is a real case perform_sync's own safety check can't
+        # tell apart from "old folder just isn't mounted", so it needs an
+        # explicit, deliberate action instead.
+        self.sync_button = Adw.SplitButton()
+        self.sync_button.set_icon_name("emblem-synchronizing-symbolic")
         self.sync_button.set_tooltip_text(_("Sync now"))
         self.sync_button.set_visible(False)
         self.sync_button.connect("clicked", self.on_sync_button_clicked)
         header_bar.pack_end(self.sync_button)
+
+        # win.sync-reset itself is registered in setup_global_menu (called
+        # earlier in __init__, before this button exists) — the menu model
+        # just needs to be attached once the button actually does.
+        sync_menu_model = Gio.Menu()
+        sync_menu_model.append(_("Reset Sync State (Start Fresh)…"), "win.sync-reset")
+        self.sync_button.set_menu_model(sync_menu_model)
 
         self.main_box.append(header_bar)
         self._ai_provider_buttons = {}
@@ -1229,6 +1245,34 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     def on_sync_button_clicked(self, button):
         self.force_sync_now()
 
+    def on_sync_reset_clicked(self, action, param):
+        """"Reset Sync State" from the sync button's dropdown — for
+        pointing sync.folder at a genuinely new/empty share (a remounted
+        drive, a fresh machine's folder) and wanting to seed it from this
+        machine, which perform_sync's own safety check would otherwise
+        correctly refuse to do on its own (see settings_sync.reset_sync_state)."""
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading=_("Reset Sync State?"),
+            body=_(
+                "The next sync will treat THIS machine's local hosts/settings/quickies as "
+                "authoritative and push them into the current sync folder, instead of merging "
+                "based on history.\n\nOnly do this after pointing Sync at a new or empty folder "
+                "you want to seed — not because a normal sync failed."
+            ),
+        )
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("reset", _("Reset and Sync Now"))
+        dialog.set_response_appearance("reset", Adw.ResponseAppearance.DESTRUCTIVE)
+
+        def on_response(dialog, response):
+            if response == "reset":
+                settings_sync.reset_sync_state()
+                self.force_sync_now()
+
+        dialog.connect("response", on_response)
+        dialog.present()
+
     def force_sync_now(self):
         """Runs one sync pass on a background thread (file I/O against a
         possibly cloud-synced folder shouldn't block the UI) and marshals
@@ -2109,6 +2153,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_batch_command = Gio.SimpleAction.new("batch-command", None)
         action_batch_command.connect("activate", self.on_menu_batch_command)
         self.add_action(action_batch_command)
+
+        action_sync_reset = Gio.SimpleAction.new("sync-reset", None)
+        action_sync_reset.connect("activate", self.on_sync_reset_clicked)
+        self.add_action(action_sync_reset)
 
         # 2. Create GMenu (model)
         main_menu_model = Gio.Menu()

@@ -1,5 +1,12 @@
 # Release Notes
 
+### 🆕 What's New in 0.8.1
+
+A single, important sync fix:
+
+* **Fixed Sync wiping hosts/settings when the sync folder wasn't actually mounted yet** — if the configured folder (a Google Drive/Dropbox mount, etc.) hadn't finished mounting at app start, it looked to Sync like an ordinary, accessible, *empty* folder — indistinguishable from "everything was deleted on every other machine." The three-way merge believed it and deleted local hosts and reset settings to match. Sync now checks whether this machine has synced successfully before; if so and the folder/sync file has since gone missing, it refuses to run and reports the error instead of guessing.
+* **New: "Reset Sync State"** — for the legitimate opposite case (you've pointed Sync at a genuinely new/empty folder and want to seed it from this machine). Lives in a small dropdown on the sync button (next to the normal "sync now" click), behind a confirmation dialog since it deliberately makes local data authoritative for the next pass.
+
 ### 🆕 What's New in 0.8.0
 
 The big one — Quickies grew up, settings can now follow you across machines, and watermarks got smart (if experimental):

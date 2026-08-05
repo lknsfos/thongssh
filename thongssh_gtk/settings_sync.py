@@ -45,6 +45,23 @@ _ = lambda s: s
 SYNC_FILE_NAME = "thongssh_sync.json"
 SYNC_STATE_FILE = CONFIG_DIR / "sync_state.json"
 
+
+def reset_sync_state():
+    """Forgets this machine's sync history (last_synced_version/
+    base_snapshot/ai_chat_ids) so the next perform_sync() treats it as a
+    brand-new first-ever sync: local state becomes authoritative and gets
+    pushed to whatever's at sync.folder, instead of merged against a
+    now-meaningless history. Deliberately does NOT touch local hosts.json/
+    settings.json/ai chats — only the local bookkeeping file.
+
+    Meant for the user to trigger by hand after pointing sync.folder at a
+    genuinely different/empty share (a remounted drive, a new machine's
+    folder, etc.) — the exact case perform_sync's own "has this machine
+    synced before" safety check (see its docstring) would otherwise
+    correctly refuse to touch, since it can't tell "new empty destination,
+    on purpose" apart from "old destination just not mounted yet"."""
+    SYNC_STATE_FILE.unlink(missing_ok=True)
+
 # Every host field except key_path — that one is always machine-specific
 # and is never read from base/remote, only ever preserved from local (see
 # merge_host_config below). Derived from config.py's own template so it
@@ -385,6 +402,29 @@ def perform_sync(settings_manager, config_data):
         return SyncResult(False, error=_("No sync folder configured."))
 
     shared_dir = Path(folder).expanduser()
+
+    # Loaded up front (not after the folder/file checks below) because the
+    # very next guard needs it: "has this machine ever synced successfully
+    # before" is what tells a genuinely-empty-on-first-sync remote apart
+    # from a cloud-drive mount (Google Drive, Dropbox, ...) that just isn't
+    # mounted yet this boot. Both look identical to a plain exists()/mkdir()
+    # check — an unmounted mount point is usually either a missing
+    # directory or a perfectly normal, empty one, not an error mkdir() or
+    # open() would ever raise.
+    state = _load_json(SYNC_STATE_FILE, default={}) or {}
+    base_snapshot = state.get("base_snapshot") or {}
+    last_synced_version = state.get("last_synced_version") or 0
+    has_synced_before = last_synced_version > 0
+
+    if has_synced_before and not shared_dir.is_dir():
+        msg = _("Sync folder is missing ({folder}) even though this machine has synced before — "
+                "it's most likely not mounted right now (e.g. a cloud-drive folder), not something "
+                "deleted on purpose. Skipping this pass instead of treating that as \"everything was "
+                "deleted\".").format(folder=folder)
+        settings_manager.set("sync.last_sync_error", msg)
+        settings_manager.save()
+        return SyncResult(False, error=msg)
+
     try:
         shared_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
@@ -399,11 +439,24 @@ def perform_sync(settings_manager, config_data):
         settings_manager.set("sync.last_sync_error", hash_error)
         settings_manager.save()
         return SyncResult(False, error=hash_error)
-    remote_payload = remote_payload or {}
 
-    state = _load_json(SYNC_STATE_FILE, default={}) or {}
-    base_snapshot = state.get("base_snapshot") or {}
-    last_synced_version = state.get("last_synced_version") or 0
+    # Same reasoning as the directory check above, one level down: the
+    # folder itself can exist (a FUSE/rclone mount point that's always
+    # there, mounted or not) while the sync file inside it is only present
+    # once the real remote is actually mounted. Without this guard, an
+    # unmounted-but-present folder reads as "remote legitimately has
+    # nothing" — the three-way merges below then see every host/setting
+    # this machine already knew about as "deleted remotely" and wipe them
+    # locally to match. This is exactly the failure that prompted this fix.
+    if has_synced_before and remote_payload is None:
+        msg = _("The sync folder has no sync file yet, but this machine has synced before — it's "
+                "most likely not mounted/accessible right now. Skipping this pass instead of "
+                "treating that as \"everything was deleted\".")
+        settings_manager.set("sync.last_sync_error", msg)
+        settings_manager.save()
+        return SyncResult(False, error=msg)
+
+    remote_payload = remote_payload or {}
     remote_wins = (remote_payload.get("version") or 0) > last_synced_version
 
     changed = set()
