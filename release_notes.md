@@ -1,5 +1,15 @@
 # Release Notes
 
+### 🆕 What's New in 0.8.2
+
+Settings dialog polish plus two Sync/Watermark fights removed:
+
+* **Fixed the Settings window opening absurdly wide** — a long sync error message sat in a plain, unwrapped label; `Adw.ViewStack` sizes itself by the widest of *all* its pages, not just the visible one, so that one label was enough to blow out the whole dialog even while looking at an unrelated page. The label is capped and ellipsized now, with the full message still available on hover.
+* **Fixed User Commands and Quickies looking narrower than every other Settings page** — a plain `Gtk.Box` dropped into an `Adw.PreferencesGroup` doesn't get the automatic full-row-width treatment real Adwaita rows do, and unlike what you'd expect, nothing there was actually *asking* for more width either — Adwaita's page clamp only ever caps width, it never stretches undersized content to fill the room. Both pages now request enough width to match the rest, and the "Text"/"Command" columns actually expand to use it.
+* **Terminal font no longer synced** — a font installed on one machine is routinely missing on another (macOS vs. Ubuntu vs. Arch), so this was a permanent tug-of-war with no winner. It's purely per-machine now, like the SSH/Telnet binary paths already are.
+* **Watermark font is now choosable — and also not synced**, for the identical reason as the terminal font above. Family only (size stays its own field); defaults to "Sans".
+* **Watermark split-view shrink is now a percentage, off by default** — was a fixed "halve it" toggle; it's a proper dropdown now (Off / 90% / 80% / … / 10%), and starts at Off instead of silently halving your watermark the first time you split the view.
+
 ### 🆕 What's New in 0.8.1
 
 A single, important sync fix:
