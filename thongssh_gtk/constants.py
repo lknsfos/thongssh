@@ -48,9 +48,18 @@ AI_STANDARD_PROVIDERS = [
 # which is what let it "forget" the no-local-execution instruction after a
 # few turns. Codex has no known equivalent flag, so it falls back to the
 # generic prepend-into-message behavior (see cli_providers._build_argv).
+# --skip-git-repo-check: every CLI provider call runs in cli_providers.py's
+# own scratch temp directory (_get_neutral_cwd), never a real project — on
+# purpose, so the tool can't mistake a plain chat question for "look at my
+# codebase". Codex refuses to run at all outside a directory it trusts
+# (a git repo, or one explicitly marked trusted) unless told to skip that
+# check, which is exactly right here: there's nothing in that throwaway
+# directory to protect. Without it, codex just hangs waiting on stdin for
+# a confirmation prompt that never comes, then exits with "Not inside a
+# trusted directory and --skip-git-repo-check was not specified."
 CLI_STANDARD_PROVIDERS = [
     ("claude", "Claude Code", "claude -p --append-system-prompt {system_prompt} {message}"),
-    ("codex", "Codex", "codex exec {message}"),
+    ("codex", "Codex", "codex exec --skip-git-repo-check {message}"),
 ]
 
 # Suggested values for Settings -> AI -> CLI Client's Model picker — there's

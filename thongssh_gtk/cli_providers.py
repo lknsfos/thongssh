@@ -187,6 +187,13 @@ def run_cli_chat(provider_id, command_template, system_prompt, messages, on_succ
                     argv, capture_output=True, text=True,
                     timeout=timeout or DEFAULT_TIMEOUT,
                     cwd=_get_neutral_cwd(),
+                    # This is a one-shot, non-interactive call — nobody is
+                    # ever there to answer a stdin prompt. Without this, a
+                    # tool that falls back to asking for confirmation (e.g.
+                    # codex outside a trusted directory) just hangs until
+                    # the timeout instead of failing fast with a clear
+                    # error the moment it hits EOF on stdin.
+                    stdin=subprocess.DEVNULL,
                 )
             except FileNotFoundError as e:
                 raise CliError(_("Command not found: {cmd}").format(cmd=argv[0])) from e
