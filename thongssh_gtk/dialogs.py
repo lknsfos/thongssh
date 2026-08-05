@@ -1272,6 +1272,17 @@ class SettingsDialog(Adw.Window):
         sync_status_row = Adw.ActionRow(title=_("Force Sync Now"))
         self.sync_status_label = Gtk.Label(xalign=1)
         self.sync_status_label.add_css_class("dim-label")
+        # sync.last_sync_error can be an arbitrarily long human-readable
+        # message (see settings_sync.py's own safety-check errors) — a
+        # plain unbounded Label demands however much width the full string
+        # needs on one line, and Adw.ViewStack sizes itself homogeneously
+        # across ALL its pages by default, not just whichever one is
+        # visible. One long error here was enough to blow out the whole
+        # Settings window's width even while looking at a different page.
+        # Capped + ellipsized, with the full text still reachable via
+        # tooltip, so no error message can ever do that again.
+        self.sync_status_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.sync_status_label.set_max_width_chars(40)
         sync_status_row.add_suffix(self.sync_status_label)
         force_sync_button = Gtk.Button(label=_("Sync Now"), css_classes=["suggested-action"])
         force_sync_button.set_valign(Gtk.Align.CENTER)
@@ -2239,12 +2250,17 @@ class SettingsDialog(Adw.Window):
         last_sync_at = self.settings_manager.get("sync.last_sync_at")
         last_error = self.settings_manager.get("sync.last_sync_error")
         if last_error:
-            self.sync_status_label.set_text(_("Last attempt failed: {error}").format(error=last_error))
+            text = _("Last attempt failed: {error}").format(error=last_error)
         elif last_sync_at:
             when = datetime.datetime.fromtimestamp(last_sync_at).strftime("%Y-%m-%d %H:%M:%S")
-            self.sync_status_label.set_text(_("Last synced: {time}").format(time=when))
+            text = _("Last synced: {time}").format(time=when)
         else:
-            self.sync_status_label.set_text(_("Never synced"))
+            text = _("Never synced")
+        self.sync_status_label.set_text(text)
+        # The label itself is capped+ellipsized (see its construction
+        # above) — the tooltip is how the full message stays reachable,
+        # long error text included.
+        self.sync_status_label.set_tooltip_text(text)
 
     def on_force_sync_clicked(self, button):
         """Saves the sync settings first (folder/what-to-sync must be
