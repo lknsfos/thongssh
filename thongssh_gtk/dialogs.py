@@ -1299,16 +1299,31 @@ class SettingsDialog(Adw.Window):
         group_commands = Adw.PreferencesGroup(title=_("Custom Commands"))
         page_commands.add(group_commands)
 
-        commands_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        scrolled_view = Gtk.ScrolledWindow(vexpand=True)
-        
+        # hexpand=True end to end (box -> scroller -> treeview) plus an
+        # explicit minimum width on the scroller: a plain Gtk.Box added to
+        # an Adw.PreferencesGroup doesn't get the automatic full-row-width
+        # treatment Adw.PreferencesRow subclasses (EntryRow, SwitchRow, ...)
+        # do, and — unlike what hexpand alone would suggest — Adw's own
+        # width-limiting AdwClamp only ever *caps* a page's natural width,
+        # it never stretches undersized content to fill leftover space; the
+        # only thing hexpand affects is how space *beyond* every child's
+        # own natural/minimum size gets divided up, which isn't in play if
+        # nothing on the page asked for more room in the first place. A
+        # page like Terminal ends up wider simply because ITS content
+        # (font button, 16-swatch custom palette grid, ...) genuinely needs
+        # that much room; this page's rows don't unless told to, hence the
+        # explicit size_request below sized to roughly match.
+        commands_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
+        scrolled_view = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
+        scrolled_view.set_size_request(780, 220)
+
         self.commands_store = Gtk.ListStore(str, str)
         # Populate from settings
         for cmd in self.settings_manager.get("user_commands"):
             self.commands_store.append([cmd.get("name", ""), cmd.get("command", "")])
 
-        self.commands_view = Gtk.TreeView(model=self.commands_store)
-        
+        self.commands_view = Gtk.TreeView(model=self.commands_store, hexpand=True)
+
         renderer_name = Gtk.CellRendererText(editable=True)
         renderer_name.connect("edited", self.on_command_edited, 0)
         col_name = Gtk.TreeViewColumn(_("Name"), renderer_name, text=0)
@@ -1317,6 +1332,7 @@ class SettingsDialog(Adw.Window):
         renderer_cmd = Gtk.CellRendererText(editable=True)
         renderer_cmd.connect("edited", self.on_command_edited, 1)
         col_cmd = Gtk.TreeViewColumn(_("Command"), renderer_cmd, text=1)
+        col_cmd.set_expand(True)  # the command itself is what's worth the extra room, not its name
         self.commands_view.append_column(col_cmd)
 
         scrolled_view.set_child(self.commands_view)
@@ -1376,14 +1392,19 @@ class SettingsDialog(Adw.Window):
         group_quickies_items = Adw.PreferencesGroup(title=_("Snippets"))
         page_quickies.add(group_quickies_items)
 
-        quickies_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        quickies_scrolled_view = Gtk.ScrolledWindow(vexpand=True)
+        # Same situation and same fix as User Commands' commands_box above
+        # (see its comment) — a plain Gtk.Box in a PreferencesGroup, sized
+        # explicitly since nothing here would otherwise ask for more room
+        # than its own modest content needs.
+        quickies_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
+        quickies_scrolled_view = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
+        quickies_scrolled_view.set_size_request(780, 220)
 
         self.quickies_store = Gtk.ListStore(str, str)
         for quicky in self.settings_manager.get("quickies.items"):
             self.quickies_store.append([quicky.get("name", ""), quicky.get("text", "")])
 
-        self.quickies_view = Gtk.TreeView(model=self.quickies_store)
+        self.quickies_view = Gtk.TreeView(model=self.quickies_store, hexpand=True)
 
         renderer_quicky_name = Gtk.CellRendererText(editable=True)
         renderer_quicky_name.connect("edited", self.on_quicky_row_edited, 0)
@@ -1393,6 +1414,7 @@ class SettingsDialog(Adw.Window):
         renderer_quicky_text = Gtk.CellRendererText(editable=True)
         renderer_quicky_text.connect("edited", self.on_quicky_row_edited, 1)
         col_quicky_text = Gtk.TreeViewColumn(_("Text"), renderer_quicky_text, text=1)
+        col_quicky_text.set_expand(True)  # the snippet body is what's worth seeing more of, not its name
         self.quickies_view.append_column(col_quicky_text)
 
         quickies_scrolled_view.set_child(self.quickies_view)
