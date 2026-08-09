@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=ThongSSH
-Exec=/home/mikhael/project/thongssh-gtk4/thongssh.py
-Icon=com.example.thongssh
-Type=Application
-Terminal=false
-Categories=GTK;GNOME;Utility;Network;
-Comment=SSH Connection Manager
-StartupWMClass=com.example.thongssh

@@ -100,6 +100,12 @@ cd thongssh
 python3 thongssh.py
 ```
 
+Running from source like this has no `.desktop` file, so docks/app menus (Plank, GNOME Shell, etc.) have no icon to show for it — they read an app's icon from a `.desktop` file's `Icon=` key, never from the running window. Optional one-time fix:
+```bash
+./install-desktop-entry.sh
+```
+Auto-detects this checkout's real path and installs a launcher to `~/.local/share/applications/` — no hand-editing paths, safe to re-run if you move the checkout.
+
 ### macOS
 Needs a venv that can still see Homebrew's PyGObject/pycairo:
 ```bash

@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=ThongSSH
-Exec=python3 /home/mikhael/project/thongssh-gtk4/thongssh.py
-Icon=/home/mikhael/project/thongssh-gtk4/thongssh_gtk/icons/thongssh.png
-Type=Application
-Categories=Utility;
