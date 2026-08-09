@@ -18,7 +18,7 @@ except ValueError as e:
     logging.shutdown() # Ensure logs are flushed before exit
     sys.exit(1)
 
-from gi.repository import Adw, Gio, Gtk, GdkPixbuf
+from gi.repository import Adw, Gio, Gtk, GdkPixbuf, GLib
 from .window import ThongSSHWindow # Keep relative import
 from .constants import APP_ID, resource_path # Import our new function
 from .settings import SettingsManager
@@ -100,6 +100,19 @@ def main():
                 pass
             except TypeError:
                 logging.warning(f"Cannot kill PID: {pid}, it's not an int")
+
+    # GTK4 has no direct "set WM_CLASS" API (GTK3's set_wmclass() is gone);
+    # on X11/XWayland it derives the window's WM_CLASS from the program
+    # name instead, which for a Python script launched as `python3
+    # thongssh.py` defaults to something like "thongssh.py" — NOT
+    # APP_ID/"com.example.thongssh". Since the installed .desktop file
+    # (see install-desktop-entry.sh) declares StartupWMClass=<APP_ID>, a
+    # mismatched WM_CLASS is exactly why a dock/window-switcher can fail to
+    # connect a running window to that launcher and its icon, falling back
+    # to a generic placeholder instead. Setting this explicitly, before
+    # any window exists, makes the two match regardless of how the script
+    # was actually invoked.
+    GLib.set_prgname(APP_ID)
 
     app = ThongSSHApp()
     return app.run(sys.argv)
