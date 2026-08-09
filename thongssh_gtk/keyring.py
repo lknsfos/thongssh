@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import threading
 
 from .constants import APP_ID
 from .settings import CONFIG_DIR
@@ -27,6 +28,53 @@ except ImportError:
 _FALLBACK_KEY_FILE = CONFIG_DIR / ".secret.key"
 _FALLBACK_STORE_FILE = CONFIG_DIR / "secrets.enc.json"
 
+# Some OS keyring backends (Secret Service over D-Bus, seen in the wild on
+# a Linux desktop/VM with no keyring daemon actually registered on the
+# session bus) can block completely at the C level — not even Ctrl+C
+# reaches it, no exception, no timeout of their own. A plain try/except
+# around a direct call can't defend against that; running it in a thread
+# and giving up on waiting for it (via join(timeout), not concurrent.
+# futures — a ThreadPoolExecutor registers an atexit hook that JOINS every
+# worker thread before the process can exit, which would turn "the OS
+# backend hung" into "the whole app can never quit" instead of just "this
+# one call gave up after N seconds") is the only way to keep both the
+# main thread and, later, process shutdown from hanging because of it.
+# A plain daemon thread has no such hook — abandoning a still-hung one is
+# exactly what we want here.
+_OS_BACKEND_TIMEOUT_SECONDS = 3
+_os_backend_dead = False  # once one call times out, a stuck D-Bus/keyring daemon isn't going to un-stick itself mid-session — stop retrying so every subsequent host/provider lookup doesn't pay the same timeout
+
+
+def _call_with_timeout(func, *args):
+    global _os_backend_dead
+    if _os_backend_dead:
+        raise RuntimeError("OS keyring backend previously timed out; skipping it for the rest of this session.")
+
+    outcome = {}
+
+    def worker():
+        try:
+            outcome["value"] = func(*args)
+        except Exception as e:
+            outcome["error"] = e
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(_OS_BACKEND_TIMEOUT_SECONDS)
+
+    if thread.is_alive():
+        _os_backend_dead = True
+        logging.warning(
+            f"Keyring: OS backend didn't respond within {_OS_BACKEND_TIMEOUT_SECONDS}s "
+            "(hung Secret Service/D-Bus backend?) — disabling it for the rest of this session "
+            "and using the local encrypted fallback instead."
+        )
+        raise RuntimeError("OS keyring backend timed out")
+
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome.get("value")
+
 
 class KeyringManager:
     """
@@ -45,7 +93,7 @@ class KeyringManager:
 
         if HAS_KEYRING:
             try:
-                _keyring.set_password(APP_ID, host_name, password)
+                _call_with_timeout(_keyring.set_password, APP_ID, host_name, password)
                 self._fallback_clear(host_name)
                 logging.info(f"Keyring: Password for '{host_name}' saved via OS keyring.")
                 return
@@ -60,7 +108,7 @@ class KeyringManager:
 
         if HAS_KEYRING:
             try:
-                password = _keyring.get_password(APP_ID, host_name)
+                password = _call_with_timeout(_keyring.get_password, APP_ID, host_name)
                 if password is not None:
                     return password
             except Exception as e:
@@ -74,7 +122,7 @@ class KeyringManager:
 
         if HAS_KEYRING:
             try:
-                _keyring.delete_password(APP_ID, host_name)
+                _call_with_timeout(_keyring.delete_password, APP_ID, host_name)
                 logging.info(f"Keyring: Password for '{host_name}' cleared from OS keyring.")
             except Exception as e:
                 logging.debug(f"Keyring: OS backend clear skipped ({e}).")
