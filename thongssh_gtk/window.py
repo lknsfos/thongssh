@@ -90,10 +90,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         icon_theme.add_search_path(resource_path("icons"))
         self.set_icon_name(self.settings_manager.get("interface.icon"))
         apply_launcher_icon(self.settings_manager.get("interface.icon"))
-        # Only takes effect once the window is actually realized (has a
-        # real GdkSurface/X11 window id to attach the property to) — see
-        # _set_x11_wm_class's own docstring for why this exists at all.
-        self.connect("realize", lambda *_a: self._set_x11_wm_class())
 
         self.keyring = KeyringManager()
 
@@ -600,51 +596,6 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         logging.debug(f"Saving window state on close: {state}")
         self._save_window_state(state)
         return False # Allow the window to close
-
-    def _set_x11_wm_class(self):
-        """GTK4 removed automatic WM_CLASS handling outright (GDK_WA_WMCLASS
-        is gone; upstream's own 3-to-4 migration guide says, verbatim, to
-        call XSetClassHint() directly if you need it) in favor of a
-        newer, GNOME-Shell-native mechanism: matching a running app to its
-        launcher via the GApplication id equaling the .desktop file's
-        basename — already true here (APP_ID == "com.example.thongssh" ==
-        install-desktop-entry.sh's installed filename). GNOME Shell reads
-        that; independent, non-GNOME-Shell docks that still identify
-        windows the classic X11 way — Plank on elementary OS, notably —
-        do not, and are left with nothing to match at all, which is
-        exactly what shows up as a generic/placeholder icon with no dock
-        entry. GDK4's own X11 surface object has no wrapper for this
-        (confirmed against the actual GdkX11-4.0 API — no set_class_hint
-        equivalent exists), so this reaches past it to python-xlib for
-        the one call that's actually missing. Silently a no-op on
-        Wayland/macOS/Windows, or if python-xlib isn't installed — a
-        second dock's icon is never worth breaking startup over."""
-        if not sys.platform.startswith("linux"):
-            return
-        try:
-            gi.require_version('GdkX11', '4.0')
-            from gi.repository import GdkX11
-        except (ImportError, ValueError):
-            return
-        display = self.get_display()
-        if not isinstance(display, GdkX11.X11Display):
-            return  # Wayland session — nothing to do
-        surface = self.get_surface()
-        if surface is None or not isinstance(surface, GdkX11.X11Surface):
-            return
-        try:
-            from Xlib.display import Display as XDisplay
-        except ImportError:
-            logging.debug("WM_CLASS: python-xlib not installed; Plank-style docks may show a generic icon.")
-            return
-        try:
-            xid = surface.get_xid()
-            xdisplay = XDisplay()
-            xwindow = xdisplay.create_resource_object("window", xid)
-            xwindow.set_wm_class(APP_ID, APP_ID)
-            xdisplay.flush()
-        except Exception as e:
-            logging.debug(f"WM_CLASS: failed to set via Xlib ({e}).")
 
     def setup_css(self):
         """Applies custom CSS to the application."""

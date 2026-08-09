@@ -2,4 +2,3 @@ keyring>=24.0
 cryptography>=41.0
 paramiko>=3.0
 pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"
-python-xlib>=0.33; sys_platform == "linux"
