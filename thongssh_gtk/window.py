@@ -615,6 +615,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                subtle hint of which pane is active, not a hard outline. */
             box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.35);
         }
+        /* Compact tab headers — the theme's own default notebook-tab
+           padding plus a full-size flat button for the close "x" adds up
+           to a lot of dead space per tab, most visible once there are
+           enough tabs to make the strip scrollable. These override that
+           down to just enough to stay clickable/legible. */
+        notebook > header > tabs > tab {
+            padding: 2px 4px;
+            min-height: 0;
+        }
+        .thongssh-tab-close {
+            padding: 0;
+            min-width: 20px;
+            min-height: 20px;
+        }
         .terminal-watermark {
             /* Color/size/opacity are set per-label from Settings (they're
                dynamic values, not fixed classes) — this just keeps the text
@@ -962,34 +976,72 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         return notebook
 
     def _on_pane_tab_drop(self, drop_target, value, x, y, dest_notebook):
-        """Accepts a tab dragged from another pane (or reordered within the
-        same one — Gtk.Notebook still handles that natively before this ever
-        fires). `value` is the plain string tab-id from the drag source's
-        'prepare' callback in _create_tab_label."""
+        """Accepts a tab dragged from another pane, OR reordered within the
+        same one — both handled here now, by drop position. `value` is the
+        plain string tab-id from the drag source's 'prepare' callback in
+        _create_tab_label.
+
+        This used to assume Gtk.Notebook's own tab_reorderable handled
+        same-notebook drags natively, before this handler ever saw them.
+        In practice, having our own Gtk.DragSource on the same tab-label
+        widget (needed for cross-pane moves, see _create_tab_label) claims
+        every drag gesture first, so the notebook's built-in reorder-drag
+        never gets a chance to fire at all — same-notebook drags always
+        ended up here anyway, and were silently dropped by the old
+        src_notebook-is-dest_notebook early return. Reordering is done by
+        hand below instead, using the drop's x position."""
         child = self._find_page_widget_by_id(value)
         if child is None:
             return False
         src_notebook = self._find_notebook_for_page_widget(child)
-        if src_notebook is None or src_notebook is dest_notebook:
+        if src_notebook is None:
             return False
+
+        target_index = self._tab_index_at_x(dest_notebook, x)
+
+        if src_notebook is dest_notebook:
+            current_index = dest_notebook.page_num(child)
+            # reorder_child's position is "the index after this child is
+            # pulled out of the list" — dropping past its own old slot
+            # needs shifting back by one to land where the cursor actually is.
+            if target_index > current_index:
+                target_index -= 1
+            if target_index == current_index:
+                return False  # dropped back where it already was — no-op
+            dest_notebook.reorder_child(child, target_index)
+            dest_notebook.set_current_page(dest_notebook.page_num(child))
+            return True
 
         tab_label = src_notebook.get_tab_label(child)
         # detach_tab() (not remove_page()) so the source notebook knows this
         # was consumed by a drop rather than cancelled mid-drag.
         src_notebook.detach_tab(child)
-        dest_notebook.append_page(child, tab_label)
+        dest_notebook.insert_page(child, tab_label, target_index)
         self._mark_tab_draggable(dest_notebook, child)
         dest_notebook.set_current_page(dest_notebook.page_num(child))
         self._set_active_pane(dest_notebook)
         return True
 
+    def _tab_index_at_x(self, notebook, x):
+        """Which page index a drop at x (in notebook-relative coordinates)
+        should insert before — lets a tab be dropped at a specific spot in
+        the tab strip instead of always landing at the end."""
+        for i in range(notebook.get_n_pages()):
+            label = notebook.get_tab_label(notebook.get_nth_page(i))
+            ok, bounds = label.compute_bounds(notebook)
+            if ok and x < bounds.get_x() + bounds.get_width() / 2:
+                return i
+        return notebook.get_n_pages()
+
     def _mark_tab_draggable(self, notebook, child):
-        """Reorderable for drag-to-reorder within one notebook. Moving a tab
-        to a *different* pane is handled entirely by the custom
-        DragSource/DropTarget pair (see _create_tab_label / _create_pane_notebook),
-        not Gtk.Notebook's own tab-detachable — so that flag is deliberately
-        not set here."""
-        notebook.set_tab_reorderable(child, True)
+        """Tab movement — both reordering within one notebook and moving to
+        a different pane — is handled entirely by hand via the custom
+        DragSource/DropTarget pair (see _create_tab_label /
+        _create_pane_notebook / _on_pane_tab_drop), not Gtk.Notebook's own
+        tab-reorderable: the two can't coexist on the same tab-label widget
+        without one silently winning every gesture (see _on_pane_tab_drop's
+        docstring), so this is deliberately left off rather than fought with."""
+        notebook.set_tab_reorderable(child, False)
 
     def _set_active_pane(self, notebook):
         if self.active_pane is notebook:
@@ -2470,12 +2522,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         # "Send File" only makes sense for SSH sessions (SFTP under the hood) —
         # telnet has no equivalent file-transfer sub-protocol.
-        # get_ancestor(), not get_parent() — the terminal's immediate parent
-        # is the Gtk.Overlay added for the watermark label, not the
-        # Gtk.ScrolledWindow tab_data is actually keyed by. Walking up to
-        # the nearest ScrolledWindow ancestor finds the right widget
-        # regardless of what's wrapped in between.
-        page_widget = terminal.get_ancestor(Gtk.ScrolledWindow)
+        page_widget = self._find_tab_widget_for(terminal)
         tab_info = self.tab_data.get(page_widget)
         can_send_file = (
             tab_info is not None
@@ -3219,18 +3266,37 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     def get_active_terminal(self):
         """Returns the active Vte.Terminal widget or None."""
         current_page_widget = self.get_active_terminal_widget()
-        # scrolled_term is the key in self.open_sessions
+        # The tab's root widget (currently a Gtk.Overlay — see
+        # _continue_session) is the key in self.open_sessions/tab_data.
         if current_page_widget and current_page_widget in self.open_sessions:
             terminal, pid = self.open_sessions[current_page_widget]
             return terminal
         return None
 
     def get_active_terminal_widget(self):
-        """Returns the container widget (ScrolledWindow) of the active tab
-        in the active pane."""
+        """Returns the tab's root container widget for the active tab in
+        the active pane — whatever's actually keyed in open_sessions/
+        tab_data (currently a Gtk.Overlay wrapping a Gtk.ScrolledWindow for
+        terminal tabs; other tab types may use something else entirely)."""
         notebook = self._get_active_notebook()
         if notebook.get_n_pages() > 0:
             return notebook.get_nth_page(notebook.get_current_page())
+        return None
+
+    def _find_tab_widget_for(self, widget):
+        """Walks up from any descendant widget (a Vte.Terminal, its
+        watermark label, anything living inside a tab's own content) to
+        the actual tab_data/open_sessions key — the tab's root widget —
+        without hardcoding how many wrapper layers sit in between. More
+        robust than a fixed-depth get_parent()/typed get_ancestor() call,
+        which breaks again the next time that wrapping changes (as
+        get_parent() already did once, when the watermark's Gtk.Overlay
+        was added between the terminal and its tab root)."""
+        node = widget
+        while node is not None:
+            if node in self.tab_data:
+                return node
+            node = node.get_parent()
         return None
 
     def _get_target_tab_widget(self):
@@ -3578,43 +3644,57 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 scroll_controller.connect("scroll", self.on_terminal_scroll)
                 terminal.add_controller(scroll_controller)
 
-                # The watermark label sits in its own Gtk.Overlay above the
-                # terminal, not inside the ScrolledWindow's scrolled content —
-                # so it stays fixed in the viewport instead of scrolling away
-                # with the terminal's own content. can_target(False) makes it
-                # click-through: pointer events fall straight to the terminal.
+                scrolled_term = Gtk.ScrolledWindow()
+                # ✨ This ensures the terminal gets the correct size allocation
+                scrolled_term.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+                # Direct child, not wrapped in the Overlay below — Vte.Terminal
+                # implements Gtk.Scrollable, which is what lets a
+                # Gtk.ScrolledWindow delegate straight to its own scroll
+                # adjustments and show a real scrollbar. Putting the Overlay
+                # in between used to make the ScrolledWindow's actual child a
+                # plain (non-Scrollable) container, so GTK4 silently fell
+                # back to auto-wrapping it in a Gtk.Viewport instead — that
+                # scrolls the *Overlay's own natural size*, not the
+                # terminal's real scrollback, which is why the scrollbar
+                # itself disappeared even though the terminal's own
+                # keyboard-driven scrolling (Shift+PageUp, etc.) kept working.
+                scrolled_term.set_child(terminal)
+
+                # The watermark label sits in its own Gtk.Overlay *above* the
+                # ScrolledWindow — not inside it — so it stays fixed in the
+                # viewport instead of scrolling away with the terminal's own
+                # content. can_target(False) makes it click-through: pointer
+                # events fall straight through to the terminal underneath.
                 watermark_label = Gtk.Label()
                 watermark_label.set_can_target(False)
                 watermark_label.add_css_class("terminal-watermark")
                 term_overlay = Gtk.Overlay()
-                term_overlay.set_child(terminal)
+                term_overlay.set_child(scrolled_term)
                 term_overlay.add_overlay(watermark_label)
-
-                scrolled_term = Gtk.ScrolledWindow()
-                # ✨ This ensures the terminal gets the correct size allocation
-                scrolled_term.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-                scrolled_term.set_child(term_overlay)
 
                 tab_label_box, close_btn = self._create_tab_label("utilities-terminal-symbolic", config['name'])
 
+                # term_overlay (not scrolled_term) is the actual tab/page
+                # widget from here on — the one keyed in open_sessions/
+                # tab_data and handed to the notebook.
                 target_notebook = self._get_active_notebook()
-                page_num = target_notebook.append_page(scrolled_term, tab_label_box)
-                self._mark_tab_draggable(target_notebook, scrolled_term)
+                page_num = target_notebook.append_page(term_overlay, tab_label_box)
+                self._mark_tab_draggable(target_notebook, term_overlay)
                 target_notebook.set_current_page(page_num)
                 terminal.grab_focus()
 
                 resolved_config = dict(config)
                 resolved_config['host'] = resolved_host_str
 
-                self.open_sessions[scrolled_term] = (terminal, pid)
-                self.tab_data[scrolled_term] = {
+                self.open_sessions[term_overlay] = (terminal, pid)
+                self.tab_data[term_overlay] = {
                     "type": "terminal", "config": resolved_config, "log_path": None,
                     "watermark_label": watermark_label,
                 }
-                close_btn.connect("clicked", self.on_tab_close_button_clicked, scrolled_term, pid)
-                terminal.connect("child-exited", self.on_ssh_process_exited, scrolled_term)
+                close_btn.connect("clicked", self.on_tab_close_button_clicked, term_overlay, pid)
+                terminal.connect("child-exited", self.on_ssh_process_exited, term_overlay)
                 if config.get("save_log", False):
-                    self._start_session_logging(scrolled_term)
+                    self._start_session_logging(term_overlay)
                 self.apply_watermark_settings_to_all()
             else: # This is a reconnect, just update the PID
                 self.open_sessions[existing_terminal_widget] = (terminal, pid)
@@ -3640,7 +3720,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def _create_tab_label(self, icon_name, label_text):
         """Creates a standard tab label box with icon, text, close button, and context menu."""
-        tab_label_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        # Tight spacing/margins here plus the "tab"/"thongssh-tab-close" CSS
+        # rules in setup_css() are what make tabs compact — a full-size flat
+        # button and the theme's own generous tab padding otherwise add up
+        # fast once there are enough tabs to scroll.
+        tab_label_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         icon = Gtk.Image.new_from_icon_name(icon_name) # No change here, this is correct
         tab_label = Gtk.Label(label=label_text)
         tab_label_box.append(icon)
@@ -3648,6 +3732,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         close_btn = Gtk.Button.new_from_icon_name("window-close-symbolic")
         close_btn.add_css_class("flat")
+        close_btn.add_css_class("thongssh-tab-close")
         tab_label_box.append(close_btn)
 
         right_click_gesture = Gtk.GestureClick.new()
