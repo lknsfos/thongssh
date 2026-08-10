@@ -2470,7 +2470,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         # "Send File" only makes sense for SSH sessions (SFTP under the hood) —
         # telnet has no equivalent file-transfer sub-protocol.
-        page_widget = terminal.get_parent()
+        # get_ancestor(), not get_parent() — the terminal's immediate parent
+        # is the Gtk.Overlay added for the watermark label, not the
+        # Gtk.ScrolledWindow tab_data is actually keyed by. Walking up to
+        # the nearest ScrolledWindow ancestor finds the right widget
+        # regardless of what's wrapped in between.
+        page_widget = terminal.get_ancestor(Gtk.ScrolledWindow)
         tab_info = self.tab_data.get(page_widget)
         can_send_file = (
             tab_info is not None
