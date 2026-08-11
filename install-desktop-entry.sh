@@ -14,7 +14,8 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE="$APP_DIR/thongssh.desktop.template"
 TARGET_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-TARGET="$TARGET_DIR/com.example.thongssh.desktop"
+# Must match thongssh_gtk/constants.py's APP_ID.
+TARGET="$TARGET_DIR/terminal.thongssh.desktop"
 
 if [ ! -f "$TEMPLATE" ]; then
     echo "Template not found at $TEMPLATE" >&2

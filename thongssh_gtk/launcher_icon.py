@@ -11,6 +11,19 @@ from .constants import APP_ID
 _SYSTEM_DESKTOP_DIRS = ("/usr/share/applications", "/usr/local/share/applications")
 _ICON_LINE_RE = re.compile(r"^Icon=.*$", re.MULTILINE)
 
+# Written into every override this function creates, and checked before
+# ever deleting one — see the "thongssh_orig" branch below for why: the
+# user-local .desktop path this writes to is the EXACT same one a dev
+# checkout's install-desktop-entry.sh installs its own (non-override,
+# only-copy) launcher to. Without this marker, every app start with the
+# default (non-"Original") icon setting was unconditionally deleting
+# that dev-checkout launcher out from under the user — it looked
+# identical to "our own override, no longer needed" from here, so it
+# quietly disappeared a launch or two after being installed, taking the
+# dock/taskbar icon with it (the window's own icon stayed fine, since
+# that's set directly at runtime, not read from this file).
+_OVERRIDE_MARKER = "X-ThongSSH-Launcher-Icon-Override=true"
+
 
 def _find_system_desktop_file():
     for base in _SYSTEM_DESKTOP_DIRS:
@@ -31,7 +44,12 @@ def apply_launcher_icon(icon_stem):
         user_desktop = Path(GLib.get_user_data_dir()) / "applications" / f"{APP_ID}.desktop"
 
         if icon_stem != "thongssh_orig":
-            if user_desktop.exists():
+            # Only ever remove a file this function itself wrote (see
+            # _OVERRIDE_MARKER) — never a dev checkout's own launcher
+            # sitting at this same path, which isn't an "override" of
+            # anything and is the only thing making a dock/taskbar show an
+            # icon at all when running from source.
+            if user_desktop.exists() and _OVERRIDE_MARKER in user_desktop.read_text(encoding="utf-8"):
                 user_desktop.unlink()
             return
 
@@ -42,6 +60,8 @@ def apply_launcher_icon(icon_stem):
 
         content = system_desktop.read_text(encoding="utf-8")
         new_content = _ICON_LINE_RE.sub(f"Icon={APP_ID}.orig", content, count=1)
+        if _OVERRIDE_MARKER not in new_content:
+            new_content = new_content.rstrip("\n") + f"\n{_OVERRIDE_MARKER}\n"
 
         user_desktop.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = user_desktop.with_name(user_desktop.name + ".tmp")

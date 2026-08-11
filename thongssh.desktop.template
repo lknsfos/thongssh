@@ -6,4 +6,4 @@ Icon=__APP_DIR__/thongssh_gtk/icons/thongssh.png
 Type=Application
 Terminal=false
 Categories=GTK;GNOME;Utility;Network;
-StartupWMClass=com.example.thongssh
+StartupWMClass=terminal.thongssh

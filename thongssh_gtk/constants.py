@@ -3,7 +3,7 @@ import os
 
 __version__ = "0.8.2"
 
-APP_ID = "com.example.thongssh"
+APP_ID = "terminal.thongssh"
 
 def resource_path(relative_path):
     """
