@@ -1,5 +1,16 @@
 # Release Notes
 
+### 🆕 What's New in 0.8.3
+
+Terminal/tab regressions from the watermark work fixed, plus a CLI provider and a launcher-icon bug:
+
+* **Fixed the terminal scrollbar disappearing** — the watermark's overlay ended up wrapping the terminal *inside* its `Gtk.ScrolledWindow`, which quietly broke the scrollbar's connection to the terminal's real scroll position (keyboard scrolling still worked, since that bypasses the scrollbar entirely). The overlay now wraps the ScrolledWindow instead of sitting inside it.
+* **Fixed tab drag-to-reorder only working between split panes, not within one** — the drag support added for moving tabs between panes was quietly swallowing every same-pane reorder attempt too, since a custom drag handler and the notebook's own built-in reordering can't both claim the same drag gesture. Reordering within a pane is handled by hand now, same as moving between panes.
+* **Tab headers are more compact** — less padding around each tab, a smaller close button, tighter spacing — most noticeable once there are enough tabs to scroll the tab strip.
+* **Fixed the Codex CLI provider failing immediately** ("Not inside a trusted directory…") — it refuses to run outside a directory it trusts, and every CLI provider call runs in a throwaway scratch directory by design (so a plain chat question is never mistaken for "look at my codebase"). Skips that check now; any CLI tool that falls back to an interactive prompt instead of erroring also fails fast now rather than hanging.
+* **Fixed the dock/taskbar icon disappearing after a restart** (seen on elementary OS, likely affects other Linux DEs too) — a bug in the app's own icon-preference handling was deleting a dev checkout's installed `.desktop` launcher on every single startup, mistaking it for an internal override file it manages itself. It now only ever touches files it actually created.
+* **App ID renamed** from the leftover placeholder `com.example.thongssh` to `terminal.thongssh`. If you have an old `.desktop` file installed under the previous name, remove it and re-run `install-desktop-entry.sh`.
+
 ### 🆕 What's New in 0.8.2
 
 Settings dialog polish plus two Sync/Watermark fights removed:
