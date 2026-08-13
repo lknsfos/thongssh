@@ -10,3 +10,13 @@ venv/
 .venv/
 env/
 .DS_Store
+
+# Packaging scratch/output (build-packages/build-appimage.sh, build-deb-rpm.sh)
+# — all regenerated from scratch on every run, nothing here needs to survive
+# a clone.
+/build/
+build-packages/.build-appimage/
+dist/
+*.AppImage
+*.deb
+*.rpm

@@ -755,7 +755,16 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 border-radius: 10px;
             }
             """
-        css_provider.load_from_string(css_data)
+        # load_from_data (not load_from_string, which needs GTK 4.12+) —
+        # keeps this working on older GTK4 (e.g. the 4.10.5 the AppImage
+        # bundles for Ubuntu 22.04, and Ubuntu 22.04/24.04's own system GTK).
+        # Binding signature varies by GTK4/PyGObject version: newer ones take
+        # a single bytes-like arg, older ones need an explicit length
+        # (-1 = "null-terminated") alongside the original str.
+        try:
+            css_provider.load_from_data(css_data.encode("utf-8"))
+        except TypeError:
+            css_provider.load_from_data(css_data, -1)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
             css_provider,

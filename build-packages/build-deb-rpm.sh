@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# build-packages.sh — build .deb and .rpm packages for ThongSSH.
+# build-deb-rpm.sh — build .deb and .rpm packages for ThongSSH.
 #
 # Fully self-contained: can be run from inside a checkout of the repo, OR
 # standalone from anywhere — in that case it clones the repo itself.
 #
 # Usage:
-#   ./build-packages.sh [deb|rpm|all]        (default: all)
+#   ./build-deb-rpm.sh [deb|rpm|all]        (default: all)
 #
 # Environment:
 #   REPO_URL  — git repo to clone in standalone mode
