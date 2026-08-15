@@ -20,3 +20,4 @@ dist/
 *.AppImage
 *.deb
 *.rpm
+*.dmg

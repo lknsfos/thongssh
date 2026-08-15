@@ -29,7 +29,6 @@
 set -euo pipefail
 
 APP=thongssh
-APP_ID=com.example.thongssh
 REPO_URL="${REPO_URL:-https://github.com/lknsfos/thongssh.git}"
 
 TARGET="${1:-all}"
@@ -63,6 +62,13 @@ fi
 
 [[ -f "$SRC_ROOT/thongssh_gtk/constants.py" ]] || {
     echo "!! $SRC_ROOT does not look like a thongssh source tree" >&2; exit 1; }
+
+# --- app id -------------------------------------------------------------------
+# Read straight out of constants.py so it can never drift from the real app id
+# (StartupWMClass/dock matching relies on this being correct).
+APP_ID="$(sed -nE 's/^APP_ID[[:space:]]*=[[:space:]]*["'\'']([^"'\'']+)["'\''].*/\1/p' \
+    "$SRC_ROOT/thongssh_gtk/constants.py" | head -1)"
+[[ -n "$APP_ID" ]] || { echo "!! Could not read APP_ID from thongssh_gtk/constants.py" >&2; exit 1; }
 
 # --- version ----------------------------------------------------------------
 # Priority: $VERSION env override > __version__ in constants.py > git tag
