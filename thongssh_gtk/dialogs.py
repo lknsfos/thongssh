@@ -2086,6 +2086,11 @@ class SettingsDialog(Adw.Window):
         for row in self.commands_store:
             user_commands.append({"name": row[0], "command": row[1]})
         self.settings_manager.set("user_commands", user_commands)
+        # Rebuild the host context menu's dynamic section now, not lazily on
+        # next right-click — see build_user_commands_menu's own docstring
+        # for why that lazy rebuild used to make the *first* right-click
+        # after commands were added show a truncated/scrolled popover.
+        self.parent_window.build_user_commands_menu()
 
         # Quickies
         self.settings_manager.set("quickies.enabled", self.quickies_enabled_row.get_active())

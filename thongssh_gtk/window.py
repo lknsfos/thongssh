@@ -2343,6 +2343,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_user_cmd.connect("activate", self.on_menu_user_command)
         self.add_action(action_user_cmd)
 
+        # Shared between the host-tree AND tab context menus (same idiom
+        # as "open-sftp" above) — the handler picks the right host config
+        # via _get_target_host_config(). 3 separate actions, not 1
+        # parametrized one, deliberately: a GSimpleAction's "enabled" is
+        # per action name, not per (action, parameter) pair, and
+        # "user@hostname" needs to grey out independently of the other two
+        # when the target host has no username (see on_tree_right_click/
+        # on_tab_right_click).
+        for field in ("name", "address", "userhost"):
+            action = Gio.SimpleAction.new(f"copy-host-{field}", None)
+            action.connect("activate", self.on_menu_copy_host_field, field)
+            self.add_action(action)
+
         # ✨ Action to open SSH from an SFTP tab
         action_open_ssh = Gio.SimpleAction.new("open-ssh-from-tab", None)
         action_open_ssh.connect("activate", self.on_menu_open_ssh_from_tab)
@@ -2385,12 +2398,31 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.last_clicked_quicky_index = None
 
         # 2. Create GMenu (models)
+
+        # Shared between the host-tree and tab menus below — a single
+        # Gio.MenuModel instance can be attached as a submenu in more than
+        # one place, and this one is 100% static (labels never change, only
+        # what on_menu_copy_host_field resolves at click time does), so
+        # there's no reason to build it twice. Always exactly 3 items —
+        # deliberately never grown/shrunk per host (e.g. by hiding
+        # "user@hostname" when no user is set) — see build_user_commands_
+        # menu's docstring for why a GtkPopoverMenu's *item count* changing
+        # between two consecutive popups is what causes a truncated first
+        # show, not just what the click handler enables/disables. When a
+        # host has no username, the win.copy-host-field('userhost') item
+        # is instead just disabled (on_tree_right_click/on_tab_right_click).
+        copy_host_menu = Gio.Menu()
+        copy_host_menu.append(_("Server name"), "win.copy-host-name")
+        copy_host_menu.append(_("Hostname/IP"), "win.copy-host-address")
+        copy_host_menu.append(_("user@hostname"), "win.copy-host-userhost")
+
         # Menu for a HOST
         host_menu = Gio.Menu()
         host_menu.append(_("Connect"), "win.connect")
         host_menu.append(_("Edit..."), "win.edit") # "win." = window prefix
         host_menu.append(_("Clone"), "win.clone")
         host_menu.append(_("Connect SFTP"), "win.open-sftp")
+        host_menu.append_submenu(_("Copy to Clipboard"), copy_host_menu)
         host_menu.append(_("Delete"), "win.delete")
         self.user_commands_menu_section = Gio.Menu()
         host_menu.append_section(None, self.user_commands_menu_section)
@@ -2413,6 +2445,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         tab_menu.append(_("Duplicate"), "win.tab-duplicate")
         tab_menu.append(_("Connect SFTP"), "win.open-sftp") # Re-use existing action
         tab_menu.append(_("Connect SSH"), "win.open-ssh-from-tab")
+        tab_menu.append_submenu(_("Copy to Clipboard"), copy_host_menu)
 
         quicky_menu = Gio.Menu()
         quicky_menu.append(_("Insert into Terminal"), "win.quicky-insert")
@@ -2433,6 +2466,15 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.popover_quicky.set_parent(self)
         self.popover_group.set_parent(self) # Set parent once to the main window
         self.popover_terminal.set_parent(self) # Attach to the main window
+
+        # Built once here — not lazily on the host tree's first right-click
+        # (see on_tree_right_click's history) — so the section's one-time
+        # jump from 0 items (freshly created above) to however many user
+        # commands are configured happens now, well before any popover is
+        # ever shown, instead of racing GtkPopoverMenu's own re-measure of
+        # a Gio.MenuModel it's already bound to. Settings' on_apply calls
+        # this again whenever the user commands list itself changes.
+        self.build_user_commands_menu()
 
         self._build_find_window()
 
@@ -2462,14 +2504,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             # Get the row's rectangle to "attach" the popover to
             rect = tree_view.get_cell_area(path, col)
 
-            self.build_user_commands_menu()
-
             self.lookup_action("connect").set_enabled(True)
             self.lookup_action("open-sftp").set_enabled(True)
             self.lookup_action("edit").set_enabled(True)
             self.lookup_action("clone").set_enabled(True)
 
             if node_type == "host":
+                host_config = model.get_value(tree_iter, COL_DATA)
+                has_user = "@" in (host_config.get("host") or "")
+                # Always real hosts here (the "local" node type returns
+                # early above) — name/address are unconditionally
+                # applicable; only re-enabling them (not just userhost)
+                # matters because these actions are shared with the tab
+                # menu, which may have last disabled them for a local tab.
+                self.lookup_action("copy-host-name").set_enabled(True)
+                self.lookup_action("copy-host-address").set_enabled(True)
+                self.lookup_action("copy-host-userhost").set_enabled(has_user)
                 self.popover_host.set_pointing_to(rect)
                 self.popover_host.popup()
 
@@ -2478,7 +2528,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 self.popover_group.popup()
 
     def build_user_commands_menu(self):
-        """Dynamically populates the user commands section of the host context menu."""
+        """(Re)populates the user commands section of the host context menu
+        from current settings. Called once at startup (setup_actions_and_
+        popovers) and again from Settings' on_apply whenever the list
+        itself changes — deliberately NOT on every right-click anymore:
+        mutating a Gio.MenuModel already bound to a live GtkPopoverMenu
+        makes it re-measure itself asynchronously, so popping the menu up
+        immediately after used to show it at its *previous* (smaller) size
+        the very first time this section went from empty to populated —
+        cut off, needing a scroll — even though every popup after that was
+        already sized right (same item count as before, nothing to
+        re-measure). Rebuilding ahead of time, off the interactive path,
+        means that one-time jump in size never happens while a popover is
+        actually open."""
         # Clear previous items
         self.user_commands_menu_section.remove_all()
 
@@ -3313,6 +3375,51 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         right-clicked, or the currently active one if none was."""
         return self.last_clicked_tab if self.last_clicked_tab else self.get_active_terminal_widget()
 
+    def _get_target_host_config(self):
+        """The host config a context-menu action should read from — same
+        shared-action idiom as on_menu_open_sftp: the right-clicked tab's
+        config if this came from the tab menu (last_clicked_tab is set),
+        else whatever's selected in the host tree (last_clicked_tab is
+        cleared by on_tree_right_click before that menu ever opens)."""
+        if self.last_clicked_tab and self.last_clicked_tab in self.tab_data:
+            return self.tab_data[self.last_clicked_tab].get("config")
+        selection = self.tree_view.get_selection()
+        model, tree_iter = selection.get_selected()
+        if tree_iter:
+            return model.get_value(tree_iter, COL_DATA)
+        return None
+
+    def on_menu_copy_host_field(self, action, param, field):
+        """win.copy-host-{name,address,userhost} — see copy_host_menu in
+        setup_actions_and_popovers. Shared by the host tree and tab
+        context menus alike (_get_target_host_config picks the right host
+        either way). "field" is bound at connect() time, not a GAction
+        parameter — see the actions' own creation comment for why."""
+        host_config = self._get_target_host_config()
+        if not host_config:
+            return
+        host_str = host_config.get("host") or ""
+        user, _sep, address = host_str.rpartition('@')
+        if field == "name":
+            text = host_config.get("name") or ""
+        elif field == "address":
+            text = address
+        elif field == "userhost":
+            text = host_str if user else ""
+        else:
+            return
+        if not text:
+            return
+        # Gdk.Clipboard.set() boxes the string into a GValue and relies on
+        # GDK's built-in text serializer — reported to silently not reach
+        # the system clipboard on Linux (see markdown_view.py's
+        # _on_copy_code_clicked, which hit the same thing first).
+        # new_for_bytes() sidesteps that entirely.
+        provider = Gdk.ContentProvider.new_for_bytes(
+            "text/plain;charset=utf-8", GLib.Bytes.new(text.encode("utf-8"))
+        )
+        self.get_clipboard().set_content(provider)
+
     # --- 6. Connection Logic (Terminal) ---
 
     def _compute_log_path(self, host_str, name):
@@ -3830,14 +3937,24 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if page_widget and page_widget in self.tab_data:
             tab_info = self.tab_data[page_widget]
             is_sftp = tab_info["type"] == "sftp"
+            host_config = tab_info.get("config", {})
             # The local-machine tab has no remote host to open an SFTP
-            # connection to.
-            is_local = tab_info.get("config", {}).get("protocol") == "local"
+            # connection to, or any of Server name/Hostname/IP/user@host
+            # to copy — same reasoning as on_tree_right_click excluding
+            # the tree's own synthetic "local" row from the host menu.
+            is_local = host_config.get("protocol") == "local"
             sftp_action.set_enabled(not is_sftp and not is_local)
             ssh_action.set_enabled(is_sftp)
+            has_user = "@" in (host_config.get("host") or "")
+            self.lookup_action("copy-host-name").set_enabled(not is_local)
+            self.lookup_action("copy-host-address").set_enabled(not is_local)
+            self.lookup_action("copy-host-userhost").set_enabled(not is_local and has_user)
         else:
             sftp_action.set_enabled(False)
             ssh_action.set_enabled(False)
+            self.lookup_action("copy-host-name").set_enabled(False)
+            self.lookup_action("copy-host-address").set_enabled(False)
+            self.lookup_action("copy-host-userhost").set_enabled(False)
 
         translated_x, translated_y = tab_label_box.translate_coordinates(self, x, y)
 
