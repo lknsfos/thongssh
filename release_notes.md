@@ -1,5 +1,13 @@
 # Release Notes
 
+### 🔒 What's New in 0.9.1
+
+Two security fixes, both reported from reading the source rather than found in the wild — thank you.
+
+* **Saved SSH passwords no longer appear in plain text in `ps aux`/`/proc/<pid>/cmdline`** — connecting with a password saved in the keyring shelled out to `sshpass -p <password> ssh ...`, putting the password directly in the process's argument list for any local user to read for the whole life of the session. It's passed via the `SSHPASS` environment variable now (`sshpass -e`), which isn't visible in `ps aux` at all.
+* **Fixed saved-password connections silently disabling host key verification** — the same code path also always added `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null` "because sshpass can't handle host key prompts." Both are gone: sshpass was never asked to answer that prompt anyway (it only intercepts the password prompt), so a known host behaves identically without them, and a genuinely new or changed host key now correctly stops and asks — right there in the same terminal — instead of being silently accepted.
+* **Fixed SFTP and Send File trusting *any* server's host key with no verification at all** — both used `paramiko.AutoAddPolicy()`, which accepts whatever key a server presents on first connect and never checks it again later, so a machine-in-the-middle was never detected either way. Both now load `~/.ssh/known_hosts` like a real `ssh` client would; an unrecognized host now shows a confirmation dialog with its fingerprint before trusting and saving it (same first-connect trust prompt OpenSSH itself shows), and a *known* host whose key has since changed correctly stops the connection instead of accepting it.
+
 ### 🆕 What's New in 0.9.0
 
 Disconnected sessions are easier to spot and reconnect to, hosts/tabs gained a quick copy-to-clipboard menu, and the watermark's position is now a visual picker instead of a dropdown:
