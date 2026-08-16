@@ -2401,20 +2401,18 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         # Shared between the host-tree and tab menus below — a single
         # Gio.MenuModel instance can be attached as a submenu in more than
-        # one place, and this one is 100% static (labels never change, only
-        # what on_menu_copy_host_field resolves at click time does), so
-        # there's no reason to build it twice. Always exactly 3 items —
+        # one place. Its 3 item labels are rewritten per right-click (see
+        # _populate_copy_host_menu) to show the actual host's values
+        # instead of a generic title — but always exactly 3 items,
         # deliberately never grown/shrunk per host (e.g. by hiding
-        # "user@hostname" when no user is set) — see build_user_commands_
-        # menu's docstring for why a GtkPopoverMenu's *item count* changing
-        # between two consecutive popups is what causes a truncated first
-        # show, not just what the click handler enables/disables. When a
-        # host has no username, the win.copy-host-field('userhost') item
-        # is instead just disabled (on_tree_right_click/on_tab_right_click).
-        copy_host_menu = Gio.Menu()
-        copy_host_menu.append(_("Server name"), "win.copy-host-name")
-        copy_host_menu.append(_("Hostname/IP"), "win.copy-host-address")
-        copy_host_menu.append(_("user@hostname"), "win.copy-host-userhost")
+        # "user@hostname" when no user is set — that's disabled instead,
+        # in on_tree_right_click/on_tab_right_click): see
+        # build_user_commands_menu's docstring for why a GtkPopoverMenu's
+        # item *count* changing between two consecutive popups is what
+        # causes a truncated first show, not what its labels say or what
+        # the click handler enables/disables.
+        self.copy_host_menu = Gio.Menu()
+        self._populate_copy_host_menu(None)
 
         # Menu for a HOST
         host_menu = Gio.Menu()
@@ -2422,7 +2420,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         host_menu.append(_("Edit..."), "win.edit") # "win." = window prefix
         host_menu.append(_("Clone"), "win.clone")
         host_menu.append(_("Connect SFTP"), "win.open-sftp")
-        host_menu.append_submenu(_("Copy to Clipboard"), copy_host_menu)
+        host_menu.append_submenu(_("Copy to Clipboard"), self.copy_host_menu)
         host_menu.append(_("Delete"), "win.delete")
         self.user_commands_menu_section = Gio.Menu()
         host_menu.append_section(None, self.user_commands_menu_section)
@@ -2445,7 +2443,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         tab_menu.append(_("Duplicate"), "win.tab-duplicate")
         tab_menu.append(_("Connect SFTP"), "win.open-sftp") # Re-use existing action
         tab_menu.append(_("Connect SSH"), "win.open-ssh-from-tab")
-        tab_menu.append_submenu(_("Copy to Clipboard"), copy_host_menu)
+        tab_menu.append_submenu(_("Copy to Clipboard"), self.copy_host_menu)
 
         quicky_menu = Gio.Menu()
         quicky_menu.append(_("Insert into Terminal"), "win.quicky-insert")
@@ -2520,6 +2518,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 self.lookup_action("copy-host-name").set_enabled(True)
                 self.lookup_action("copy-host-address").set_enabled(True)
                 self.lookup_action("copy-host-userhost").set_enabled(has_user)
+                self._populate_copy_host_menu(host_config)
                 self.popover_host.set_pointing_to(rect)
                 self.popover_host.popup()
 
@@ -3389,6 +3388,24 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             return model.get_value(tree_iter, COL_DATA)
         return None
 
+    def _populate_copy_host_menu(self, host_config):
+        """Rewrites the "Copy to Clipboard" submenu's 3 item labels to the
+        given host's actual values, in place of a generic title — called
+        from on_tree_right_click/on_tab_right_click with whatever host is
+        about to be right-clicked (host_config=None gives a safe generic
+        fallback, used only for the one-time initial build before any
+        real host has ever been clicked). Item count never changes — see
+        this menu's own creation comment in setup_actions_and_popovers for
+        why that specifically (not label text) is what a GtkPopoverMenu
+        can't re-measure in time for its very next popup."""
+        self.copy_host_menu.remove_all()
+        host_str = (host_config or {}).get("host") or ""
+        name = (host_config or {}).get("name") or ""
+        user, _sep, address = host_str.rpartition('@')
+        self.copy_host_menu.append(name or _("Server name"), "win.copy-host-name")
+        self.copy_host_menu.append(address or _("Hostname/IP"), "win.copy-host-address")
+        self.copy_host_menu.append(host_str if user else _("user@hostname"), "win.copy-host-userhost")
+
     def on_menu_copy_host_field(self, action, param, field):
         """win.copy-host-{name,address,userhost} — see copy_host_menu in
         setup_actions_and_popovers. Shared by the host tree and tab
@@ -3415,10 +3432,21 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # the system clipboard on Linux (see markdown_view.py's
         # _on_copy_code_clicked, which hit the same thing first).
         # new_for_bytes() sidesteps that entirely.
-        provider = Gdk.ContentProvider.new_for_bytes(
-            "text/plain;charset=utf-8", GLib.Bytes.new(text.encode("utf-8"))
-        )
-        self.get_clipboard().set_content(provider)
+        #
+        # X11/Wayland actually have TWO independent selections, and a
+        # terminal's paste shortcuts split across them: Ctrl+V/Ctrl+Shift+V
+        # read the CLIPBOARD selection, but Shift+Insert and (in VTE's
+        # default menu) right-click-Paste read PRIMARY — the one that's
+        # normally only updated by highlighting text with the mouse.
+        # Setting just CLIPBOARD left PRIMARY stale, so those two pasted
+        # whatever had last been *selected* somewhere instead of what was
+        # just copied here. Both need the same content.
+        display = self.get_display()
+        for clipboard in (display.get_clipboard(), display.get_primary_clipboard()):
+            provider = Gdk.ContentProvider.new_for_bytes(
+                "text/plain;charset=utf-8", GLib.Bytes.new(text.encode("utf-8"))
+            )
+            clipboard.set_content(provider)
 
     # --- 6. Connection Logic (Terminal) ---
 
@@ -3949,12 +3977,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self.lookup_action("copy-host-name").set_enabled(not is_local)
             self.lookup_action("copy-host-address").set_enabled(not is_local)
             self.lookup_action("copy-host-userhost").set_enabled(not is_local and has_user)
+            self._populate_copy_host_menu(None if is_local else host_config)
         else:
             sftp_action.set_enabled(False)
             ssh_action.set_enabled(False)
             self.lookup_action("copy-host-name").set_enabled(False)
             self.lookup_action("copy-host-address").set_enabled(False)
             self.lookup_action("copy-host-userhost").set_enabled(False)
+            self._populate_copy_host_menu(None)
 
         translated_x, translated_y = tab_label_box.translate_coordinates(self, x, y)
 
