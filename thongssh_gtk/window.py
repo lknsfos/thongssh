@@ -3738,6 +3738,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         cmd = []
         password = None
+        # Only set for the sshpass branch below (SSHPASS env var, "-e") —
+        # every other case spawns with an unmodified environment.
+        extra_env = {}
 
         if protocol == "ssh":
             # Check for a password in the keyring
@@ -3745,11 +3748,31 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
             # Build the SSH command
             if password and "@" in host_str:
-                # Use sshpass if a password is set
+                # Use sshpass if a password is set. "-e" (read the
+                # password from the SSHPASS env var), not "-p <password>"
+                # — an argv element is visible to any local user for the
+                # whole life of the process via `ps aux`/`/proc/<pid>/
+                # cmdline`; SSHPASS itself is still readable via
+                # /proc/<pid>/environ, but that's a deliberate, targeted
+                # read by someone with the same access level as reading
+                # this process's own memory, not a passive `ps aux` glance.
+                # The actual env var is set below, alongside the rest of
+                # the spawned process's environment (see spawn_sync's envv).
                 sshpass_path = self.settings_manager.get("client.sshpass_path")
-                cmd = [sshpass_path, "-p", password, self.settings_manager.get("client.ssh_path")]
-                # Add options to prevent host key prompts, as sshpass can't handle them
-                cmd.extend(["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"])
+                cmd = [sshpass_path, "-e", self.settings_manager.get("client.ssh_path")]
+                # StrictHostKeyChecking=no + UserKnownHostsFile=/dev/null
+                # used to be added here "because sshpass can't handle host
+                # key prompts" — but that's only true for a HOST KEY
+                # CHANGE/unknown-host confirmation prompt, which sshpass
+                # was never asked to answer anyway (it only intercepts the
+                # password prompt); a *known* host authenticates with no
+                # such prompt at all. Dropping both: an already-known host
+                # works exactly the same, and a genuinely new/changed host
+                # key now correctly stops and asks — in this same
+                # interactive terminal, since VTE's own pty is what's
+                # actually connected here — instead of silently accepting
+                # it, which is exactly the case that should ask.
+                extra_env["SSHPASS"] = password
                 logging.info("Password found in keyring, using sshpass.")
             else:
                 # Standard SSH command
@@ -3801,19 +3824,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         logging.debug(f"Assembled command: {' '.join(cmd)}")
 
         # ✨ Log command to file in config directory
+        # No password-masking needed here: sshpass now gets the password
+        # via "-e"/the SSHPASS env var (see above), never as a "cmd" argv
+        # element, so there's nothing sensitive in "cmd" to mask.
         try:
             log_file_path = CONFIG_DIR / "session_commands.log"
             with open(log_file_path, "a", encoding="utf-8") as f:
                 timestamp = datetime.datetime.now().isoformat()
-                # Mask password if using sshpass
-                log_cmd = list(cmd)
-                try:
-                    sshpass_idx = log_cmd.index("sshpass")
-                    if log_cmd[sshpass_idx + 1] == "-p":
-                        log_cmd[sshpass_idx + 2] = "'********'"
-                except (ValueError, IndexError):
-                    pass  # sshpass not in command or command is malformed
-                f.write(f"[{timestamp}] {' '.join(log_cmd)}\n")
+                f.write(f"[{timestamp}] {' '.join(cmd)}\n")
         except Exception as e:
             logging.error(f"Failed to write to command log file: {e}")
 
@@ -3833,10 +3851,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             terminal.set_font(Pango.FontDescription.from_string(font_str))
             self._apply_color_scheme_to_terminal(terminal)
 
+            # An empty envv here (the common case — extra_env is only
+            # ever populated for the sshpass/SSHPASS case above) makes VTE
+            # spawn with an unmodified inherited environment, same as
+            # before; confirmed live (TERM/PATH/HOME all still present)
+            # rather than assumed, since passing a NON-empty envv fully
+            # *replaces* the child's environment instead of extending it —
+            # so the sshpass case has to build the full list itself, not
+            # just the one extra SSHPASS var.
+            envv = [f"{k}={v}" for k, v in os.environ.items()] if extra_env else []
+            for key, value in extra_env.items():
+                envv.append(f"{key}={value}")
+
             success, pid = terminal.spawn_sync(
                 Vte.PtyFlags.DEFAULT,
                 os.environ['HOME'],
-                cmd, [], GLib.SpawnFlags.DEFAULT, # Use DEFAULT instead of DO_NOT_REAP_CHILD
+                cmd, envv, GLib.SpawnFlags.DEFAULT, # Use DEFAULT instead of DO_NOT_REAP_CHILD
                 None, None
             )
 
