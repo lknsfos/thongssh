@@ -8,11 +8,96 @@ circular import.
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw
+from gi.repository import Gtk, Adw, Gdk, GObject
 
 from .constants import WATERMARK_POSITIONS
 
 _ = lambda s: s
+
+# Ignored on their own while listening for a new shortcut — a bare modifier
+# press isn't a combination yet, just wait for the actual key that goes
+# with it. (Caps/Num/Scroll Lock deliberately excluded from this list even
+# though they're technically modifiers too — capturing e.g. "Ctrl+W" while
+# Caps Lock happens to be on shouldn't require it stay on forever after.)
+_MODIFIER_ONLY_KEYVALS = {
+    Gdk.KEY_Control_L, Gdk.KEY_Control_R,
+    Gdk.KEY_Shift_L, Gdk.KEY_Shift_R,
+    Gdk.KEY_Alt_L, Gdk.KEY_Alt_R,
+    Gdk.KEY_Super_L, Gdk.KEY_Super_R,
+    Gdk.KEY_Meta_L, Gdk.KEY_Meta_R,
+}
+
+
+class ShortcutPicker(Gtk.Button):
+    """A button that captures a new keyboard shortcut when clicked: click
+    it, then press the desired key combination (Escape cancels, leaving
+    the previous value in place). Shows the current shortcut as its own
+    label (e.g. "Ctrl+W"). Read/written as a Gtk accelerator name (e.g.
+    "<Control>w", see get_accelerator/set_accelerator) — the same format
+    Gtk.accelerator_parse/_name/_get_label already understand, so nothing
+    bespoke needs to be invented for storage or for turning it back into a
+    display label.
+
+    Used by Settings -> General -> Keyboard Shortcuts, where every
+    combination this app used to hardcode (Ctrl+W to close a tab, etc.)
+    is configurable instead — several collide with standard shell
+    keybindings on some setups (Ctrl+W deletes the last word in bash/
+    zsh's own line editing, for one)."""
+
+    __gsignals__ = {
+        "changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+    }
+
+    def __init__(self, accel=None):
+        super().__init__()
+        self.add_css_class("flat")
+        self._accel = None
+        self._listening = False
+        self.set_accelerator(accel)
+
+        key_controller = Gtk.EventControllerKey.new()
+        key_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(key_controller)
+        self.connect("clicked", self._on_clicked)
+
+    def _on_clicked(self, *_args):
+        self._listening = True
+        self.set_label(_("Press a key combination…"))
+        self.grab_focus()
+
+    def _on_key_pressed(self, _controller, keyval, _keycode, state):
+        if not self._listening:
+            return False
+        if keyval == Gdk.KEY_Escape:
+            self._listening = False
+            self._refresh_label()
+            return True
+        if keyval in _MODIFIER_ONLY_KEYVALS:
+            return True  # not a full combination yet — keep listening
+        mods = state & Gtk.accelerator_get_default_mod_mask()
+        self._listening = False
+        self.set_accelerator(Gtk.accelerator_name(keyval, mods))
+        return True
+
+    def set_accelerator(self, accel):
+        """accel: a Gtk accelerator name (e.g. "<Control>w"), or
+        None/"" to clear. Fires "changed" — including when called
+        programmatically (e.g. Settings' on_reset), same as PositionGrid's
+        set_selected, so callers never need a separate no-signal path."""
+        self._accel = accel or None
+        self._refresh_label()
+        self.emit("changed")
+
+    def get_accelerator(self):
+        return self._accel
+
+    def _refresh_label(self):
+        if self._accel:
+            success, keyval, mods = Gtk.accelerator_parse(self._accel)
+            if success:
+                self.set_label(Gtk.accelerator_get_label(keyval, mods))
+                return
+        self.set_label(_("(none)"))
 
 
 def set_split_button_active_style(split_button, active):

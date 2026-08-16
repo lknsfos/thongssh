@@ -31,6 +31,17 @@ DEFAULT_SETTINGS = {
     "interface.tree_row_striping": False,
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default
     "interface.host_search_position": "bottom", # "top" or "bottom" — where the host-tree search bar sits
+    # Gtk accelerator names (Gtk.accelerator_parse/_name understand them
+    # directly, e.g. "<Control>w") for every keyboard shortcut this app
+    # used to hardcode — several collide with standard shell keybindings
+    # (Ctrl+W deletes the last word in bash/zsh's own line editing, for
+    # one), hence configurable rather than fixed. See window.py's
+    # _shortcut_matches.
+    "shortcuts.close_tab": "<Control><Shift>w", # plain Ctrl+W deletes the last word in bash/zsh's own (readline) line editing
+    "shortcuts.focus_search": "<Control>f",
+    "shortcuts.find_in_terminal": "<Control><Shift>f",
+    "shortcuts.copy": "<Control><Shift>c",
+    "shortcuts.paste": "<Control><Shift>v",
     "interface.watermark_enabled": False, # mirrored by the header toggle button, not a Settings-page switch
     "interface.watermark_text": "$user@$host", # see constants.py's _prepare_command note: $name, $host, $user
     "interface.watermark_position": "center", # one of constants.WATERMARK_POSITIONS' ids

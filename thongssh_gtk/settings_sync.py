@@ -82,6 +82,11 @@ TERMINAL_SETTINGS_KEYS = [
 ]
 GENERAL_SETTINGS_KEYS = [
     "interface.icon", "interface.tree_row_striping", "interface.debug_mode", "interface.host_search_position",
+    # Keyboard shortcuts — plain Gtk accelerator names, not a font/binary
+    # path, so (unlike terminal.font etc.) there's no reason a preferred
+    # binding on one machine wouldn't also apply cleanly on another.
+    "shortcuts.close_tab", "shortcuts.focus_search", "shortcuts.find_in_terminal",
+    "shortcuts.copy", "shortcuts.paste",
 ]
 
 _EMPTY_ROOT = {"type": "group", "name": "Root", "children": []}

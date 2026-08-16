@@ -9,7 +9,7 @@ import re
 import datetime
 
 from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS
-from .widgets import PositionGrid, set_split_button_active_style
+from .widgets import PositionGrid, set_split_button_active_style, ShortcutPicker
 from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
 from .settings import DEFAULT_SETTINGS
 from .launcher_icon import apply_launcher_icon
@@ -1537,6 +1537,40 @@ class SettingsDialog(Adw.Window):
         self.debug_mode_row.set_active(self.settings_manager.get("interface.debug_mode"))
         group_debug.add(self.debug_mode_row)
 
+        # --- Shortcuts Page ---
+        # Every keyboard shortcut this app used to hardcode, made
+        # configurable — several collide with standard shell keybindings
+        # on some setups (Ctrl+W deletes the last word in bash/zsh's own
+        # line editing, for one). See window.py's _shortcut_matches for
+        # where these actually get read.
+        page_shortcuts = Adw.PreferencesPage()
+        page_shortcuts.set_title(_("Shortcuts"))
+        page_shortcuts.set_icon_name("preferences-desktop-keyboard-shortcuts-symbolic")
+
+        group_shortcuts = Adw.PreferencesGroup(
+            title=_("Keyboard Shortcuts"),
+            description=_(
+                "Click a shortcut, then press the new key combination — Escape cancels, "
+                "leaving it unchanged."
+            ),
+        )
+        page_shortcuts.add(group_shortcuts)
+
+        self._shortcut_pickers = {}
+        for key, label in [
+            ("shortcuts.close_tab", _("Close Tab")),
+            ("shortcuts.focus_search", _("Focus Host Search")),
+            ("shortcuts.find_in_terminal", _("Find in Terminal")),
+            ("shortcuts.copy", _("Copy")),
+            ("shortcuts.paste", _("Paste")),
+        ]:
+            row = Adw.ActionRow(title=label)
+            picker = ShortcutPicker(self.settings_manager.get(key))
+            picker.set_valign(Gtk.Align.CENTER)
+            row.add_suffix(picker)
+            group_shortcuts.add(row)
+            self._shortcut_pickers[key] = picker
+
         # --- SFTP Page ---
         page_sftp = Adw.PreferencesPage()
         page_sftp.set_title(_("SFTP"))
@@ -1916,20 +1950,23 @@ class SettingsDialog(Adw.Window):
         # Connect ListBox selection to Stack
         sidebar.connect("row-selected", lambda listbox, row: self.stack.set_visible_child_name(row.get_name()))
 
-        # Add pages to stack and rows to sidebar
+        # Add pages to stack and rows to sidebar — order here is the
+        # sidebar's own order (built below from self.stack.get_pages(),
+        # which iterates in add-order).
+        self.stack.add_titled_with_icon(page_interface, "interface", _("General"), "preferences-desktop-appearance-symbolic")
+        self.stack.add_titled_with_icon(page_shortcuts, "shortcuts", _("Shortcuts"), "preferences-desktop-keyboard-shortcuts-symbolic")
         self.stack.add_titled_with_icon(page_terminal, "terminal", _("Terminal"), "utilities-terminal-symbolic")
-        self.stack.add_titled_with_icon(page_sftp, "sftp", _("SFTP"), "folder-remote-symbolic")
         self.stack.add_titled_with_icon(page_client, "client", _("Client Options"), "network-wired-symbolic")
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
         self.stack.add_titled_with_icon(page_quickies, "quickies", _("Quickies"), "insert-text-symbolic")
-        self.stack.add_titled_with_icon(page_interface, "interface", _("General"), "preferences-desktop-appearance-symbolic")
+        self.stack.add_titled_with_icon(page_sync, "sync", _("Sync"), "emblem-synchronizing-symbolic")
+        self.stack.add_titled_with_icon(page_sftp, "sftp", _("SFTP"), "folder-remote-symbolic")
         # API and CLI Client are nested tabs *inside* this one "AI" entry
         # (see the Gtk.Stack/StackSwitcher built above) — not separate
         # top-level sidebar entries.
         self.stack.add_titled_with_icon(page_ai_scrolled, "ai", _("AI"), "dialog-messages-symbolic")
-        self.stack.add_titled_with_icon(page_sync, "sync", _("Sync"), "emblem-synchronizing-symbolic")
 
-        for page in (page_terminal, page_sftp, page_client, page_commands, page_interface, page_ai_shared, page_api, page_cli, page_sync):
+        for page in (page_terminal, page_sftp, page_client, page_commands, page_interface, page_shortcuts, page_ai_shared, page_api, page_cli, page_sync):
             _widen_preferences_clamp(page)
 
         for page in self.stack.get_pages():
@@ -2128,6 +2165,9 @@ class SettingsDialog(Adw.Window):
         )
 
         self.settings_manager.set("interface.debug_mode", self.debug_mode_row.get_active())
+
+        for key, picker in self._shortcut_pickers.items():
+            self.settings_manager.set(key, picker.get_accelerator())
 
         self.settings_manager.set("interface.watermark_enabled", self.watermark_enabled_row.get_active())
         self.settings_manager.set("interface.watermark_text", self.watermark_text_row.get_text())
@@ -2463,6 +2503,23 @@ class SettingsDialog(Adw.Window):
             self.sftp_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.local_default_sort_direction"], 0))
             self.sftp_remote_sort_col_row.set_selected(sort_col_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_column"], 0))
             self.sftp_remote_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_direction"], 0))
+        elif current_page_name == "interface":
+            try:
+                default_icon_index = [stem for _label, stem in self._icon_options].index(
+                    DEFAULT_SETTINGS["interface.icon"]
+                )
+            except ValueError:
+                default_icon_index = 0
+            self.icon_row.set_selected(default_icon_index)
+            self.tree_row_striping_row.set_active(DEFAULT_SETTINGS["interface.tree_row_striping"])
+            search_position_map = {"top": 0, "bottom": 1}
+            self.search_position_row.set_selected(
+                search_position_map.get(DEFAULT_SETTINGS["interface.host_search_position"], 1)
+            )
+            self.debug_mode_row.set_active(DEFAULT_SETTINGS["interface.debug_mode"])
+        elif current_page_name == "shortcuts":
+            for key, picker in self._shortcut_pickers.items():
+                picker.set_accelerator(DEFAULT_SETTINGS[key])
         elif current_page_name == "sync":
             self.sync_enabled_row.set_active(DEFAULT_SETTINGS["sync.enabled"])
             self.sync_folder_row.set_text(DEFAULT_SETTINGS["sync.folder"])

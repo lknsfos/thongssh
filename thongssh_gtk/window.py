@@ -2197,8 +2197,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         return False # For all other keys - propagate further
 
     def on_window_key_pressed(self, controller, keyval, keycode, modifier):
-        """Handles global key presses for the window (e.g., Ctrl+W, Ctrl+F,
-        Ctrl+Shift+F).
+        """Handles global key presses for the window — close tab/focus
+        search/find-in-terminal, all configurable (Settings -> General ->
+        Keyboard Shortcuts, see _shortcut_matches).
 
         Resolved through _resolve_latin_letter (see on_terminal_key_pressed)
         rather than compared against keyval directly, same reasoning as
@@ -2209,18 +2210,17 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
         letter = self._resolve_latin_letter(keyval, keycode) if is_ctrl else None
 
-        # ✨ Handle Ctrl+W globally to close any active tab
-        if is_ctrl and letter == "w":
+        if self._shortcut_matches("shortcuts.close_tab", is_ctrl, is_shift, letter):
             self.on_menu_close_tab(None, None)
             return True # Event handled
-        # Checked before the plain Ctrl+F branch below since both share
-        # is_ctrl and letter == "f".
-        if is_ctrl and is_shift and letter == "f":
+        # Checked before focus_search below since both commonly share
+        # is_ctrl and the same letter (Ctrl+F / Ctrl+Shift+F by default).
+        if self._shortcut_matches("shortcuts.find_in_terminal", is_ctrl, is_shift, letter):
             self.on_menu_find_in_terminal(None, None)
             return True
-        # Ctrl+F focuses the search entry from anywhere — terminal, tree,
-        # or elsewhere in the window (see the CAPTURE phase note above).
-        if is_ctrl and letter == "f":
+        # Focuses the search entry from anywhere — terminal, tree, or
+        # elsewhere in the window (see the CAPTURE phase note above).
+        if self._shortcut_matches("shortcuts.focus_search", is_ctrl, is_shift, letter):
             self.on_toggle_search()
             return True
         return False
@@ -4085,6 +4085,32 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 return chr(kv).lower()
         return None
 
+    def _shortcut_matches(self, settings_key, is_ctrl, is_shift, letter):
+        """Whether the just-pressed combination (already broken down into
+        is_ctrl/is_shift/the physical key's resolved Latin letter — see
+        on_window_key_pressed/on_terminal_key_pressed) matches the
+        configurable shortcut stored under settings_key (a Gtk accelerator
+        name, e.g. "<Control>w" — see Settings -> General -> Keyboard
+        Shortcuts). Re-reads and re-parses the setting on every call
+        rather than caching: keypresses are infrequent enough for a plain
+        string parse to be a non-issue, and this way a change made in
+        Settings (or pulled in by Sync) takes effect on the very next
+        keypress with no extra wiring needed to invalidate a cache."""
+        accel = self.settings_manager.get(settings_key)
+        if not accel:
+            return False
+        success, keyval, mods = Gtk.accelerator_parse(accel)
+        if not success:
+            return False
+        want_ctrl = bool(mods & Gdk.ModifierType.CONTROL_MASK)
+        want_shift = bool(mods & Gdk.ModifierType.SHIFT_MASK)
+        want_letter = None
+        if Gdk.KEY_a <= keyval <= Gdk.KEY_z:
+            want_letter = chr(keyval)
+        elif Gdk.KEY_A <= keyval <= Gdk.KEY_Z:
+            want_letter = chr(keyval).lower()
+        return bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift and letter == want_letter
+
     def on_terminal_key_pressed(self, controller, keyval, keycode, modifier):
         """Handles key presses directly on the Vte.Terminal widget."""
         is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
@@ -4092,17 +4118,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         already_latin = (Gdk.KEY_a <= keyval <= Gdk.KEY_z) or (Gdk.KEY_A <= keyval <= Gdk.KEY_Z)
         letter = self._resolve_latin_letter(keyval, keycode) if is_ctrl else None
 
-        if is_ctrl and letter == "w":
+        if self._shortcut_matches("shortcuts.close_tab", is_ctrl, is_shift, letter):
             self.on_menu_close_tab(None, None)
             return True # Event handled, stop propagation
 
-        # Ctrl+Shift+C/V: Vte only binds the classic Shift+Insert/Ctrl+Insert
-        # copy-paste shortcuts itself, not this newer convention, so it has
-        # to be wired up explicitly here.
-        if is_ctrl and is_shift and letter == "c":
+        # Copy/Paste: Vte only binds the classic Shift+Insert/Ctrl+Insert
+        # copy-paste shortcuts itself, not the newer Ctrl+Shift+C/V
+        # convention these default to, so it has to be wired up explicitly
+        # here — both configurable (Settings -> General -> Keyboard
+        # Shortcuts), same as close_tab above.
+        if self._shortcut_matches("shortcuts.copy", is_ctrl, is_shift, letter):
             self.on_menu_copy(None, None)
             return True
-        if is_ctrl and is_shift and letter == "v":
+        if self._shortcut_matches("shortcuts.paste", is_ctrl, is_shift, letter):
             self.on_menu_paste(None, None)
             return True
 
