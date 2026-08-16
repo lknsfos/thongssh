@@ -2971,7 +2971,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         sftp_view = SftpWidget(host_config)
 
         # Create a tab label with a close button
-        tab_label_box, close_btn = self._create_tab_label("folder-remote-symbolic", host_config['name'])
+        tab_label_box, close_btn, _tab_label = self._create_tab_label("folder-remote-symbolic", host_config['name'])
 
         # Add the new widget to the active pane
         target_notebook = self._get_active_notebook()
@@ -3345,12 +3345,30 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             logging.warning("Error: host is not set in the config.")
             return
 
-        # Only ask for a username if it's an SSH connection and no user is specified.
-        if config.get("protocol", "ssh") == "ssh" and "@" not in host_str:
+        # Reconnecting (not opening fresh) to a tab whose session already
+        # ended (see on_ssh_process_exited/terminal.close_on_disconnect) —
+        # normally config['host'] already has a resolved "user@host" baked
+        # in by now (see _continue_session) and this would skip straight
+        # to reusing it forever. terminal.reconnect_prompt_username opts
+        # into re-asking here too, same as the very first connection.
+        is_reconnect_to_dead_session = (
+            existing_terminal_widget is not None
+            and self.tab_data.get(existing_terminal_widget, {}).get("disconnected", False)
+        )
+        ask_username_again = (
+            is_reconnect_to_dead_session
+            and self.settings_manager.get("terminal.reconnect_prompt_username")
+        )
+
+        # Only ask for a username if it's an SSH connection and either no
+        # user is specified yet, or the reconnect setting above asks again.
+        if config.get("protocol", "ssh") == "ssh" and ("@" not in host_str or ask_username_again):
+            prev_user, _sep, bare_host = host_str.rpartition('@')
             dialog = InputDialog(
                 self,
                 title=_("Username Required"),
-                message=_("Enter username for {host_str}").format(host_str=host_str)
+                message=_("Enter username for {host_str}").format(host_str=bare_host),
+                default_text=prev_user,
             )
             # Run asynchronously to not block the UI
             dialog.run_async(lambda username: self._continue_session(config, username, existing_terminal_widget))
@@ -3508,7 +3526,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         host_str = config.get('host')
         if username_from_prompt:
-             host_str = f"{username_from_prompt}@{host_str}"
+            # rpartition, not a plain prepend — config['host'] may already
+            # be "olduser@host" (a reconnect re-prompting per
+            # terminal.reconnect_prompt_username, see start_session), and
+            # prepending onto that unconditionally would produce
+            # "newuser@olduser@host" instead of replacing it.
+            _old_user, _sep, bare_host = host_str.rpartition('@')
+            host_str = f"{username_from_prompt}@{bare_host}"
 
         # Captured before the telnet branch below strips the user@ part back
         # off — this is what actually gets used to auth this session, so
@@ -3681,7 +3705,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 term_overlay.set_child(scrolled_term)
                 term_overlay.add_overlay(watermark_label)
 
-                tab_label_box, close_btn = self._create_tab_label("utilities-terminal-symbolic", config['name'])
+                tab_label_box, close_btn, tab_label = self._create_tab_label("utilities-terminal-symbolic", config['name'])
 
                 # term_overlay (not scrolled_term) is the actual tab/page
                 # widget from here on — the one keyed in open_sessions/
@@ -3698,7 +3722,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 self.open_sessions[term_overlay] = (terminal, pid)
                 self.tab_data[term_overlay] = {
                     "type": "terminal", "config": resolved_config, "log_path": None,
-                    "watermark_label": watermark_label,
+                    "watermark_label": watermark_label, "tab_label": tab_label,
+                    "disconnected": False,
                 }
                 close_btn.connect("clicked", self.on_tab_close_button_clicked, term_overlay, pid)
                 terminal.connect("child-exited", self.on_ssh_process_exited, term_overlay)
@@ -3712,6 +3737,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 if tab_info is not None:
                     tab_info["log_path"] = None
                     tab_info["config"]["host"] = resolved_host_str
+                    # Alive again — clear the disconnected strikethrough
+                    # applied in on_ssh_process_exited, if any.
+                    tab_info["disconnected"] = False
+                    self._set_tab_label_disconnected(tab_info.get("tab_label"), False)
                 if config.get("save_log", False):
                     self._start_session_logging(existing_terminal_widget)
                 terminal.grab_focus()
@@ -3782,7 +3811,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         drag_source.connect("drag-begin", on_drag_begin)
         tab_label_box.add_controller(drag_source)
 
-        return tab_label_box, close_btn
+        return tab_label_box, close_btn, tab_label
 
     def on_tab_right_click(self, gesture, n_press, x, y):
         """Shows the context menu for a notebook tab. Connected to 'released'."""
@@ -3956,6 +3985,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             terminal.feed_child(exit_message.encode('utf-8'))
             # Make the terminal read-only
             terminal.set_input_enabled(False)
+            # Strike through the tab's name — the only visual cue this tab
+            # is dead, since it otherwise looks identical to a live one.
+            # Cleared again on a successful reconnect (see _continue_session).
+            tab_info = self.tab_data[tab_widget]
+            tab_info["disconnected"] = True
+            self._set_tab_label_disconnected(tab_info.get("tab_label"), True)
+
+    def _set_tab_label_disconnected(self, tab_label, disconnected):
+        """Toggles the strikethrough on a terminal tab's label text — the
+        visual cue that its session has ended but the tab itself was kept
+        open (see terminal.close_on_disconnect)."""
+        if tab_label is None:
+            return
+        attrs = Pango.AttrList()
+        attrs.insert(Pango.attr_strikethrough_new(disconnected))
+        tab_label.set_attributes(attrs)
 
     def close_tab(self, widget):
         """
@@ -4048,7 +4093,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             if tab_info["type"] == "sftp":
                 # This is complex, for now, just open a new SFTP based on config
                 sftp_view = SftpWidget(tab_info["config"])
-                tab_label_box, close_btn = self._create_tab_label("folder-remote-symbolic", tab_info["config"]['name'])
+                tab_label_box, close_btn, _tab_label = self._create_tab_label("folder-remote-symbolic", tab_info["config"]['name'])
                 target_notebook = self._get_active_notebook()
                 page_num = target_notebook.append_page(sftp_view, tab_label_box)
                 self._mark_tab_draggable(target_notebook, sftp_view)

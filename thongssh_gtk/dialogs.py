@@ -962,6 +962,24 @@ class SettingsDialog(Adw.Window):
         self.close_on_disconnect_row.set_active(self.settings_manager.get("terminal.close_on_disconnect"))
         group_behavior.add(self.close_on_disconnect_row)
 
+        # Only makes sense when tabs survive a disconnect at all (see
+        # above) — a dead tab's name gets struck through (on_ssh_process_
+        # exited) and "Reconnect" from its context menu normally just
+        # reuses whatever username it last connected with; this makes that
+        # prompt itself again instead, pre-filled with the old one so
+        # confirming without changes reproduces the old behavior.
+        self.reconnect_prompt_username_row = Adw.SwitchRow(
+            title=_("Ask for username when reconnecting"),
+            subtitle=_("Prompt again instead of reusing the previous username when reconnecting to a disconnected tab")
+        )
+        self.reconnect_prompt_username_row.set_active(self.settings_manager.get("terminal.reconnect_prompt_username"))
+        group_behavior.add(self.reconnect_prompt_username_row)
+
+        def _update_reconnect_prompt_visibility(*_args):
+            self.reconnect_prompt_username_row.set_visible(not self.close_on_disconnect_row.get_active())
+        self.close_on_disconnect_row.connect("notify::active", _update_reconnect_prompt_visibility)
+        _update_reconnect_prompt_visibility()
+
         # --- Watermark (the header-bar button next to the split buttons is
         # the same live on/off switch as the row below — either one flips
         # interface.watermark_enabled, so they never fall out of sync) ---
@@ -2042,6 +2060,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("terminal.font", self.font_button.get_font())
         self.settings_manager.set("terminal.scrollback_lines", int(self.scrollback_row.get_value()))
         self.settings_manager.set("terminal.close_on_disconnect", self.close_on_disconnect_row.get_active())
+        self.settings_manager.set("terminal.reconnect_prompt_username", self.reconnect_prompt_username_row.get_active())
         
         selected_idx = self.scheme_row.get_selected()
         base_scheme_key = _BASE_SCHEME_IDS[selected_idx]
@@ -2388,6 +2407,7 @@ class SettingsDialog(Adw.Window):
         if current_page_name == "terminal":
             self.scrollback_row.set_value(DEFAULT_SETTINGS["terminal.scrollback_lines"])
             self.close_on_disconnect_row.set_active(DEFAULT_SETTINGS["terminal.close_on_disconnect"])
+            self.reconnect_prompt_username_row.set_active(DEFAULT_SETTINGS["terminal.reconnect_prompt_username"])
             self.font_button.set_font(DEFAULT_SETTINGS["terminal.font"])
             
             default_scheme_key = DEFAULT_SETTINGS["terminal.color_scheme"]

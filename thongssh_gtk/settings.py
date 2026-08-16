@@ -26,6 +26,7 @@ DEFAULT_SETTINGS = {
     "sftp.remote_default_sort_column": "name", # name, size, date
     "sftp.remote_default_sort_direction": "asc", # asc, desc
     "terminal.close_on_disconnect": True, # ✨ NEW: Whether to close tab on disconnect
+    "terminal.reconnect_prompt_username": False, # Only relevant when the above is off — ask again instead of reusing the last username when reconnecting to a disconnected tab
     "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
     "interface.tree_row_striping": False,
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default
