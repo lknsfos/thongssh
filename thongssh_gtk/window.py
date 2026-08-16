@@ -28,6 +28,7 @@ from .sftp_widget import SftpWidget
 from .ai_panel import AiPanel
 from .provider_badges import icon_name_for as _icon_name_for, badge_family as _badge_family, badge_text as _badge_text
 from .colors import get_scheme_colors
+from .widgets import PositionGrid, set_split_button_active_style
 from . import settings_sync
 import threading
 
@@ -164,11 +165,36 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # Grouped with Batch Command, not the split-view buttons below —
         # all three (send a command, watermark, Quickies) act on/around the
         # terminal's content, whereas split-view is purely about layout.
-        self.watermark_toggle_button = Gtk.ToggleButton(icon_name="insert-image-symbolic")
+        # Plain Adw.SplitButton — same widget the sync button uses, so the
+        # two look visually consistent (AdwSplitButton is a *final*
+        # GObject type, confirmed unsubclassable, hence no toggle-style
+        # get_active()/set_active() of its own — see
+        # widgets.set_split_button_active_style for how "on" is shown, and
+        # on_watermark_toggle_clicked for where the actual on/off state
+        # lives instead: interface.watermark_enabled). The arrow segment
+        # opens a popover with the same 3x3 position grid Settings uses,
+        # so the position can be changed without a trip through the full
+        # Settings dialog.
+        self.watermark_toggle_button = Adw.SplitButton()
+        self.watermark_toggle_button.set_icon_name("insert-image-symbolic")
         self.watermark_toggle_button.set_tooltip_text(_("Toggle terminal watermark"))
-        self.watermark_toggle_button.set_active(self.settings_manager.get("interface.watermark_enabled"))
-        self.watermark_toggle_button.connect("toggled", self.on_watermark_toggle_clicked)
+        self.watermark_toggle_button.connect("clicked", self.on_watermark_toggle_clicked)
+
+        self.watermark_position_grid = PositionGrid(self.settings_manager.get("interface.watermark_position"))
+        self.watermark_position_grid.connect_changed(self._on_watermark_position_changed)
+        watermark_position_popover = Gtk.Popover()
+        watermark_position_popover.set_child(self.watermark_position_grid)
+        self.watermark_toggle_button.set_popover(watermark_position_popover)
+
+        # After pack_start, not before — a Gtk.StateFlags set on a widget
+        # that isn't parented/realized yet doesn't survive the realize
+        # that follows (confirmed live: True right after set_state_flags,
+        # False again once actually packed+presented), unlike a real
+        # widget property (e.g. a Gtk.ToggleButton's own "active").
         header_bar.pack_start(self.watermark_toggle_button)
+        set_split_button_active_style(
+            self.watermark_toggle_button, self.settings_manager.get("interface.watermark_enabled")
+        )
 
         self.quickies_toggle_button = Gtk.ToggleButton(icon_name="media-seek-forward-symbolic")
         self.quickies_toggle_button.set_tooltip_text(_("Toggle Quickies panel"))
@@ -614,6 +640,20 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                Kept thin and low-opacity on purpose — this is meant to be a
                subtle hint of which pane is active, not a hard outline. */
             box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.35);
+        }
+        /* Watermark header-bar button's "on" look (set_split_button_active_
+           style, widgets.py) — same subtle shade Adwaita itself uses for a
+           checked flat button/split-button (its own stylesheet has this as
+           color-mix(in srgb, currentColor 7%, transparent); alpha() here
+           instead — functionally the same at this low a percentage, but
+           understood by older GTK4 too, e.g. the AppImage's bundled 4.10.5,
+           which the newer color-mix() syntax isn't). Deliberately NOT the
+           accent-colored "suggested-action" class — this app's other
+           toggle-style header buttons (Gtk.ToggleButton, whose real
+           :checked state gets this shading for free) don't stand out with
+           a bright color either, just this. */
+        .watermark-toggle-active {
+            background: alpha(currentColor, 0.07);
         }
         /* Compact tab headers — the theme's own default notebook-tab
            padding plus a full-size flat button for the close "x" adds up
@@ -3543,8 +3583,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self._apply_color_scheme_to_terminal(terminal, scheme_key)
 
     def on_watermark_toggle_clicked(self, button):
-        self.settings_manager.set("interface.watermark_enabled", button.get_active())
+        # "clicked", not "toggled" — button is a plain Adw.SplitButton
+        # (momentary click, no on/off state of its own; see its creation
+        # comment) — the flip happens here, against the actual state
+        # (interface.watermark_enabled), not read off the button.
+        new_state = not self.settings_manager.get("interface.watermark_enabled")
+        self.settings_manager.set("interface.watermark_enabled", new_state)
         self.settings_manager.save()
+        set_split_button_active_style(button, new_state)
         self.apply_watermark_settings_to_all()
 
     def _render_template_text(self, template, host_config):
@@ -3569,7 +3615,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if label is None:
             return
 
-        if not self.watermark_toggle_button.get_active():
+        if not self.settings_manager.get("interface.watermark_enabled"):
             label.set_visible(False)
             return
 
@@ -3645,8 +3691,23 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         watermark settings to every open tab immediately, whether it's the
         toggle button, a Settings change, or the active pane/tab/split
         layout changing which tab(s) should show one."""
+        # Keeps the header-bar popover's own grid in sync with whatever
+        # last changed the setting — Settings' on_apply, in particular,
+        # would otherwise leave it showing a stale position until the app
+        # restarted. A no-op (no signal refires) when it's already
+        # showing the current position, e.g. when this call was itself
+        # triggered by that same grid via _on_watermark_position_changed.
+        self.watermark_position_grid.set_selected(self.settings_manager.get("interface.watermark_position"))
         for scrolled_term in list(self.open_sessions.keys()):
             self._update_watermark_for_tab(scrolled_term)
+
+    def _on_watermark_position_changed(self, position_id):
+        """PositionGrid.connect_changed callback for the header-bar
+        popover's own grid (see its creation, next to watermark_toggle_
+        button)."""
+        self.settings_manager.set("interface.watermark_position", position_id)
+        self.settings_manager.save()
+        self.apply_watermark_settings_to_all()
 
     def _continue_session(self, config, username_from_prompt, existing_terminal_widget=None):
         """Second part of the logic, called AFTER getting the username."""

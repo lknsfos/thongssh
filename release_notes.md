@@ -1,5 +1,15 @@
 # Release Notes
 
+### 🆕 What's New in 0.9.0
+
+Disconnected sessions are easier to spot and reconnect to, hosts/tabs gained a quick copy-to-clipboard menu, and the watermark's position is now a visual picker instead of a dropdown:
+
+* **Disconnected tabs are now struck through** — if "Close tab on disconnect" is off, a tab whose session has ended used to look completely identical to a live one until you actually clicked into it. Its name gets a strikethrough now, and clears again the moment you reconnect.
+* **New: "Ask for username when reconnecting"** (Settings → Terminal, appears once "Close tab on disconnect" is off) — reconnecting to a disconnected tab used to silently reuse whatever username it last connected with, forever. Turning this on prompts again on reconnect, pre-filled with the previous username so confirming without changes still reproduces the old behavior.
+* **New: "Copy to Clipboard" on hosts and tabs** — right-click a host (tree) or a tab and copy its Server name, Hostname/IP, or user@hostname directly; the menu shows the actual value for whichever host you clicked, not a generic label. "user@hostname" is greyed out for hosts with no username configured. Copies to both the Clipboard and Primary selections, so Ctrl+V *and* Shift+Insert/right-click-paste both get the same thing (previously only Ctrl+V did — Shift+Insert/right-click-paste read the Primary selection, which this didn't touch, and pasted whatever had last been selected elsewhere instead).
+* **Fixed the host right-click menu being cut off (needing a scroll) the first time you opened it, if you had any User Commands configured** — the menu's User Commands section was rebuilt on every single right-click, and a `GtkPopoverMenu` doesn't reliably re-measure its size in time for its own very next popup the first time a bound menu grows from empty to populated. It's built once at startup (and again only when the list itself changes in Settings) instead of on every click.
+* **Watermark position is now a 3x3 grid you click, not a dropdown** — a small attached button next to the watermark toggle (same style as the Sync button) opens the same grid Settings uses, so the position can be changed without a trip through the full Settings dialog; both stay in sync with each other.
+
 ### 🆕 What's New in 0.8.3
 
 Terminal/tab regressions from the watermark work fixed, plus a CLI provider and a launcher-icon bug:

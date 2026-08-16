@@ -8,7 +8,8 @@ import uuid
 import re
 import datetime
 
-from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS, WATERMARK_POSITIONS
+from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS
+from .widgets import PositionGrid, set_split_button_active_style
 from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
 from .settings import DEFAULT_SETTINGS
 from .launcher_icon import apply_launcher_icon
@@ -1002,16 +1003,13 @@ class SettingsDialog(Adw.Window):
         group_watermark.add(self.watermark_text_row)
         group_watermark.add(watermark_text_note)
 
-        self._watermark_position_ids = [pos_id for pos_id, _label in WATERMARK_POSITIONS]
-        position_model = Gtk.StringList.new([label for _pos_id, label in WATERMARK_POSITIONS])
-        self.watermark_position_row = Adw.ComboRow(title=_("Position"), model=position_model)
-        try:
-            current_position_index = self._watermark_position_ids.index(
-                self.settings_manager.get("interface.watermark_position")
-            )
-        except ValueError:
-            current_position_index = 0
-        self.watermark_position_row.set_selected(current_position_index)
+        # Same 3x3 anchor-point grid as the header-bar watermark button's
+        # own quick-picker popover (see window.py) — one shared widget
+        # (widgets.PositionGrid) so the two never show/save anything
+        # different from each other.
+        self.watermark_position_grid = PositionGrid(self.settings_manager.get("interface.watermark_position"))
+        self.watermark_position_row = Adw.ActionRow(title=_("Position"))
+        self.watermark_position_row.add_suffix(self.watermark_position_grid)
         group_watermark.add(self.watermark_position_row)
 
         self.watermark_font_size_row = Adw.SpinRow(
@@ -2133,10 +2131,7 @@ class SettingsDialog(Adw.Window):
 
         self.settings_manager.set("interface.watermark_enabled", self.watermark_enabled_row.get_active())
         self.settings_manager.set("interface.watermark_text", self.watermark_text_row.get_text())
-        self.settings_manager.set(
-            "interface.watermark_position",
-            self._watermark_position_ids[self.watermark_position_row.get_selected()]
-        )
+        self.settings_manager.set("interface.watermark_position", self.watermark_position_grid.get_selected())
         self.settings_manager.set("interface.watermark_font_size", int(self.watermark_font_size_row.get_value()))
         self.settings_manager.set(
             "interface.watermark_font_family", self.watermark_font_family_button.get_font_desc().get_family()
@@ -2257,7 +2252,7 @@ class SettingsDialog(Adw.Window):
         # to the "Enabled on start" row (same underlying setting, either
         # control can flip it), then every already-open terminal tab picks
         # up the new enabled/text/position/size/color/opacity/scope state.
-        self.parent_window.watermark_toggle_button.set_active(self.watermark_enabled_row.get_active())
+        set_split_button_active_style(self.parent_window.watermark_toggle_button, self.watermark_enabled_row.get_active())
         self.parent_window.apply_watermark_settings_to_all()
 
         # And for Quickies — same sync as the watermark above, then rebuild
@@ -2424,12 +2419,7 @@ class SettingsDialog(Adw.Window):
 
             self.watermark_enabled_row.set_active(DEFAULT_SETTINGS["interface.watermark_enabled"])
             self.watermark_text_row.set_text(DEFAULT_SETTINGS["interface.watermark_text"])
-            try:
-                self.watermark_position_row.set_selected(
-                    self._watermark_position_ids.index(DEFAULT_SETTINGS["interface.watermark_position"])
-                )
-            except ValueError:
-                self.watermark_position_row.set_selected(0)
+            self.watermark_position_grid.set_selected(DEFAULT_SETTINGS["interface.watermark_position"])
             self.watermark_font_size_row.set_value(DEFAULT_SETTINGS["interface.watermark_font_size"])
             self.watermark_font_family_button.set_font_desc(
                 Pango.FontDescription.from_string(DEFAULT_SETTINGS["interface.watermark_font_family"])
