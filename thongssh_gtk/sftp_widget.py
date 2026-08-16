@@ -18,6 +18,7 @@ import json
 from .settings import SettingsManager
 from .keyring import KeyringManager
 from .dialogs import InputDialog, PermissionsDialog, MessageDialog # MessageDialog for delete confirmation
+from . import host_keys
 
 # Attempt to import paramiko
 IS_PARAMIKO_AVAILABLE = False
@@ -562,8 +563,7 @@ class SftpWidget(Gtk.Box):
         if auth_password:
             try:
                 self._log_message(_("Attempting connection with provided password..."))
-                self.ssh_client = paramiko.SSHClient()
-                self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                self.ssh_client = host_keys.make_ssh_client()
                 self.ssh_client.connect(host, port=port, username=user, password=auth_password, timeout=10, allow_agent=False, look_for_keys=False)
                 # NO keepalive - it causes deadlock during file transfers
                 self.sftp_client = self.ssh_client.open_sftp()
@@ -574,6 +574,16 @@ class SftpWidget(Gtk.Box):
                 self.is_connected = True
                 self.is_reconnecting = False
                 return
+            except host_keys.UnknownHostKeyError as e:
+                def on_decided(trusted, username_from_prompt=username_from_prompt, key_passphrase=key_passphrase, auth_password=auth_password):
+                    if trusted:
+                        # Key's now in ~/.ssh/known_hosts — retry the exact
+                        # same attempt, which will find it there this time.
+                        self._start_sftp_worker_with_user(username_from_prompt, key_passphrase=key_passphrase, auth_password=auth_password)
+                    else:
+                        self._log_message(_("Host key not trusted — connection canceled."), is_error=True)
+                host_keys.confirm_unknown_host_key(self, e, on_decided)
+                return
             except Exception as e:
                 self._log_message(_("Provided password authentication failed: {e}").format(e=e), is_error=True)
 
@@ -581,8 +591,7 @@ class SftpWidget(Gtk.Box):
         if key_filename and not self.sftp_client: # Only try key if not already connected
             try:
                 self._log_message(_("Attempting connection with SSH key..."))
-                self.ssh_client = paramiko.SSHClient()
-                self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                self.ssh_client = host_keys.make_ssh_client()
                 self.ssh_client.connect(host, port=port, username=user, password=key_passphrase, key_filename=key_filename, timeout=10)
                 # Configure transport for large file transfers
                 transport = self.ssh_client.get_transport()
@@ -611,6 +620,14 @@ class SftpWidget(Gtk.Box):
             except paramiko.AuthenticationException:
                 self._log_message(_("Key authentication failed. Falling back to password..."))
                 pass
+            except host_keys.UnknownHostKeyError as e:
+                def on_decided(trusted, username_from_prompt=username_from_prompt, key_passphrase=key_passphrase, auth_password=auth_password):
+                    if trusted:
+                        self._start_sftp_worker_with_user(username_from_prompt, key_passphrase=key_passphrase, auth_password=auth_password)
+                    else:
+                        self._log_message(_("Host key not trusted — connection canceled."), is_error=True)
+                host_keys.confirm_unknown_host_key(self, e, on_decided)
+                return
             except Exception as e:
                 self._log_message(_("SFTP connection failed with key: {e}").format(e=e), is_error=True)
                 return # Stop on other errors
@@ -621,8 +638,7 @@ class SftpWidget(Gtk.Box):
             if password_from_keyring:
                 self._log_message(_("Attempting connection with saved password..."))
                 try:
-                    self.ssh_client = paramiko.SSHClient()
-                    self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    self.ssh_client = host_keys.make_ssh_client()
                     self.ssh_client.connect(host, port=port, username=user, password=password_from_keyring, key_filename=None, timeout=10, allow_agent=False, look_for_keys=False)
                     # Minimal transport configuration
                     transport = self.ssh_client.get_transport()
@@ -632,6 +648,13 @@ class SftpWidget(Gtk.Box):
                     self._log_message(_("SFTP connection established successfully with password."))
                     self.is_connected = True
                     self.is_reconnecting = False
+                except host_keys.UnknownHostKeyError as e:
+                    def on_decided(trusted, username_from_prompt=username_from_prompt, key_passphrase=key_passphrase, auth_password=auth_password):
+                        if trusted:
+                            self._start_sftp_worker_with_user(username_from_prompt, key_passphrase=key_passphrase, auth_password=auth_password)
+                        else:
+                            self._log_message(_("Host key not trusted — connection canceled."), is_error=True)
+                    host_keys.confirm_unknown_host_key(self, e, on_decided)
                 except Exception as e:
                     self._log_message(_("Saved password authentication failed: {e}").format(e=e), is_error=True)
             else:

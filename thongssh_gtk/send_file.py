@@ -11,6 +11,7 @@ gi.require_version('Vte', '3.91')
 from gi.repository import Gtk, Adw, GLib, Vte
 
 from .dialogs import InputDialog
+from . import host_keys
 
 IS_PARAMIKO_AVAILABLE = False
 try:
@@ -240,8 +241,7 @@ def _send_worker(dialog, host_config, local_path, remote_dir, key_passphrase, au
     key_filename = host_config.get("key_path")
     remote_name = os.path.basename(local_path)
 
-    ssh_client = paramiko.SSHClient()
-    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh_client = host_keys.make_ssh_client()
 
     try:
         if auth_password:
@@ -269,6 +269,17 @@ def _send_worker(dialog, host_config, local_path, remote_dir, key_passphrase, au
             GLib.idle_add(_prompt_password, dialog, host_config, local_path, remote_dir)
             return
         GLib.idle_add(_finish_with_error, dialog, _("Authentication failed."))
+        return
+    except host_keys.UnknownHostKeyError as e:
+        def on_decided(trusted):
+            if trusted:
+                # Key's now in ~/.ssh/known_hosts — retry the exact same
+                # attempt (same args), which spins up a fresh SSHClient
+                # that will find it there this time.
+                _start_send(dialog, host_config, local_path, remote_dir, key_passphrase, auth_password)
+            else:
+                _finish_with_error(dialog, _("Host key not trusted — connection canceled."))
+        host_keys.confirm_unknown_host_key(dialog, e, on_decided)
         return
     except Exception as e:
         GLib.idle_add(_finish_with_error, dialog, _("Connection failed: {e}").format(e=e))
