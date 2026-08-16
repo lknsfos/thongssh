@@ -82,9 +82,16 @@ TERMINAL_SETTINGS_KEYS = [
 ]
 GENERAL_SETTINGS_KEYS = [
     "interface.icon", "interface.tree_row_striping", "interface.debug_mode", "interface.host_search_position",
-    # Keyboard shortcuts — plain Gtk accelerator names, not a font/binary
-    # path, so (unlike terminal.font etc.) there's no reason a preferred
-    # binding on one machine wouldn't also apply cleanly on another.
+]
+# Kept separate from GENERAL_SETTINGS_KEYS (own sync.sync_shortcuts switch,
+# not bundled under sync.sync_general) — a binding chosen for one OS/
+# keyboard (e.g. Mac, where Cmd-based conventions are already different)
+# is often deliberately NOT what's wanted on another machine, the same
+# reasoning terminal.font/interface.watermark_font_family already get
+# excluded from sync entirely for. Unlike those two, though, a plain Gtk
+# accelerator name has no "doesn't exist on this machine" failure mode —
+# so this is opt-out (defaults to syncing), not excluded outright.
+SHORTCUTS_SETTINGS_KEYS = [
     "shortcuts.close_tab", "shortcuts.focus_search", "shortcuts.find_in_terminal",
     "shortcuts.copy", "shortcuts.paste",
 ]
@@ -532,6 +539,21 @@ def perform_sync(settings_manager, config_data):
             new_remote_payload["general"] = merged_g
             new_base_snapshot["general"] = merged_g
 
+        if settings_manager.get("sync.sync_shortcuts"):
+            base_sc = base_snapshot.get("shortcuts") or {}
+            local_sc = _gather_flat(settings_manager, SHORTCUTS_SETTINGS_KEYS)
+            remote_sc = remote_payload.get("shortcuts") or {}
+            merged_sc = {
+                k: merge_scalar(base_sc.get(k, _MISSING), local_sc[k], remote_sc.get(k), remote_wins)
+                for k in SHORTCUTS_SETTINGS_KEYS
+            }
+            if merged_sc != local_sc:
+                changed.add("shortcuts")
+                for k, v in merged_sc.items():
+                    settings_manager.set(k, v)
+            new_remote_payload["shortcuts"] = merged_sc
+            new_base_snapshot["shortcuts"] = merged_sc
+
         if settings_manager.get("sync.sync_terminal"):
             base_t = base_snapshot.get("terminal") or {}
             local_t = _gather_flat(settings_manager, TERMINAL_SETTINGS_KEYS)
@@ -563,7 +585,7 @@ def perform_sync(settings_manager, config_data):
 
         if "hosts" in changed:
             hosts_config.save_config(new_config_data)
-        if changed & {"quickies", "user_commands", "general", "terminal"}:
+        if changed & {"quickies", "user_commands", "general", "shortcuts", "terminal"}:
             settings_manager.save()
 
         new_version = time.time()

@@ -1310,6 +1310,13 @@ class SettingsDialog(Adw.Window):
         self.sync_general_row.set_active(self.settings_manager.get("sync.sync_general"))
         group_sync_categories.add(self.sync_general_row)
 
+        # Separate from General on purpose — a keybinding chosen for one
+        # OS/keyboard (Mac's own conventions, say) is often deliberately
+        # not what's wanted elsewhere.
+        self.sync_shortcuts_row = Adw.SwitchRow(title=_("Keyboard Shortcuts"))
+        self.sync_shortcuts_row.set_active(self.settings_manager.get("sync.sync_shortcuts"))
+        group_sync_categories.add(self.sync_shortcuts_row)
+
         self.sync_terminal_row = Adw.SwitchRow(title=_("Terminal Settings"), subtitle=_("Colors, watermarks"))
         self.sync_terminal_row.set_active(self.settings_manager.get("sync.sync_terminal"))
         group_sync_categories.add(self.sync_terminal_row)
@@ -2274,6 +2281,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("sync.sync_ai_chats", self.sync_ai_chats_row.get_active())
         self.settings_manager.set("sync.sync_user_commands", self.sync_user_commands_row.get_active())
         self.settings_manager.set("sync.sync_general", self.sync_general_row.get_active())
+        self.settings_manager.set("sync.sync_shortcuts", self.sync_shortcuts_row.get_active())
         self.settings_manager.set("sync.sync_terminal", self.sync_terminal_row.get_active())
 
         self.settings_manager.save()
@@ -2394,6 +2402,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("sync.sync_ai_chats", self.sync_ai_chats_row.get_active())
         self.settings_manager.set("sync.sync_user_commands", self.sync_user_commands_row.get_active())
         self.settings_manager.set("sync.sync_general", self.sync_general_row.get_active())
+        self.settings_manager.set("sync.sync_shortcuts", self.sync_shortcuts_row.get_active())
         self.settings_manager.set("sync.sync_terminal", self.sync_terminal_row.get_active())
         self.settings_manager.save()
 
@@ -2529,6 +2538,7 @@ class SettingsDialog(Adw.Window):
             self.sync_ai_chats_row.set_active(DEFAULT_SETTINGS["sync.sync_ai_chats"])
             self.sync_user_commands_row.set_active(DEFAULT_SETTINGS["sync.sync_user_commands"])
             self.sync_general_row.set_active(DEFAULT_SETTINGS["sync.sync_general"])
+            self.sync_shortcuts_row.set_active(DEFAULT_SETTINGS["sync.sync_shortcuts"])
             self.sync_terminal_row.set_active(DEFAULT_SETTINGS["sync.sync_terminal"])
 
 

@@ -90,6 +90,7 @@ DEFAULT_SETTINGS = {
     "sync.sync_ai_chats": True,
     "sync.sync_user_commands": True,
     "sync.sync_general": True,
+    "sync.sync_shortcuts": True, # separate from sync_general — a keybinding chosen for one OS/keyboard layout (e.g. Mac) is often deliberately not what you want elsewhere
     "sync.sync_terminal": True, # color scheme (incl. custom_color_scheme.json) + watermark settings
     "sync.last_sync_at": 0, # epoch seconds; 0 = never synced yet
     "sync.last_sync_error": "", # empty = last sync attempt was clean
