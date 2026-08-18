@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 """Settings/hosts/quickies/AI-chat sync via a plain shared folder (Dropbox,
 iCloud, a local network share, or just another directory on disk) — the app
 never talks to any cloud API directly, it only reads/writes files inside

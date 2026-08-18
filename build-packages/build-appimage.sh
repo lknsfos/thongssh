@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # build-appimage.sh — build a self-contained .AppImage for ThongSSH that
-# bundles GTK4 4.10.5 + libadwaita 1.3.4 + VTE 0.72.2 (gtk4) — plus every
-# transitive shared library either of those three actually needs — all
+# bundles GLib 2.76.6 + GTK4 4.12.5 + libadwaita 1.4.3 + VTE 0.72.2 (gtk4)
+# — plus every transitive shared library any of those actually needs — all
 # compiled/resolved *inside* an Ubuntu 22.04 container. The whole point is
 # for the result to only ever need glibc symbols already present on 22.04,
 # regardless of how new the machine running this script is.
@@ -16,27 +16,59 @@
 # library-bundling itself has to happen inside the 22.04 container, or
 # you're right back to silently bundling this machine's own (too new) glib/
 # cairo/pango/etc. instead of 22.04's. Every step here that touches a
-# compiled artifact — building GTK4/libadwaita/VTE, resolving their shared
-# library dependencies, bundling gdk-pixbuf loaders, even the Python
+# compiled artifact — building GLib/GTK4/libadwaita/VTE, resolving their
+# shared library dependencies, bundling gdk-pixbuf loaders, even the Python
 # interpreter and its compiled pip dependencies (cryptography/bcrypt/
-# pynacl) — runs inside the container. Only icon resizing and final
-# .desktop-file text generation (pure file/text manipulation, no compiled
-# code involved) happen on the host.
+# pynacl/PyGObject/pycairo — see the PyGObject comment further down for why
+# those two are built from source too now, not copied off this container's
+# own apt packages) — runs inside the container. Only icon resizing and
+# final .desktop-file text generation (pure file/text manipulation, no
+# compiled code involved) happen on the host.
 #
 # Package/version choices, checked against real upstream meson.build
 # requirements and real Ubuntu 22.04 (jammy) package versions:
-#   GTK4 4.10.5      needs glib>=2.72.0 pango>=1.50.0 cairo>=1.14
+#   GLib 2.76.6      needs meson>=0.60.0 libffi>=3.0.0 pcre2>=10.32
+#                     (jammy: libffi8 3.4.2, libpcre2-8 10.39 — meson
+#                     itself already gets upgraded past 0.60 for the
+#                     PyGObject build below, so no extra bump needed here)
+#   GTK4 4.12.5      needs glib>=2.76.0 pango>=1.50.0 cairo>=1.14
 #                     gdk-pixbuf>=2.30 graphene>=1.10 harfbuzz>=2.6
-#                     fribidi>=1.0.6 epoxy>=1.4
-#   libadwaita 1.3.4 needs gtk4>=4.9.5 glib>=2.72.0
-#                     (deliberately NOT 1.4.x — that needs gtk4>=4.11.3
-#                     AND glib>=2.76, which would force rebuilding glib too)
+#                     fribidi>=1.0.6 epoxy>=1.4 — identical to 4.10.5's own
+#                     requirements except glib (was >=2.72.0), which is
+#                     exactly why GLib is the only *additional* thing that
+#                     needed building from source to move onto this GTK4
+#                     series at all. Also needs gobject-introspection
+#                     >=1.76.0 (jammy: 1.72.0), but meson handles that one
+#                     itself, silently falling back to building its own
+#                     bundled subproject copy instead of failing outright
+#                     — no extra build step needed from this script for
+#                     it, just python3-dev + flex/bison for that
+#                     subproject's own build (its scanner is generated
+#                     from a lexer/parser grammar)
+#   libadwaita 1.4.3 needs gtk4>=4.11.3 glib>=2.76.0 — bumped from 1.3.4
+#                     specifically for Adw.SwitchRow/Adw.SpinRow (added in
+#                     1.4), which the app's own Settings dialog uses
+#                     extensively; 1.3.4 doesn't have them at all, which
+#                     surfaced as a real, live-reproduced AttributeError
+#                     the moment Settings was opened in the AppImage —
+#                     never caught earlier since that specific dialog
+#                     hadn't been exercised inside the actual AppImage
+#                     runtime until then
 #   VTE 0.72.2       needs gtk4>=4.0.1 glib>=2.52 pcre2>=10.21
 #                     (-Dgtk4=true -Dgtk3=false — same source repo builds
 #                     either GTK version; 22.04 only ships the gtk3 one)
-# jammy ships glib 2.72.4, pango 1.50.6, gdk-pixbuf 2.42.8, graphene 1.10.8,
-# harfbuzz 2.7.4 — every requirement above is satisfied with room to spare,
-# which is why only these 3 packages need building from source at all.
+# jammy ships pango 1.50.6, gdk-pixbuf 2.42.8, graphene 1.10.8, harfbuzz
+# 2.7.4 — every one of those requirements is satisfied with room to spare
+# regardless of the GLib bump, which is why pango/cairo/gdk-pixbuf/
+# graphene/harfbuzz/fribidi/epoxy still don't need building from source —
+# only GLib joins GTK4/libadwaita/VTE in that list now. GLib's own ABI
+# stability guarantee (a binary built against older 2.x headers always
+# runs fine against a newer 2.x runtime) is what makes this safe: pango/
+# cairo/etc. stay linked against their *headers'* 2.72-era expectations
+# at compile time, but at actual runtime every one of them, plus GTK4/
+# libadwaita/VTE, resolves the exact same loaded libglib-2.0.so.0 — our
+# newer 2.76.6 build, found first via LD_LIBRARY_PATH — since a process
+# can only ever have one instance of a given soname loaded at once.
 #
 # Usage:
 #   ./build-appimage.sh [--rebuild-stack]
@@ -96,15 +128,18 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates curl pkg-config meson ninja-build \
-    python3 python3-pip python3-gi python3-gi-cairo gir1.2-glib-2.0 \
+    build-essential git ca-certificates curl pkg-config meson ninja-build cmake \
+    flex bison gperf gettext itstool bash-completion \
+    python3 python3-pip python3-dev python3-gi python3-gi-cairo gir1.2-glib-2.0 \
     gobject-introspection libgirepository1.0-dev \
     libglib2.0-dev libpango1.0-dev libcairo2-dev libgdk-pixbuf-2.0-dev \
     libgraphene-1.0-dev libharfbuzz-dev libfribidi-dev libepoxy-dev \
     libx11-dev libxext-dev libxi-dev libxrandr-dev libxcursor-dev libxdamage-dev \
     libxfixes-dev libxinerama-dev libxkbcommon-dev libxkbcommon-x11-dev \
     libwayland-dev wayland-protocols libegl1-mesa-dev libgl1-mesa-dev \
-    libpcre2-dev libgnutls28-dev libxml2-dev libxml2-utils \
+    libpcre2-dev libgnutls28-dev libxml2-dev libxml2-utils libcurl4-gnutls-dev \
+    libzstd-dev \
+    libffi-dev zlib1g-dev \
     desktop-file-utils \
  && rm -rf /var/lib/apt/lists/*
 
@@ -113,10 +148,38 @@ ENV PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig
 ENV LD_LIBRARY_PATH=$PREFIX/lib
 WORKDIR /src
 
+# jammy's own apt meson (0.61.2) is too old for GTK4 4.12 (needs >=0.63.0)
+# and, later, for PyGObject's own build backend meson-python (needs
+# >=0.63.3) — upgraded once, up front, before anything that needs it
+# rather than separately/later, since every build below needs at least
+# one of these two floors. meson-python itself is unrelated to any of
+# GLib/GTK4/libadwaita/VTE — installed here too only because it's cheap
+# and keeps every meson-related version bump in one place.
+RUN pip3 install --disable-pip-version-check --upgrade 'meson>=0.63.3' meson-python
+
+# GLib itself, built first (into the same $PREFIX, ahead of everything
+# that needs it) — GTK 4.12/libadwaita 1.4 both need glib>=2.76.0, jammy's
+# own system package is 2.72.4. Every *other* requirement both still have
+# (pango/cairo/gdk-pixbuf/graphene/harfbuzz/fribidi/epoxy) is unchanged
+# from the 4.10.5/1.3.4 pairing this used to build, still satisfied by
+# jammy's own packages — GLib is the only additional thing that needs
+# building from source. GLib has no -Dintrospection switch of its own
+# (unlike GTK4/libadwaita below) — it just builds its typelib whenever
+# gobject-introspection is available, which it is here. gtk_doc/tests/
+# selinux/libmount all disabled: none of them matter for a runtime
+# bundle, and selinux/libmount specifically would otherwise pull in dev
+# packages this image has no other reason to carry. (man pages already
+# default to off.)
+RUN git clone --branch 2.76.6 --depth 1 https://gitlab.gnome.org/GNOME/glib.git glib \
+ && meson setup glib/build glib --prefix="$PREFIX" --libdir=lib \
+        -Dgtk_doc=false -Dtests=false -Dinstalled_tests=false \
+        -Dselinux=disabled -Dlibmount=disabled \
+ && ninja -C glib/build install
+
 # --libdir=lib (not the multiarch default) so everything ends up in one
 # predictable $PREFIX/lib regardless of how meson would otherwise detect
 # the install layout for this distro.
-RUN git clone --branch 4.10.5 --depth 1 https://gitlab.gnome.org/GNOME/gtk.git gtk4 \
+RUN git clone --branch 4.12.5 --depth 1 https://gitlab.gnome.org/GNOME/gtk.git gtk4 \
  && meson setup gtk4/build gtk4 --prefix="$PREFIX" --libdir=lib \
         -Dintrospection=enabled -Ddemos=false -Dbuild-testsuite=false \
         -Dbuild-examples=false -Dgtk_doc=false -Dmedia-gstreamer=disabled \
@@ -132,9 +195,56 @@ RUN git clone --branch 4.10.5 --depth 1 https://gitlab.gnome.org/GNOME/gtk.git g
 ENV XDG_DATA_DIRS=$PREFIX/share:/usr/local/share:/usr/share
 ENV GI_TYPELIB_PATH=$PREFIX/lib/girepository-1.0
 
-RUN git clone --branch 1.3.4 --depth 1 https://gitlab.gnome.org/GNOME/libadwaita.git libadwaita \
+# libadwaita 1.4+ unconditionally depends on appstream (no meson option
+# to turn it off — it's a hard entry in libadwaita_deps, presumably for
+# AdwAboutWindow's release-notes-from-appdata feature) — jammy has no
+# appstream pkg-config file either, so meson falls back to building ITS
+# OWN bundled subproject (github.com/ximion/appstream, not on GNOME's own
+# gitlab, per its own .wrap file), which brings its own small dependency
+# chain along: libcurl (libcurl4-gnutls-dev above — matching this stack's
+# existing GnuTLS choice for VTE, rather than also pulling in OpenSSL as
+# a second TLS stack), libfyaml (its YAML-format metadata parser — no
+# option to disable this one either), libzstd (compression support, on
+# by default, jammy's libzstd-dev is new enough), gperf (a plain
+# code-generator binary, used unconditionally at meson.build:244 to
+# build a string->enum lookup table — no dev package needed, just the
+# tool itself), gettext (its po/meson.build calls i18n.gettext()
+# unconditionally for translations; without msgfmt present meson's i18n
+# module returns void from that call instead of the expected dict,
+# which this meson version then fails to assign — installing gettext
+# avoids hitting that path at all rather than working around it) and
+# itstool (data/meson.build unconditionally uses it too, to translate
+# its .desktop/.metainfo.xml data files via the same i18n machinery) and
+# bash-completion (contrib/meson.build wants its pkg-config file to find
+# the completions install directory — its own bash-completion option
+# defaults to on, and libadwaita doesn't override it). After that, its
+# default-on `man` option wanted xsltproc + Docbook XSL stylesheets too
+# (docs/meson.build) — rather than chase yet another apt package for a
+# man page we'll never install from this bundle anyway, appstream's own
+# `man`/`docs` options are disabled directly via meson subproject
+# overrides (`-D<subproject>:<option>=value`, passed on libadwaita's own
+# meson setup line below since libadwaita itself never exposes them).
+#
+# libfyaml specifically can't just be `apt install libfyaml-dev` though:
+# jammy/universe only has 0.7.12, appstream 1.1.7's meson.build requires
+# >=0.8 and hard-fails the version check (no fallback wrap of its own for
+# this one dependency, unlike appstream's own status as libadwaita's
+# fallback). So it's built from source too, straight into the same
+# $PREFIX, via its CMake build (simpler than its autotools path, which
+# has no committed ./configure and would need autoreconf). BUILD_TESTING
+# off skips its network-touching test suite; everything else defaults
+# are fine for a runtime bundle.
+RUN git clone --branch v0.9.6 --depth 1 https://github.com/pantoniou/libfyaml.git libfyaml \
+ && cmake -S libfyaml -B libfyaml/build -G Ninja \
+        -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+ && cmake --build libfyaml/build \
+ && cmake --install libfyaml/build
+
+RUN git clone --branch 1.4.3 --depth 1 https://gitlab.gnome.org/GNOME/libadwaita.git libadwaita \
  && meson setup libadwaita/build libadwaita --prefix="$PREFIX" --libdir=lib \
         -Dintrospection=enabled -Dtests=false -Dexamples=false -Dgtk_doc=false -Dvapi=false \
+        -Dappstream:man=false -Dappstream:docs=false \
  && ninja -C libadwaita/build install
 
 RUN git clone --branch 0.72.2 --depth 1 https://gitlab.gnome.org/GNOME/vte.git vte \
@@ -152,6 +262,73 @@ RUN git clone --branch 0.72.2 --depth 1 https://gitlab.gnome.org/GNOME/vte.git v
 COPY requirements.appimage.txt /src/requirements.txt
 RUN pip3 install --disable-pip-version-check --no-compile \
         --target=/opt/thongssh-pydeps -r /src/requirements.txt
+
+# PyGObject/pycairo, built from source here too — NOT copied from this
+# container's own python3-gi/python3-gi-cairo apt packages (Ubuntu 22.04
+# ships PyGObject 3.42.1, contemporary with roughly GTK 4.0-4.2, paired
+# against our custom-built, much newer GTK 4.10.5). That mismatch is a
+# real, live-reproduced bug, not a theoretical one: right-clicking
+# *anywhere* a Gtk.GestureClick is attached (host tree, tabs, terminal)
+# calls gesture.get_last_event(), and 3.42.1's marshaling of the returned
+# Gdk.Event (a boxed type, not a GObject) corrupts memory badly enough to
+# later segfault deep inside CPython's own dict lookup — confirmed via a
+# real gdb backtrace, and confirmed absent once PyGObject is rebuilt here
+# against our own stack instead. A normal (non-AppImage) install never
+# hits this, since there GTK4 and PyGObject are always whatever matched
+# pair the OS itself ships — it's specifically this AppImage's "newer
+# GTK4 than the 22.04 base" approach that can pull them out of sync.
+# python3-dev (Python.h) is needed to compile PyGObject's own C extension
+# too, but it's in the main apt install list up top now, not a separate
+# layer here — GTK4 4.12's own build turned out to need it already, for
+# an unrelated reason: it needs gobject-introspection>=1.76.0 (jammy's
+# system package is only 1.72.0), so meson silently falls back to
+# building its own bundled copy of gobject-introspection as a subproject,
+# and *that* build needs python3-dev regardless of anything PyGObject-
+# related.
+# PyGObject's build backend (meson-python) shells out to a "meson"
+# command on PATH rather than importing it as a Python module — pip's
+# usual build-isolation (a private venv for build-time deps, declared in
+# PyGObject's own pyproject.toml) doesn't rescue this, since that
+# isolation only covers Python imports, not external command resolution.
+# Meson itself was already upgraded system-wide up front (see the very
+# first RUN after WORKDIR /src) — but that upgrade alone isn't enough
+# here: pip build-isolates by default, building each package's declared
+# pyproject.toml [build-system] requirements in a private, throwaway venv
+# that can't see our upgraded system meson at all — that isolated venv
+# gets its OWN meson per PyGObject's own declared (looser/older) pin,
+# which is exactly the same "too-old meson" problem all over again just
+# one level removed. --no-build-isolation opts out, using the system
+# environment directly — meson-python (also installed up front, next to
+# meson itself) needs to already be present system-wide for that same
+# reason; ninja (also required) is already present system-wide from the
+# GTK4/libadwaita/VTE builds above.
+#
+# PyGObject pinned to 3.50.2, not left unpinned/latest: 3.52.0 onward
+# needs girepository-2.0 (a newer, separate GObject-Introspection ABI
+# that replaced 1.0), which jammy doesn't have at all — only the
+# libgirepository1.0-dev/gobject-introspection-1.0 apt package installed
+# above. 3.50.2 is the last release still on girepository-1.0, and
+# already comfortably newer than jammy's own stock 3.42.1 — the actual
+# bug this whole detour exists for.
+# pycairo installed FIRST, on its own: PyGObject's own meson.build probes
+# for it at build time via a plain "import cairo" + cairo.get_include(),
+# which — with --no-build-isolation running against the system Python —
+# otherwise finds jammy's system python3-gi-cairo apt package first (it's
+# still importable from /usr/lib/python3/dist-packages regardless of our
+# --target), and that one ships no headers at all (a runtime-only
+# binding, not meant for anything else to build against), failing with
+# "Include dir .../cairo/include does not exist." PYTHONPATH here points
+# the *build-time* import at our --target install instead, which (being
+# the real pip package) has real headers.
+#
+# pycairo is ALSO meson-python-based, so it needs --no-build-isolation
+# too, for the identical reason PyGObject does above — otherwise pip's
+# own isolated build venv reintroduces the same 0.61.2-vs-0.63.3+ mismatch
+# one level removed, since that isolation doesn't see our system upgrade.
+RUN pip3 install --disable-pip-version-check --no-compile --no-build-isolation \
+        --target=/opt/thongssh-pydeps pycairo
+RUN PYTHONPATH=/opt/thongssh-pydeps pip3 install --disable-pip-version-check --no-compile --no-build-isolation \
+        --target=/opt/thongssh-pydeps 'PyGObject==3.50.2'
 
 # linuxdeploy/appimagetool baked into the image (not downloaded on the
 # host) so the library-dependency resolution step below — which needs to
@@ -313,14 +490,22 @@ TARGET_SITE="$TARGET_PY_DIR/site-packages"
 mkdir -p "$TARGET_SITE"
 cp -aL "$(readlink -f "$(command -v python3)")" "$APPDIR/usr/bin/python3"
 cp -a "/usr/lib/python$PYVER/." "$TARGET_PY_DIR/"
-cp -a /usr/lib/python3/dist-packages/gi "$TARGET_SITE/gi"
-[ -d /usr/lib/python3/dist-packages/cairo ] && cp -a /usr/lib/python3/dist-packages/cairo "$TARGET_SITE/cairo"
+# gi/cairo come from /opt/thongssh-pydeps (built from source against our
+# own GTK4 stack, see the Dockerfile) — NOT this container's own
+# python3-gi/python3-gi-cairo apt packages (Ubuntu 22.04 ships PyGObject
+# 3.42.1, contemporary with roughly GTK 4.0-4.2) any more. See the
+# Dockerfile comment above the PyGObject pip install for the actual bug
+# that forced this: mismatched against our newer, custom-built GTK
+# 4.10.5, it corrupted memory on nearly every Gtk.GestureClick right-click
+# anywhere in the app (get_last_event() returning a Gdk.Event — a boxed
+# type, not a GObject — confused its marshaling), reproduced as a real
+# segfault, not just a warning.
 cp -a /opt/thongssh-pydeps/. "$TARGET_SITE/"
 find "$TARGET_SITE" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
 echo "==> Typelibs (Gtk-4.0/Adw-1/Vte-3.91/Gdk-4.0/Gsk-4.0 from the built stack, everything else from this container's own system libs)"
 SYS_TYPELIB_DIR="$(dirname "$(find /usr/lib -name 'GLib-2.0.typelib' | head -1)")"
-for typelib in Gtk-4.0 Adw-1 Vte-3.91 Gio-2.0 GLib-2.0 GObject-2.0 GdkPixbuf-2.0 \
+for typelib in Gtk-4.0 Adw-1 Vte-3.91 Gio-2.0 GLib-2.0 GObject-2.0 GModule-2.0 GdkPixbuf-2.0 \
                Gdk-4.0 Pango-1.0 PangoCairo-1.0 HarfBuzz-0.0 Graphene-1.0 Gsk-4.0 cairo-1.0; do
     dest="$APPDIR/usr/lib/girepository-1.0/$typelib.typelib"
     if [ -f "/opt/thongssh-stack/lib/girepository-1.0/$typelib.typelib" ]; then

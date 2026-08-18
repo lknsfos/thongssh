@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 """SSH host key verification — shared by sftp_widget.py and send_file.py,
 the two places this app opens a paramiko.SSHClient of its own (regular
 terminal sessions shell out to the real `ssh` binary instead, which

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 """Local CLI-tool glue for the AI chat panel — an alternative to the HTTP
 API providers (see ai_providers.py) for talking to locally-installed CLI
 tools (Claude Code CLI, OpenAI Codex CLI, or anything else the user points

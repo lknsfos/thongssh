@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
@@ -1022,7 +1025,67 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         focus_controller.connect("enter", lambda c, nb=notebook: self._set_active_pane(nb))
         notebook.add_controller(focus_controller)
 
+        # "+" new-local-terminal button, packed as the notebook's own END
+        # action widget. GTK draws this inside the real tab strip itself,
+        # immediately after the last tab — and, since set_scrollable(True)
+        # above is already on, GTK's own built-in scroll arrows appear
+        # automatically, in that same strip, right between the last visible
+        # tab and this button, whenever there are too many tabs to fit.
+        # Both behaviors are native Gtk.Notebook — nothing extra to build.
+        new_local_btn = Gtk.Button(icon_name="list-add-symbolic")
+        new_local_btn.set_tooltip_text(_("New local terminal"))
+        new_local_btn.add_css_class("flat")
+        new_local_btn.connect("clicked", self._on_new_local_terminal_clicked, notebook)
+        notebook.set_action_widget(new_local_btn, Gtk.PackType.END)
+        new_local_btn.set_visible(True)
+
+        # Gtk.Notebook hides its entire header (tabs + action widgets) via
+        # a plain set_visible(False) on its own internal header box the
+        # moment it has zero pages — confirmed by walking the widget tree
+        # live, not just inferred from the empty screen. That's the ONE
+        # real widget holding the button above; forcing it back to visible
+        # (it never gets auto-hidden again afterwards — checked by adding
+        # then removing a page and re-reading get_visible()) shows that
+        # same strip empty-but-present from the start, "+" included, with
+        # no second stand-in widget to keep in sync. get_first_child() is
+        # relying on Gtk.Notebook's current internal layout (undocumented,
+        # but stable across GTK4's life so far) rather than public API —
+        # there isn't a public one for this. Logs one benign one-time
+        # Gtk-WARNING ("reported min height -3") the first time this state
+        # is entered, from GTK's own size negotiation momentarily measuring
+        # the now-forced-visible-but-genuinely-empty tab strip; harmless
+        # and doesn't repeat on further redraws/resizes.
+        notebook.get_first_child().set_visible(True)
+
         return notebook
+
+    def _on_new_local_terminal_clicked(self, button, notebook):
+        """Opens a new local-terminal tab in this pane. If
+        terminal.inherit_cwd_for_new_local_tab is on (the default), starts
+        in the same directory as this pane's currently active tab, IF that
+        tab is itself a local terminal (read via /proc/<pid>/cwd — the
+        actual live cwd of its shell, not just wherever it started out) —
+        otherwise, or with the setting off, falls back to $HOME. Named
+        "Local:<dir>" (short form: "~" for home, or the last path
+        component otherwise) so several local tabs stay distinguishable at
+        a glance."""
+        cwd = os.environ.get("HOME", os.path.expanduser("~"))
+        current_page = notebook.get_current_page()
+        if current_page != -1 and self.settings_manager.get("terminal.inherit_cwd_for_new_local_tab"):
+            page_widget = notebook.get_nth_page(current_page)
+            info = self.tab_data.get(page_widget)
+            if info and info.get("type") == "terminal" and info.get("config", {}).get("protocol") == "local":
+                session = self.open_sessions.get(page_widget)
+                if session:
+                    _terminal, pid = session
+                    try:
+                        cwd = os.readlink(f"/proc/{pid}/cwd")
+                    except OSError:
+                        pass  # e.g. macOS (no /proc), or the process already exited
+
+        label = self._dir_short_label(cwd)
+        self._set_active_pane(notebook)
+        self.start_session({"name": f"Local:{label}", "protocol": "local", "cwd": cwd})
 
     def _on_pane_tab_drop(self, drop_target, value, x, y, dest_notebook):
         """Accepts a tab dragged from another pane, OR reordered within the
@@ -3013,6 +3076,65 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         timeout_id = tab_info.pop("_log_timeout_id", None)
         if timeout_id is not None:
             GLib.source_remove(timeout_id)
+
+    def _dir_short_label(self, path):
+        """"~" for $HOME, otherwise just the last path component — the
+        display form used for "Local:<dir>" tab names (see
+        _on_new_local_terminal_clicked / _tick_local_cwd)."""
+        home = os.environ.get("HOME", os.path.expanduser("~"))
+        return "~" if path == home else (os.path.basename(path.rstrip("/")) or path)
+
+    def _start_local_cwd_tracking(self, page_widget):
+        """Keeps a local-terminal tab's title live-updated to its shell's
+        actual current directory ("Local:~", "Local:.config", ...) by
+        polling /proc/<pid>/cwd once a second. Local-protocol tabs only:
+        an ssh/telnet tab's pid is the local ssh client, whose own cwd
+        never reflects anything happening on the remote session. VTE/OSC-7
+        based tracking would need the connecting shell's rc files to opt
+        in (most don't, by default); reading /proc directly needs nothing
+        from the shell at all — Linux-only, degrades to "never updates
+        after the first prompt" wherever /proc doesn't exist (e.g. macOS),
+        same as if this weren't called.
+        Stops and restarts cleanly on reconnect (see _continue_session) so
+        there's never more than one timer running per tab."""
+        self._stop_local_cwd_tracking(page_widget)
+        tab_info = self.tab_data.get(page_widget)
+        if tab_info is None:
+            return
+        tab_info["_cwd_last"] = None
+        tab_info["_cwd_timeout_id"] = GLib.timeout_add_seconds(1, self._tick_local_cwd, page_widget)
+
+    def _tick_local_cwd(self, page_widget):
+        """Recurring GLib.timeout_add_seconds callback — returning False
+        cancels it, doubling as cleanup once the tab closes or its shell
+        process dies."""
+        tab_info = self.tab_data.get(page_widget)
+        if tab_info is None:
+            return False
+        session = self.open_sessions.get(page_widget)
+        if session is None:
+            return False
+        _terminal, pid = session
+        try:
+            cwd = os.readlink(f"/proc/{pid}/cwd")
+        except OSError:
+            return False  # process gone, or no /proc at all (e.g. macOS)
+
+        if cwd != tab_info.get("_cwd_last"):
+            tab_info["_cwd_last"] = cwd
+            tab_label = tab_info.get("tab_label")
+            if tab_label is not None:
+                tab_label.set_text(f"Local:{self._dir_short_label(cwd)}")
+        return True
+
+    def _stop_local_cwd_tracking(self, page_widget):
+        """Safe to call even if no tracking was active."""
+        tab_info = self.tab_data.get(page_widget)
+        if tab_info is None:
+            return
+        timeout_id = tab_info.pop("_cwd_timeout_id", None)
+        if timeout_id is not None:
+            GLib.source_remove(timeout_id)
         log_file = tab_info.pop("_log_file", None)
         if log_file:
             try:
@@ -3135,7 +3257,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         dialog.set_version(__version__)
         dialog.set_license_type(Gtk.License.MIT_X11)
         dialog.set_comments(_("SSH client with a tree-like host structure"))
-        dialog.set_copyright("© 2025 Mikhael Karpov")
+        current_year = datetime.datetime.now().year
+        year_range = "2025" if current_year <= 2025 else f"2025–{current_year}"
+        dialog.set_copyright(f"© {year_range} Mikhael Karpov")
         dialog.set_developers(["Gemini Code Assist", "Claude Code (Anthropic)"])
         dialog.set_designers(["Mikhael Karpov (lknsfos)"])
         dialog.set_application_icon(self.settings_manager.get("interface.icon"))
@@ -3865,7 +3989,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
             success, pid = terminal.spawn_sync(
                 Vte.PtyFlags.DEFAULT,
-                os.environ['HOME'],
+                config.get('cwd') or os.environ['HOME'],
                 cmd, envv, GLib.SpawnFlags.DEFAULT, # Use DEFAULT instead of DO_NOT_REAP_CHILD
                 None, None
             )
@@ -3955,6 +4079,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 terminal.connect("child-exited", self.on_ssh_process_exited, term_overlay)
                 if config.get("save_log", False):
                     self._start_session_logging(term_overlay)
+                if protocol == "local":
+                    self._start_local_cwd_tracking(term_overlay)
                 self.apply_watermark_settings_to_all()
             else: # This is a reconnect, just update the PID
                 self.open_sessions[existing_terminal_widget] = (terminal, pid)
@@ -3969,6 +4095,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                     self._set_tab_label_disconnected(tab_info.get("tab_label"), False)
                 if config.get("save_log", False):
                     self._start_session_logging(existing_terminal_widget)
+                if protocol == "local":
+                    self._start_local_cwd_tracking(existing_terminal_widget)
                 terminal.grab_focus()
                 self.apply_watermark_settings_to_all()
 
@@ -4257,6 +4385,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             tab_info = self.tab_data[tab_widget]
             tab_info["disconnected"] = True
             self._set_tab_label_disconnected(tab_info.get("tab_label"), True)
+            # Dead pid — no more /proc/<pid>/cwd to poll until a reconnect
+            # starts a fresh timer (see _continue_session).
+            self._stop_local_cwd_tracking(tab_widget)
 
     def _set_tab_label_disconnected(self, tab_label, disconnected):
         """Toggles the strikethrough on a terminal tab's label text — the
@@ -4294,6 +4425,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         if widget in self.tab_data:
             self._stop_session_logging(widget)
+            self._stop_local_cwd_tracking(widget)
             del self.tab_data[widget]
 
         if owner is not None and owner.get_n_pages() > 0:

@@ -122,4 +122,9 @@ python3 thongssh.py
 
 If that complains about a missing `gi` module, make sure the venv was created from Homebrew's own `python3` (`/usr/local/bin/python3` or `/opt/homebrew/bin/python3`) — not some other `pyenv`/`conda` python that Homebrew's PyGObject was never built against.
 
+## 📄 License
+
+MIT — see [LICENSE](LICENSE). Use it, fork it, ship it internally, whatever;
+no warranty, no strings attached.
+
 _Made with 💖, Python & AI hallucinations._

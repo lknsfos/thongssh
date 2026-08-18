@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 import json
 import logging
 from pathlib import Path
@@ -27,6 +30,7 @@ DEFAULT_SETTINGS = {
     "sftp.remote_default_sort_direction": "asc", # asc, desc
     "terminal.close_on_disconnect": True, # ✨ NEW: Whether to close tab on disconnect
     "terminal.reconnect_prompt_username": False, # Only relevant when the above is off — ask again instead of reusing the last username when reconnecting to a disconnected tab
+    "terminal.inherit_cwd_for_new_local_tab": True, # Whether the "+" new-local-terminal button starts in the current tab's working directory instead of always $HOME
     "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
     "interface.tree_row_striping": False,
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 """HTTP glue for the AI chat panel. Stdlib-only (urllib) on purpose — no new
 third-party dependency, to avoid repeating the py2app native-extension
 packaging pain paramiko/cryptography caused for the macOS build.

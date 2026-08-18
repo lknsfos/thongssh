@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
@@ -980,6 +983,13 @@ class SettingsDialog(Adw.Window):
             self.reconnect_prompt_username_row.set_visible(not self.close_on_disconnect_row.get_active())
         self.close_on_disconnect_row.connect("notify::active", _update_reconnect_prompt_visibility)
         _update_reconnect_prompt_visibility()
+
+        self.inherit_cwd_row = Adw.SwitchRow(
+            title=_("New local terminal opens in current directory"),
+            subtitle=_("The tab strip's \"+\" button starts its shell in the active tab's current directory instead of always $HOME")
+        )
+        self.inherit_cwd_row.set_active(self.settings_manager.get("terminal.inherit_cwd_for_new_local_tab"))
+        group_behavior.add(self.inherit_cwd_row)
 
         # --- Watermark (the header-bar button next to the split buttons is
         # the same live on/off switch as the row below — either one flips
@@ -2103,6 +2113,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("terminal.scrollback_lines", int(self.scrollback_row.get_value()))
         self.settings_manager.set("terminal.close_on_disconnect", self.close_on_disconnect_row.get_active())
         self.settings_manager.set("terminal.reconnect_prompt_username", self.reconnect_prompt_username_row.get_active())
+        self.settings_manager.set("terminal.inherit_cwd_for_new_local_tab", self.inherit_cwd_row.get_active())
         
         selected_idx = self.scheme_row.get_selected()
         base_scheme_key = _BASE_SCHEME_IDS[selected_idx]
@@ -2457,6 +2468,7 @@ class SettingsDialog(Adw.Window):
             self.scrollback_row.set_value(DEFAULT_SETTINGS["terminal.scrollback_lines"])
             self.close_on_disconnect_row.set_active(DEFAULT_SETTINGS["terminal.close_on_disconnect"])
             self.reconnect_prompt_username_row.set_active(DEFAULT_SETTINGS["terminal.reconnect_prompt_username"])
+            self.inherit_cwd_row.set_active(DEFAULT_SETTINGS["terminal.inherit_cwd_for_new_local_tab"])
             self.font_button.set_font(DEFAULT_SETTINGS["terminal.font"])
             
             default_scheme_key = DEFAULT_SETTINGS["terminal.color_scheme"]

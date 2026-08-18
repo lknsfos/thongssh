@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 """Small, deliberately-scoped Markdown -> Gtk widgets renderer for AI chat
 bubbles. Not full CommonMark — supports fenced code blocks (each rendered as
 its own widget with a Copy button), bullet/numbered list lines, and inline

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 """Persists AI chat conversations as one JSON file per chat under the
 user's cache directory (see paths.CACHE_DIR) — history lives here instead
 of on any provider's servers, since the active provider is swappable

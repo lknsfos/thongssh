@@ -1,7 +1,10 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 import sys
 import os
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 APP_ID = "terminal.thongssh"
 

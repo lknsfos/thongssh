@@ -1,5 +1,14 @@
 # Release Notes
 
+### 🆕 What's New in 0.9.2
+
+A real AppImage crash fixed, a quicker way to spin up a local terminal, and the project is now officially MIT-licensed:
+
+* **Fixed the AppImage segfaulting on right-click** — the bundled PyGObject (whatever Ubuntu 22.04's own `python3-gi` happened to be) mismarshaled `Gdk.Event` — a GTK4 *boxed* type, not a GObject — when returned from a right-click gesture, corrupting memory badly enough to crash later, deep inside CPython itself. The AppImage now bundles a pinned, known-good PyGObject instead of whatever the build container's system package happened to be.
+* **Fixed Settings never actually working inside the AppImage** — discovered while chasing the crash above: the AppImage's bundled libadwaita was a version older than what `Adw.SwitchRow`/`Adw.SpinRow` (used throughout Settings) require, so opening Settings from an AppImage build has apparently never worked at all. The whole bundled GTK4/libadwaita/VTE stack is rebuilt against a current libadwaita now.
+* **New: a "+" button in the tab strip** opens a fresh local terminal without needing the sidebar's "Local Terminal" entry — it starts in whichever directory the currently-active local tab is actually in (read live, not just wherever that tab itself started), named `Local:<dir>` (`Local:~`, `Local:.config`, …), and keeps that name **live-updated** as you `cd` around, no reconnect needed. Toggle it off in Settings → Terminal → Behavior ("New local terminal opens in current directory", on by default) to always start fresh at `$HOME` instead.
+* **ThongSSH is now MIT-licensed** — a `LICENSE` file plus a license header in every source file, so pulling this into a company's own toolset doesn't need a legal detour first.
+
 ### 🔒 What's New in 0.9.1
 
 Two security fixes, both reported from reading the source rather than found in the wild — thank you.

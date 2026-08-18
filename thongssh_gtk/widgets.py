@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 """Small reusable GTK widgets shared across window.py and dialogs.py.
 
 A separate module (not window.py) specifically because dialogs.py already

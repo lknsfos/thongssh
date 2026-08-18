@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 lknsfos
+
 """Shared visual identity for AI providers — which real logo (if any)
 represents a provider id, the text-initials fallback for providers with
 none, and the CSS "family" class used to tint both consistently. Used by
