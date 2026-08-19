@@ -91,14 +91,24 @@ def _forced_language():
     return None
 
 
-def _resolve_active_language_code():
-    """Best-effort "which language ended up active" — used only to decide
-    RTL vs LTR (see apply_language_direction), not for the actual
-    translation lookup itself (gettext.translation below handles that part
-    on its own, including the "system" case)."""
-    forced = _forced_language()
-    if forced:
-        return forced
+def _resolve_system_language_code():
+    """Which language the underlying OS/desktop session is actually
+    running in — deliberately ignoring interface.language's forced
+    override (see apply_language_direction for why). Used only to decide
+    RTL vs LTR, never for the actual translation lookup (gettext.translation
+    below handles that separately, including honoring the forced choice).
+
+    On macOS, env vars like LANG are often unset for a GUI-launched app
+    (no login shell in the picture), so the real signal is Cocoa's own
+    preferred-language list instead."""
+    if sys.platform == "darwin":
+        try:
+            from Foundation import NSLocale
+            langs = NSLocale.preferredLanguages()
+            if langs:
+                return str(langs[0]).split("-")[0].split("_")[0].lower()
+        except Exception:
+            pass
     for var in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
         value = os.environ.get(var)
         if value:
@@ -109,11 +119,36 @@ def _resolve_active_language_code():
 def apply_language_direction():
     """Sets the whole app's default text direction to RTL for Arabic/
     Hebrew, LTR otherwise. Call once at startup, after the window system
-    is initialized (app.py does this right before creating the window)."""
+    is initialized (app.py does this right before creating the window).
+
+    Deliberately keyed off the *system's* language, not interface.language's
+    forced override: forcing a translation from Settings -> Language is a
+    "show me this UI in Hebrew" choice, not "my desktop is a native RTL
+    environment" — mirroring the whole widget/menu order for the former
+    has no real benefit (nothing else on the system is mirrored to match)
+    and, on macOS specifically, actively breaks the header bar (see below).
+    If the system itself is genuinely RTL, we mirror regardless of
+    interface.language, since then the OS's own conventions already
+    expect it — a translated-but-unmirrored UI would be the odd one out.
+
+    Known issue on macOS when the system itself is RTL: the header bar's
+    leading content overlaps the native traffic-light buttons. Confirmed
+    via direct introspection (comparing AdwHeaderBar's internal
+    GtkWindowControls allocation against the real NSWindow button frame
+    read through AppKit) that libadwaita's macOS-native-controls support
+    (added in 1.8) mirrors its *reserved* space for RTL, while the real
+    buttons — fixed by AppKit, never mirrored — don't move; no per-widget
+    or per-window direction override changes this, since the placement
+    math reads this same process-wide default direction directly rather
+    than any widget's resolved direction. Not fixable from window.py's
+    header bar setup; would need an upstream libadwaita fix. Left as-is
+    for a genuinely RTL system (matching the rest of the OS wins out over
+    working around this one widget), but no longer triggered just by
+    forcing Hebrew/Arabic from Settings on an otherwise LTR system."""
     import gi
     gi.require_version('Gtk', '4.0')
     from gi.repository import Gtk
-    code = _resolve_active_language_code()
+    code = _resolve_system_language_code()
     direction = Gtk.TextDirection.RTL if code in RTL_LANGUAGES else Gtk.TextDirection.LTR
     Gtk.Widget.set_default_direction(direction)
 

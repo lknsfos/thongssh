@@ -15,6 +15,9 @@ import json
 import logging
 import datetime
 import re
+import platform
+import shutil
+import subprocess
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio, GObject
 
@@ -105,6 +108,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # --- 1.1. HeaderBar ---
         header_bar = Adw.HeaderBar()
         header_bar.set_show_end_title_buttons(True) # Shows min/max/close
+
+        # macOS + RTL (Hebrew/Arabic) header bar bug: see i18n.py's
+        # apply_language_direction for why this can't be fixed here on the
+        # header bar itself (verified empirically — no per-widget or even
+        # per-window direction override changes AdwHeaderBar's native-
+        # controls placement on macOS; it reads the process-wide default
+        # direction directly, so there is no safe app-level workaround).
 
         title_widget = Adw.WindowTitle(title="ThongSSH", subtitle=__version__)
         header_bar.set_title_widget(title_widget)
@@ -397,7 +407,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         self.tree_view.set_headers_visible(False)
 
         # Disable the old built-in search, as we now have our own SearchBar
-
+        self.tree_view.set_enable_search(False)
 
         # Renderers
         renderer_pixbuf = Gtk.CellRendererPixbuf()
@@ -3214,17 +3224,65 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         home = os.environ.get("HOME", os.path.expanduser("~"))
         return "~" if path == home else (os.path.basename(path.rstrip("/")) or path)
 
+    def _get_process_cwd(self, pid):
+        """Cross-platform "what directory is this process currently in".
+        Linux gets this for free via /proc/<pid>/cwd. macOS and the BSDs
+        have no /proc, so they fall back to a tool that already ships
+        with the OS itself: lsof on macOS (and any BSD that happens to
+        have it), procstat(1) on FreeBSD's base system. Returns None if
+        the cwd genuinely can't be determined (missing tool, permissions,
+        ...) — distinct from "process is gone", which callers check
+        separately."""
+        try:
+            return os.readlink(f"/proc/{pid}/cwd")
+        except OSError:
+            pass
+
+        def _via_lsof():
+            try:
+                result = subprocess.run(
+                    ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+                    capture_output=True, text=True, timeout=2,
+                )
+            except (OSError, subprocess.SubprocessError):
+                return None
+            for line in result.stdout.splitlines():
+                if line.startswith("n"):
+                    return line[1:]
+            return None
+
+        def _via_procstat():
+            try:
+                result = subprocess.run(
+                    ["procstat", "-f", str(pid)],
+                    capture_output=True, text=True, timeout=2,
+                )
+            except (OSError, subprocess.SubprocessError):
+                return None
+            for line in result.stdout.splitlines():
+                parts = line.split()
+                if len(parts) >= 4 and parts[2] == "cwd":
+                    return parts[-1]
+            return None
+
+        if platform.system() == "Darwin":
+            return _via_lsof()
+        if shutil.which("procstat"):
+            return _via_procstat()
+        if shutil.which("lsof"):
+            return _via_lsof()
+        return None
+
     def _start_local_cwd_tracking(self, page_widget):
         """Keeps a local-terminal tab's title live-updated to its shell's
         actual current directory ("Local:~", "Local:.config", ...) by
-        polling /proc/<pid>/cwd once a second. Local-protocol tabs only:
-        an ssh/telnet tab's pid is the local ssh client, whose own cwd
-        never reflects anything happening on the remote session. VTE/OSC-7
-        based tracking would need the connecting shell's rc files to opt
-        in (most don't, by default); reading /proc directly needs nothing
-        from the shell at all — Linux-only, degrades to "never updates
-        after the first prompt" wherever /proc doesn't exist (e.g. macOS),
-        same as if this weren't called.
+        polling the shell process's cwd once a second (see
+        _get_process_cwd). Local-protocol tabs only: an ssh/telnet tab's
+        pid is the local ssh client, whose own cwd never reflects
+        anything happening on the remote session. VTE/OSC-7 based
+        tracking would need the connecting shell's rc files to opt in
+        (most don't, by default); reading the process's cwd directly
+        needs nothing from the shell at all.
         Stops and restarts cleanly on reconnect (see _continue_session) so
         there's never more than one timer running per tab."""
         self._stop_local_cwd_tracking(page_widget)
@@ -3236,8 +3294,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def _tick_local_cwd(self, page_widget):
         """Recurring GLib.timeout_add_seconds callback — returning False
-        cancels it, doubling as cleanup once the tab closes or its shell
-        process dies."""
+        cancels it, doubling as cleanup once the tab closes, its shell
+        process dies, or its cwd simply can't be determined on this
+        platform (no point polling forever for an answer that will never
+        come)."""
         tab_info = self.tab_data.get(page_widget)
         if tab_info is None:
             return False
@@ -3245,10 +3305,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if session is None:
             return False
         _terminal, pid = session
-        try:
-            cwd = os.readlink(f"/proc/{pid}/cwd")
-        except OSError:
-            return False  # process gone, or no /proc at all (e.g. macOS)
+        cwd = self._get_process_cwd(pid)
+        if cwd is None:
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return False  # process is gone
+            return False  # process alive, but cwd unavailable — nothing will change
 
         if cwd != tab_info.get("_cwd_last"):
             tab_info["_cwd_last"] = cwd
