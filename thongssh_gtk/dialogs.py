@@ -20,8 +20,7 @@ from .keyring import KeyringManager
 from .ai_providers import DEFAULT_MODELS as AI_DEFAULT_MODELS, DEFAULT_BASE_URLS as AI_DEFAULT_BASE_URLS, fetch_models
 from .cli_providers import is_available as cli_is_available
 
-# Placeholder for future internationalization (i18n)
-_ = lambda s: s
+from .i18n import _, LANGUAGES
 
 # "custom" is driven by its own switch + color pickers, not a selectable
 # dropdown entry — the dropdown only ever lists real templates, one of
@@ -1548,6 +1547,29 @@ class SettingsDialog(Adw.Window):
         self.icon_row.set_selected(current_icon_index)
         group_logo.add(self.icon_row)
 
+        group_language = Adw.PreferencesGroup(
+            title=_("Language"),
+            description=_("Takes effect the next time ThongSSH starts."),
+        )
+        page_interface.add(group_language)
+
+        # (label, language code) — labels are each language's own native
+        # name (see i18n.LANGUAGES), not translated into whatever the
+        # current UI language is, same convention as every OS's own
+        # language picker: you shouldn't need to already read English to
+        # find "日本語" in the list.
+        self._language_options = list(LANGUAGES.items())
+        self._language_options[0] = ("system", _("System Default"))  # only entry actually worth translating
+        language_labels = [label for code, label in self._language_options]
+        self.language_row = Adw.ComboRow(title=_("Language"), model=Gtk.StringList.new(language_labels))
+        current_language = self.settings_manager.get("interface.language")
+        try:
+            current_language_index = [code for code, label in self._language_options].index(current_language)
+        except ValueError:
+            current_language_index = 0
+        self.language_row.set_selected(current_language_index)
+        group_language.add(self.language_row)
+
         group_host_tree = Adw.PreferencesGroup(title=_("Host Tree"))
         page_interface.add(group_host_tree)
 
@@ -2257,6 +2279,9 @@ class SettingsDialog(Adw.Window):
         icon_stem = self._icon_options[self.icon_row.get_selected()][1]
         self.settings_manager.set("interface.icon", icon_stem)
 
+        language_code = self._language_options[self.language_row.get_selected()][0]
+        self.settings_manager.set("interface.language", language_code)
+
         self.settings_manager.set("interface.tree_row_striping", self.tree_row_striping_row.get_active())
 
         search_position_map_rev = {0: "top", 1: "bottom"}
@@ -2622,6 +2647,13 @@ class SettingsDialog(Adw.Window):
             except ValueError:
                 default_icon_index = 0
             self.icon_row.set_selected(default_icon_index)
+            try:
+                default_language_index = [code for code, _label in self._language_options].index(
+                    DEFAULT_SETTINGS["interface.language"]
+                )
+            except ValueError:
+                default_language_index = 0
+            self.language_row.set_selected(default_language_index)
             self.tree_row_striping_row.set_active(DEFAULT_SETTINGS["interface.tree_row_striping"])
             search_position_map = {"top": 0, "bottom": 1}
             self.search_position_row.set_selected(

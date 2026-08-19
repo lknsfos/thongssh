@@ -21,7 +21,7 @@ from gi.repository import GLib
 
 from .constants import AI_STANDARD_PROVIDERS
 
-_ = lambda s: s
+from .i18n import _
 
 # Overridable via the "ai.request_timeout_seconds" setting (see dialogs.py) —
 # this is only the fallback if a caller doesn't pass one explicitly. Kept

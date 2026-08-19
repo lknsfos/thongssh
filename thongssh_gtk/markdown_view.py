@@ -20,7 +20,7 @@ import re
 
 from gi.repository import Gtk, Gdk, GLib, Pango
 
-_ = lambda s: s
+from .i18n import _
 
 _INLINE_PATTERN = re.compile(
     r"\*\*(?P<bold>.+?)\*\*|\*(?P<italic>[^*]+?)\*|`(?P<code>[^`]+?)`"

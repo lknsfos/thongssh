@@ -1,0 +1,2141 @@
+# Spanish translations for ThongSSH package.
+# Copyright (C) 2026 lknsfos
+# This file is distributed under the same license as the ThongSSH package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: ThongSSH 0.9.2\n"
+"Report-Msgid-Bugs-To: https://github.com/lknsfos/thongssh/issues\n"
+"POT-Creation-Date: 2026-08-19 21:07+0300\n"
+"PO-Revision-Date: 2026-08-19 21:07+0300\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: thongssh_gtk/ai_panel.py:107 thongssh_gtk/ai_panel.py:123
+#: thongssh_gtk/ai_panel.py:352
+msgid "New chat"
+msgstr "Chat nuevo"
+
+#: thongssh_gtk/ai_panel.py:112
+msgid "Delete this chat"
+msgstr "Eliminar este chat"
+
+#: thongssh_gtk/ai_panel.py:178
+msgid ""
+"Attach terminal context (current selection, or last 20 lines of output)"
+msgstr ""
+"Adjuntar contexto de la terminal (selección actual, o las últimas 20 líneas "
+"de salida)"
+
+#: thongssh_gtk/ai_panel.py:200 thongssh_gtk/dialogs.py:2696
+#: thongssh_gtk/send_file.py:109 thongssh_gtk/window.py:1877
+msgid "Send"
+msgstr "Enviar"
+
+#: thongssh_gtk/ai_panel.py:282
+msgid "Search chats"
+msgstr "Buscar chats"
+
+#: thongssh_gtk/ai_panel.py:316
+msgid "No chats found."
+msgstr "No se encontraron chats."
+
+#: thongssh_gtk/ai_panel.py:322
+msgid "Untitled chat"
+msgstr "Chat sin título"
+
+#: thongssh_gtk/ai_panel.py:422
+msgid ""
+"Reply with ONLY a short 3-6 word title summarizing what this conversation is"
+" about. No quotes, no trailing punctuation, no explanation — just the title."
+msgstr ""
+"Responde SOLO con un título breve de 3 a 6 palabras que resuma de qué trata "
+"esta conversación. Sin comillas, sin puntuación final, sin explicaciones — "
+"solo el título."
+
+#: thongssh_gtk/ai_panel.py:475
+msgid "Context to attach:"
+msgstr "Contexto para adjuntar:"
+
+#: thongssh_gtk/ai_panel.py:493
+msgid "No AI provider selected."
+msgstr "No hay ningún proveedor de IA seleccionado."
+
+#: thongssh_gtk/ai_panel.py:502
+msgid "This provider is no longer configured."
+msgstr "Este proveedor ya no está configurado."
+
+#: thongssh_gtk/ai_panel.py:505
+#, python-brace-format
+msgid "No API key configured for {label}."
+msgstr "No hay clave de API configurada para {label}."
+
+#: thongssh_gtk/ai_panel.py:631
+msgid "Thinking…"
+msgstr "Pensando…"
+
+#: thongssh_gtk/ai_providers.py:78 thongssh_gtk/colors.py:68
+#: thongssh_gtk/dialogs.py:2359 thongssh_gtk/window.py:1532
+msgid "Custom"
+msgstr "Personalizado"
+
+#: thongssh_gtk/ai_providers.py:147
+#, python-brace-format
+msgid ""
+"Request header contains a non-ASCII character (double-check the API key was "
+"pasted correctly): {error}"
+msgstr ""
+"La cabecera de la solicitud contiene un carácter no ASCII (comprueba que la "
+"clave de API se haya pegado correctamente): {error}"
+
+#: thongssh_gtk/cli_providers.py:81 thongssh_gtk/dialogs.py:2388
+#: thongssh_gtk/window.py:1541
+msgid "Custom CLI"
+msgstr "CLI personalizada"
+
+#: thongssh_gtk/cli_providers.py:132
+#, python-brace-format
+msgid "Invalid command template: {error}"
+msgstr "Plantilla de comando no válida: {error}"
+
+#: thongssh_gtk/cli_providers.py:134
+msgid "Command template is empty."
+msgstr "La plantilla de comando está vacía."
+
+#: thongssh_gtk/cli_providers.py:202
+#, python-brace-format
+msgid "Command not found: {cmd}"
+msgstr "Comando no encontrado: {cmd}"
+
+#: thongssh_gtk/cli_providers.py:204
+#, python-brace-format
+msgid "Timed out after {seconds}s"
+msgstr "Tiempo de espera agotado tras {seconds}s"
+
+#: thongssh_gtk/cli_providers.py:208
+#, python-brace-format
+msgid "'{cmd}' exited with status {code}: {detail}"
+msgstr "'{cmd}' finalizó con estado {code}: {detail}"
+
+#: thongssh_gtk/cli_providers.py:214
+msgid "Command produced no output."
+msgstr "El comando no produjo ninguna salida."
+
+#: thongssh_gtk/colors.py:59
+msgid "Default"
+msgstr "Predeterminado"
+
+#: thongssh_gtk/dialogs.py:35
+msgid "Black"
+msgstr "Negro"
+
+#: thongssh_gtk/dialogs.py:35
+msgid "Red"
+msgstr "Rojo"
+
+#: thongssh_gtk/dialogs.py:35
+msgid "Green"
+msgstr "Verde"
+
+#: thongssh_gtk/dialogs.py:35
+msgid "Yellow"
+msgstr "Amarillo"
+
+#: thongssh_gtk/dialogs.py:35
+msgid "Blue"
+msgstr "Azul"
+
+#: thongssh_gtk/dialogs.py:35
+msgid "Magenta"
+msgstr "Magenta"
+
+#: thongssh_gtk/dialogs.py:35
+msgid "Cyan"
+msgstr "Cian"
+
+#: thongssh_gtk/dialogs.py:35
+msgid "White"
+msgstr "Blanco"
+
+#: thongssh_gtk/dialogs.py:36
+msgid "Bright Black"
+msgstr "Negro brillante"
+
+#: thongssh_gtk/dialogs.py:36
+msgid "Bright Red"
+msgstr "Rojo brillante"
+
+#: thongssh_gtk/dialogs.py:36
+msgid "Bright Green"
+msgstr "Verde brillante"
+
+#: thongssh_gtk/dialogs.py:36
+msgid "Bright Yellow"
+msgstr "Amarillo brillante"
+
+#: thongssh_gtk/dialogs.py:37
+msgid "Bright Blue"
+msgstr "Azul brillante"
+
+#: thongssh_gtk/dialogs.py:37
+msgid "Bright Magenta"
+msgstr "Magenta brillante"
+
+#: thongssh_gtk/dialogs.py:37
+msgid "Bright Cyan"
+msgstr "Cian brillante"
+
+#: thongssh_gtk/dialogs.py:37
+msgid "Bright White"
+msgstr "Blanco brillante"
+
+#: thongssh_gtk/dialogs.py:74
+msgid "Root (/)"
+msgstr "Raíz (/)"
+
+#: thongssh_gtk/dialogs.py:132 thongssh_gtk/dialogs.py:210
+#: thongssh_gtk/dialogs.py:238 thongssh_gtk/dialogs.py:2897
+#: thongssh_gtk/window.py:4134 thongssh_gtk/window.py:4240
+msgid "OK"
+msgstr "Aceptar"
+
+#: thongssh_gtk/dialogs.py:137 thongssh_gtk/dialogs.py:242
+#: thongssh_gtk/dialogs.py:363 thongssh_gtk/dialogs.py:545
+#: thongssh_gtk/dialogs.py:688 thongssh_gtk/dialogs.py:747
+#: thongssh_gtk/dialogs.py:2464 thongssh_gtk/dialogs.py:2484
+#: thongssh_gtk/host_keys.py:120 thongssh_gtk/send_file.py:157
+#: thongssh_gtk/sftp_widget.py:1275 thongssh_gtk/window.py:1449
+#: thongssh_gtk/window.py:3614
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: thongssh_gtk/dialogs.py:236
+msgid "Change Permissions"
+msgstr "Cambiar permisos"
+
+#: thongssh_gtk/dialogs.py:255 thongssh_gtk/dialogs.py:260
+msgid "Read"
+msgstr "Lectura"
+
+#: thongssh_gtk/dialogs.py:256 thongssh_gtk/dialogs.py:260
+msgid "Write"
+msgstr "Escritura"
+
+#: thongssh_gtk/dialogs.py:257 thongssh_gtk/dialogs.py:260
+msgid "Execute"
+msgstr "Ejecución"
+
+#: thongssh_gtk/dialogs.py:269
+msgid "User"
+msgstr "Usuario"
+
+#: thongssh_gtk/dialogs.py:269 thongssh_gtk/dialogs.py:388
+msgid "Group"
+msgstr "Grupo"
+
+#: thongssh_gtk/dialogs.py:269
+msgid "Other"
+msgstr "Otros"
+
+#: thongssh_gtk/dialogs.py:280
+msgid "Octal value:"
+msgstr "Valor octal:"
+
+#: thongssh_gtk/dialogs.py:352
+#, python-brace-format
+msgid "Edit Host: {host_name}"
+msgstr "Editar host: {host_name}"
+
+#: thongssh_gtk/dialogs.py:353 thongssh_gtk/dialogs.py:742
+msgid "Save"
+msgstr "Guardar"
+
+#: thongssh_gtk/dialogs.py:355
+msgid "Add New Host"
+msgstr "Añadir host nuevo"
+
+#: thongssh_gtk/dialogs.py:356 thongssh_gtk/dialogs.py:742
+msgid "Add"
+msgstr "Añadir"
+
+#: thongssh_gtk/dialogs.py:371
+msgid "Basic Settings"
+msgstr "Ajustes básicos"
+
+#: thongssh_gtk/dialogs.py:374
+msgid "Protocol"
+msgstr "Protocolo"
+
+#: thongssh_gtk/dialogs.py:378 thongssh_gtk/dialogs.py:760
+#: thongssh_gtk/dialogs.py:1393 thongssh_gtk/dialogs.py:1492
+#: thongssh_gtk/dialogs.py:1696 thongssh_gtk/dialogs.py:1819
+#: thongssh_gtk/dialogs.py:1965 thongssh_gtk/sftp_widget.py:256
+#: thongssh_gtk/sftp_widget.py:359
+msgid "Name"
+msgstr "Nombre"
+
+#: thongssh_gtk/dialogs.py:381 thongssh_gtk/window.py:3700
+msgid "Hostname/IP"
+msgstr "Nombre de host/IP"
+
+#: thongssh_gtk/dialogs.py:381
+msgid "Hostname or IP address"
+msgstr "Nombre de host o dirección IP"
+
+#: thongssh_gtk/dialogs.py:397
+msgid "Port"
+msgstr "Puerto"
+
+#: thongssh_gtk/dialogs.py:407 thongssh_gtk/dialogs.py:431
+msgid "Authentication"
+msgstr "Autenticación"
+
+#: thongssh_gtk/dialogs.py:408
+msgid "Saved securely in system keyring"
+msgstr "Guardada de forma segura en el llavero del sistema"
+
+#: thongssh_gtk/dialogs.py:412
+msgid "Username"
+msgstr "Nombre de usuario"
+
+#: thongssh_gtk/dialogs.py:415
+msgid "Password"
+msgstr "Contraseña"
+
+#: thongssh_gtk/dialogs.py:419
+msgid "Clear saved password"
+msgstr "Borrar contraseña guardada"
+
+#: thongssh_gtk/dialogs.py:424
+msgid "Path to key (IdentityFile)"
+msgstr "Ruta a la clave (IdentityFile)"
+
+#: thongssh_gtk/dialogs.py:435 thongssh_gtk/dialogs.py:1247
+msgid "Logging"
+msgstr "Registro"
+
+#: thongssh_gtk/dialogs.py:439
+msgid "Save session log"
+msgstr "Guardar registro de sesión"
+
+#: thongssh_gtk/dialogs.py:440
+msgid ""
+"Records every session to a file in the configured log directory (see "
+"Settings → Client Options)"
+msgstr ""
+"Registra cada sesión en un archivo dentro del directorio de registros "
+"configurado (ver Preferencias → Opciones del cliente)"
+
+#: thongssh_gtk/dialogs.py:444
+msgid "SSH Options"
+msgstr "Opciones de SSH"
+
+#: thongssh_gtk/dialogs.py:447
+msgid "Compatibility with old systems"
+msgstr "Compatibilidad con sistemas antiguos"
+
+#: thongssh_gtk/dialogs.py:448
+msgid "Enables old ciphers (for CentOS 5/6, etc.)"
+msgstr "Activa cifrados antiguos (para CentOS 5/6, etc.)"
+
+#: thongssh_gtk/dialogs.py:451
+msgid "X11 Forwarding"
+msgstr "Reenvío de X11"
+
+#: thongssh_gtk/dialogs.py:452
+msgid "Enables the -X flag (ForwardX11)"
+msgstr "Activa el parámetro -X (ForwardX11)"
+
+#: thongssh_gtk/dialogs.py:455
+msgid "ssh-agent Forwarding"
+msgstr "Reenvío de ssh-agent"
+
+#: thongssh_gtk/dialogs.py:456
+msgid "Enables the -A flag (ForwardAgent)"
+msgstr "Activa el parámetro -A (ForwardAgent)"
+
+#: thongssh_gtk/dialogs.py:459
+msgid "Extra SSH Options"
+msgstr "Opciones adicionales de SSH"
+
+#: thongssh_gtk/dialogs.py:460
+msgid "Example: -o ServerAliveInterval=60"
+msgstr "Ejemplo: -o ServerAliveInterval=60"
+
+#: thongssh_gtk/dialogs.py:467
+msgid "Telnet Options"
+msgstr "Opciones de Telnet"
+
+#: thongssh_gtk/dialogs.py:470
+msgid "Binary Mode"
+msgstr "Modo binario"
+
+#: thongssh_gtk/dialogs.py:471
+msgid "Enable binary mode transmission"
+msgstr "Activar transmisión en modo binario"
+
+#: thongssh_gtk/dialogs.py:474
+msgid "Local Echo"
+msgstr "Eco local"
+
+#: thongssh_gtk/dialogs.py:475
+msgid "Echo typed characters locally"
+msgstr "Mostrar localmente los caracteres escritos"
+
+#: thongssh_gtk/dialogs.py:478
+msgid "Options"
+msgstr "Opciones"
+
+#: thongssh_gtk/dialogs.py:540
+msgid "Select SSH Key"
+msgstr "Seleccionar clave SSH"
+
+#: thongssh_gtk/dialogs.py:544 thongssh_gtk/dialogs.py:2463
+#: thongssh_gtk/dialogs.py:2483 thongssh_gtk/send_file.py:156
+msgid "Select"
+msgstr "Seleccionar"
+
+#: thongssh_gtk/dialogs.py:548
+msgid "All files"
+msgstr "Todos los archivos"
+
+#: thongssh_gtk/dialogs.py:680
+msgid "Create New Group"
+msgstr "Crear grupo nuevo"
+
+#: thongssh_gtk/dialogs.py:682
+msgid "Create"
+msgstr "Crear"
+
+#: thongssh_gtk/dialogs.py:699
+msgid "Group Name:"
+msgstr "Nombre del grupo:"
+
+#: thongssh_gtk/dialogs.py:705
+msgid "Parent Group:"
+msgstr "Grupo superior:"
+
+#: thongssh_gtk/dialogs.py:739
+msgid "Edit Quicky"
+msgstr "Editar rapidito"
+
+#: thongssh_gtk/dialogs.py:739 thongssh_gtk/window.py:1784
+msgid "Add Quicky"
+msgstr "Añadir rapidito"
+
+#: thongssh_gtk/dialogs.py:791 thongssh_gtk/dialogs.py:1009
+msgid "Available variables: $name, $host, $user"
+msgstr "Variables disponibles: $name, $host, $user"
+
+#: thongssh_gtk/dialogs.py:834 thongssh_gtk/dialogs.py:2068
+msgid "Terminal"
+msgstr "Terminal"
+
+#: thongssh_gtk/dialogs.py:838
+msgid "Appearance"
+msgstr "Apariencia"
+
+#: thongssh_gtk/dialogs.py:841 thongssh_gtk/dialogs.py:1037
+msgid "Font"
+msgstr "Tipografía"
+
+#: thongssh_gtk/dialogs.py:852
+msgid "Color Scheme"
+msgstr "Esquema de color"
+
+#: thongssh_gtk/dialogs.py:870 thongssh_gtk/dialogs.py:877
+msgid "Custom Colors"
+msgstr "Colores personalizados"
+
+#: thongssh_gtk/dialogs.py:871
+msgid "Manually set every color, starting from the template above"
+msgstr "Define manualmente cada color, partiendo de la plantilla de arriba"
+
+#: thongssh_gtk/dialogs.py:902
+msgid "Background"
+msgstr "Fondo"
+
+#: thongssh_gtk/dialogs.py:903
+msgid "Foreground"
+msgstr "Primer plano"
+
+#: thongssh_gtk/dialogs.py:909
+msgid "Palette"
+msgstr "Paleta"
+
+#: thongssh_gtk/dialogs.py:910
+msgid "The 16 colors terminal apps use for colored text"
+msgstr ""
+"Los 16 colores que usan las aplicaciones de terminal para el texto en color"
+
+#: thongssh_gtk/dialogs.py:951
+msgid "Behavior"
+msgstr "Comportamiento"
+
+#: thongssh_gtk/dialogs.py:955
+msgid "Scrollback History"
+msgstr "Historial de desplazamiento"
+
+#: thongssh_gtk/dialogs.py:956
+msgid "Number of lines to keep in history"
+msgstr "Número de líneas que se conservan en el historial"
+
+#: thongssh_gtk/dialogs.py:962
+msgid "Close tab on disconnect"
+msgstr "Cerrar pestaña al desconectar"
+
+#: thongssh_gtk/dialogs.py:963
+msgid "Automatically close the terminal tab when the session ends"
+msgstr ""
+"Cierra automáticamente la pestaña de la terminal cuando finaliza la sesión"
+
+#: thongssh_gtk/dialogs.py:975
+msgid "Ask for username when reconnecting"
+msgstr "Preguntar el nombre de usuario al reconectar"
+
+#: thongssh_gtk/dialogs.py:976
+msgid ""
+"Prompt again instead of reusing the previous username when reconnecting to a"
+" disconnected tab"
+msgstr ""
+"Vuelve a preguntar en lugar de reutilizar el nombre de usuario anterior al "
+"reconectar una pestaña desconectada"
+
+#: thongssh_gtk/dialogs.py:987
+msgid "New local terminal opens in current directory"
+msgstr "La terminal local nueva se abre en el directorio actual"
+
+#: thongssh_gtk/dialogs.py:988
+msgid ""
+"The tab strip's \"+\" button starts its shell in the active tab's current "
+"directory instead of always $HOME"
+msgstr ""
+"El botón «+» de la barra de pestañas inicia su shell en el directorio actual"
+" de la pestaña activa, en lugar de usar siempre $HOME"
+
+#: thongssh_gtk/dialogs.py:996
+msgid "Watermark"
+msgstr "Marca de agua"
+
+#: thongssh_gtk/dialogs.py:1000 thongssh_gtk/dialogs.py:1434
+msgid "Enabled on start"
+msgstr "Activada al iniciar"
+
+#: thongssh_gtk/dialogs.py:1001
+msgid ""
+"Whether the watermark is on when the app launches — same switch as the "
+"header-bar button"
+msgstr ""
+"Indica si la marca de agua está activada al iniciar la aplicación — el mismo"
+" interruptor que el botón de la barra de cabecera"
+
+#: thongssh_gtk/dialogs.py:1006 thongssh_gtk/dialogs.py:1497
+msgid "Text"
+msgstr "Texto"
+
+#: thongssh_gtk/dialogs.py:1020 thongssh_gtk/dialogs.py:1441
+msgid "Position"
+msgstr "Posición"
+
+#: thongssh_gtk/dialogs.py:1025
+msgid "Font Size"
+msgstr "Tamaño de la tipografía"
+
+#: thongssh_gtk/dialogs.py:1048 thongssh_gtk/dialogs.py:1150
+msgid "Color"
+msgstr "Color"
+
+#: thongssh_gtk/dialogs.py:1058 thongssh_gtk/dialogs.py:1160
+msgid "Opacity (%)"
+msgstr "Opacidad (%)"
+
+#: thongssh_gtk/dialogs.py:1064
+msgid "Active terminal only"
+msgstr "Solo la terminal activa"
+
+#: thongssh_gtk/dialogs.py:1064
+msgid "All panes"
+msgstr "Todos los paneles"
+
+#: thongssh_gtk/dialogs.py:1065
+msgid "Show on"
+msgstr "Mostrar en"
+
+#: thongssh_gtk/dialogs.py:1077
+msgid "Off"
+msgstr "Desactivada"
+
+#: thongssh_gtk/dialogs.py:1080
+msgid "Shrink in split view"
+msgstr "Reducir en vista dividida"
+
+#: thongssh_gtk/dialogs.py:1081
+msgid "Scale the size down to this percent while any split layout is active"
+msgstr ""
+"Reduce el tamaño a este porcentaje mientras haya activo un diseño dividido"
+
+#: thongssh_gtk/dialogs.py:1103
+msgid "Adaptive Watermarks"
+msgstr "Marcas de agua adaptables"
+
+#: thongssh_gtk/dialogs.py:1104
+msgid ""
+"Override the color/opacity above when the watermark text matches a pattern. "
+"The topmost matching rule wins — put more specific patterns above more "
+"general ones."
+msgstr ""
+"Sustituye el color/opacidad de arriba cuando el texto de la marca de agua "
+"coincide con un patrón. Gana la regla coincidente que esté más arriba — "
+"coloca los patrones más específicos por encima de los más generales."
+
+#: thongssh_gtk/dialogs.py:1144
+msgid "Pattern (regex)"
+msgstr "Patrón (regex)"
+
+#: thongssh_gtk/dialogs.py:1166
+msgid "Move up (higher priority)"
+msgstr "Subir (mayor prioridad)"
+
+#: thongssh_gtk/dialogs.py:1172
+msgid "Move down (lower priority)"
+msgstr "Bajar (menor prioridad)"
+
+#: thongssh_gtk/dialogs.py:1178 thongssh_gtk/dialogs.py:1845
+#: thongssh_gtk/dialogs.py:1984
+msgid "Remove"
+msgstr "Quitar"
+
+#: thongssh_gtk/dialogs.py:1200
+msgid "Add Rule"
+msgstr "Añadir regla"
+
+#: thongssh_gtk/dialogs.py:1228 thongssh_gtk/dialogs.py:2069
+msgid "Client Options"
+msgstr "Opciones del cliente"
+
+#: thongssh_gtk/dialogs.py:1231
+msgid "Executable Paths"
+msgstr "Rutas de los ejecutables"
+
+#: thongssh_gtk/dialogs.py:1234
+msgid "SSH Client Path"
+msgstr "Ruta del cliente SSH"
+
+#: thongssh_gtk/dialogs.py:1238
+msgid "sshpass Client Path"
+msgstr "Ruta del cliente sshpass"
+
+#: thongssh_gtk/dialogs.py:1242
+msgid "Telnet Client Path"
+msgstr "Ruta del cliente Telnet"
+
+#: thongssh_gtk/dialogs.py:1248
+msgid ""
+"Used for hosts with \"Save session log\" enabled. Leave empty to use the "
+".config_path pointer's terminal_logs_path, or the config directory if that's"
+" empty too."
+msgstr ""
+"Se usa para los hosts que tienen activado «Guardar registro de sesión». "
+"Déjalo vacío para usar el terminal_logs_path del puntero .config_path, o el "
+"directorio de configuración si ese también está vacío."
+
+#: thongssh_gtk/dialogs.py:1254
+msgid "Log Directory"
+msgstr "Directorio de registros"
+
+#: thongssh_gtk/dialogs.py:1258 thongssh_gtk/dialogs.py:1285
+msgid "Choose a folder"
+msgstr "Elegir una carpeta"
+
+#: thongssh_gtk/dialogs.py:1265 thongssh_gtk/dialogs.py:1269
+#: thongssh_gtk/dialogs.py:2072
+msgid "Sync"
+msgstr "Sincronización"
+
+#: thongssh_gtk/dialogs.py:1270
+msgid ""
+"Keeps hosts/Quickies/AI chats/user commands/general/terminal settings in "
+"step across machines via a plain shared folder — Dropbox, iCloud, a network "
+"share, or just another local directory. The app never talks to any cloud API"
+" directly, it only reads/writes files inside whatever folder you point it at"
+" below."
+msgstr ""
+"Mantiene sincronizados entre equipos los hosts, rapiditos, chats de IA, "
+"comandos de usuario y ajustes generales/de terminal, mediante una simple "
+"carpeta compartida — Dropbox, iCloud, un recurso de red o cualquier otro "
+"directorio local. La aplicación nunca se comunica directamente con ninguna "
+"API en la nube, solo lee y escribe archivos dentro de la carpeta que "
+"indiques abajo."
+
+#: thongssh_gtk/dialogs.py:1277
+msgid "Enable Sync"
+msgstr "Activar sincronización"
+
+#: thongssh_gtk/dialogs.py:1281
+msgid "Sync Folder"
+msgstr "Carpeta de sincronización"
+
+#: thongssh_gtk/dialogs.py:1291
+msgid "Sync Interval (seconds)"
+msgstr "Intervalo de sincronización (segundos)"
+
+#: thongssh_gtk/dialogs.py:1292
+msgid "Minimum 60 seconds"
+msgstr "Mínimo 60 segundos"
+
+#: thongssh_gtk/dialogs.py:1299
+msgid "What to Sync"
+msgstr "Qué sincronizar"
+
+#: thongssh_gtk/dialogs.py:1302 thongssh_gtk/window.py:405
+msgid "Hosts"
+msgstr "Hosts"
+
+#: thongssh_gtk/dialogs.py:1306 thongssh_gtk/dialogs.py:1427
+#: thongssh_gtk/dialogs.py:1643 thongssh_gtk/dialogs.py:2071
+msgid "Quickies"
+msgstr "Rapiditos"
+
+#: thongssh_gtk/dialogs.py:1310
+msgid "AI Chats"
+msgstr "Chats de IA"
+
+#: thongssh_gtk/dialogs.py:1314 thongssh_gtk/dialogs.py:1360
+#: thongssh_gtk/dialogs.py:2070
+msgid "User Commands"
+msgstr "Comandos de usuario"
+
+#: thongssh_gtk/dialogs.py:1318 thongssh_gtk/dialogs.py:1529
+#: thongssh_gtk/dialogs.py:2066
+msgid "General"
+msgstr "General"
+
+#: thongssh_gtk/dialogs.py:1325 thongssh_gtk/dialogs.py:1612
+msgid "Keyboard Shortcuts"
+msgstr "Atajos de teclado"
+
+#: thongssh_gtk/dialogs.py:1329
+msgid "Terminal Settings"
+msgstr "Ajustes de terminal"
+
+#: thongssh_gtk/dialogs.py:1329
+msgid "Colors, watermarks"
+msgstr "Colores, marcas de agua"
+
+#: thongssh_gtk/dialogs.py:1336
+msgid "Force Sync Now"
+msgstr "Forzar sincronización ahora"
+
+#: thongssh_gtk/dialogs.py:1351
+msgid "Sync Now"
+msgstr "Sincronizar ahora"
+
+#: thongssh_gtk/dialogs.py:1363
+msgid "Custom Commands"
+msgstr "Comandos personalizados"
+
+#: thongssh_gtk/dialogs.py:1398 thongssh_gtk/dialogs.py:1934
+#: thongssh_gtk/dialogs.py:1970
+msgid "Command"
+msgstr "Comando"
+
+#: thongssh_gtk/dialogs.py:1415
+msgid ""
+"Commands for the host's context menu.\n"
+"Available variables: $name, $host, $user"
+msgstr ""
+"Comandos para el menú contextual del host.\n"
+"Variables disponibles: $name, $host, $user"
+
+#: thongssh_gtk/dialogs.py:1430
+msgid "Panel"
+msgstr "Panel"
+
+#: thongssh_gtk/dialogs.py:1435
+msgid ""
+"Whether the Quickies panel is shown when the app launches — same switch as "
+"the header-bar button"
+msgstr ""
+"Indica si el panel de rapiditos se muestra al iniciar la aplicación — el "
+"mismo interruptor que el botón de la barra de cabecera"
+
+#: thongssh_gtk/dialogs.py:1440
+msgid "Above hosts"
+msgstr "Encima de los hosts"
+
+#: thongssh_gtk/dialogs.py:1440
+msgid "Below hosts"
+msgstr "Debajo de los hosts"
+
+#: thongssh_gtk/dialogs.py:1448 thongssh_gtk/dialogs.py:1583
+#: thongssh_gtk/window.py:1239
+msgid "Top"
+msgstr "Arriba"
+
+#: thongssh_gtk/dialogs.py:1448 thongssh_gtk/dialogs.py:1583
+#: thongssh_gtk/window.py:1239
+msgid "Bottom"
+msgstr "Abajo"
+
+#: thongssh_gtk/dialogs.py:1449 thongssh_gtk/dialogs.py:1584
+msgid "Search bar position"
+msgstr "Posición de la barra de búsqueda"
+
+#: thongssh_gtk/dialogs.py:1456
+msgid "Snippets"
+msgstr "Fragmentos"
+
+#: thongssh_gtk/dialogs.py:1485
+msgid "#"
+msgstr "#"
+
+#: thongssh_gtk/dialogs.py:1515
+msgid ""
+"Drag rows to reorder — the first 10 get a keyboard shortcut (Settings → Shortcuts → Quickies).\n"
+"Inserted into the active terminal, not executed.\n"
+"Available variables: $name, $host, $user"
+msgstr ""
+"Arrastra las filas para reordenarlas — las 10 primeras obtienen un atajo de teclado (Preferencias → Atajos → Rapiditos).\n"
+"Se insertan en la terminal activa, no se ejecutan.\n"
+"Variables disponibles: $name, $host, $user"
+
+#: thongssh_gtk/dialogs.py:1532
+msgid "Logo"
+msgstr "Logotipo"
+
+#: thongssh_gtk/dialogs.py:1537
+msgid "Safe"
+msgstr "Seguro"
+
+#: thongssh_gtk/dialogs.py:1538
+msgid "Original"
+msgstr "Original"
+
+#: thongssh_gtk/dialogs.py:1541
+msgid "App Icon"
+msgstr "Icono de la aplicación"
+
+#: thongssh_gtk/dialogs.py:1551 thongssh_gtk/dialogs.py:1564
+msgid "Language"
+msgstr "Idioma"
+
+#: thongssh_gtk/dialogs.py:1552
+msgid "Takes effect the next time ThongSSH starts."
+msgstr "Se aplicará la próxima vez que se inicie ThongSSH."
+
+#: thongssh_gtk/dialogs.py:1562
+msgid "System Default"
+msgstr "Predeterminado del sistema"
+
+#: thongssh_gtk/dialogs.py:1573
+msgid "Host Tree"
+msgstr "Árbol de hosts"
+
+#: thongssh_gtk/dialogs.py:1577
+msgid "Alternating row highlight"
+msgstr "Resaltado alterno de filas"
+
+#: thongssh_gtk/dialogs.py:1578
+msgid "Tint every other row with a faint accent-color wash"
+msgstr "Tiñe filas alternas con un ligero tono del color de énfasis"
+
+#: thongssh_gtk/dialogs.py:1591
+msgid "Debugging"
+msgstr "Depuración"
+
+#: thongssh_gtk/dialogs.py:1595
+msgid "Enable debug logging"
+msgstr "Activar registro de depuración"
+
+#: thongssh_gtk/dialogs.py:1596
+msgid ""
+"Print verbose debug messages to the console. Leave off unless "
+"troubleshooting an issue."
+msgstr ""
+"Muestra mensajes detallados de depuración en la consola. Déjalo desactivado "
+"salvo que estés resolviendo un problema."
+
+#: thongssh_gtk/dialogs.py:1608 thongssh_gtk/dialogs.py:2067
+msgid "Shortcuts"
+msgstr "Atajos"
+
+#: thongssh_gtk/dialogs.py:1614
+msgid ""
+"Click a shortcut, then press the new key combination — Escape cancels, "
+"leaving it unchanged."
+msgstr ""
+"Haz clic en un atajo y luego pulsa la nueva combinación de teclas — Escape "
+"cancela sin realizar cambios."
+
+#: thongssh_gtk/dialogs.py:1622 thongssh_gtk/window.py:2450
+msgid "Close Tab"
+msgstr "Cerrar pestaña"
+
+#: thongssh_gtk/dialogs.py:1623
+msgid "Focus Host Search"
+msgstr "Ir a la búsqueda de hosts"
+
+#: thongssh_gtk/dialogs.py:1624
+msgid "Find in Terminal"
+msgstr "Buscar en la terminal"
+
+#: thongssh_gtk/dialogs.py:1625 thongssh_gtk/markdown_view.py:171
+#: thongssh_gtk/markdown_view.py:259 thongssh_gtk/window.py:2665
+msgid "Copy"
+msgstr "Copiar"
+
+#: thongssh_gtk/dialogs.py:1626 thongssh_gtk/dialogs.py:1659
+#: thongssh_gtk/window.py:2666
+msgid "Paste"
+msgstr "Pegar"
+
+#: thongssh_gtk/dialogs.py:1645
+msgid ""
+"Quick-access bindings for the first 10 Quickies, by their position in the "
+"panel (slot 10 uses the \"0\" key) — Paste inserts without running (same as "
+"Send ▶), Run inserts and executes (same as Send and Run ⏩)."
+msgstr ""
+"Atajos de acceso rápido para los 10 primeros rapiditos, según su posición en"
+" el panel (el puesto 10 usa la tecla «0») — Pegar inserta sin ejecutar "
+"(igual que Enviar ▶), Ejecutar inserta y ejecuta (igual que Enviar y "
+"ejecutar ⏩)."
+
+#: thongssh_gtk/dialogs.py:1661 thongssh_gtk/window.py:2681
+msgid "Run"
+msgstr "Ejecutar"
+
+#: thongssh_gtk/dialogs.py:1686 thongssh_gtk/dialogs.py:2073
+msgid "SFTP"
+msgstr "SFTP"
+
+#: thongssh_gtk/dialogs.py:1689
+msgid "Local Panel"
+msgstr "Panel local"
+
+#: thongssh_gtk/dialogs.py:1692
+msgid "Default Local Path"
+msgstr "Ruta local predeterminada"
+
+#: thongssh_gtk/dialogs.py:1696 thongssh_gtk/sftp_widget.py:257
+#: thongssh_gtk/sftp_widget.py:359
+msgid "Size"
+msgstr "Tamaño"
+
+#: thongssh_gtk/dialogs.py:1696
+msgid "Date"
+msgstr "Fecha"
+
+#: thongssh_gtk/dialogs.py:1697 thongssh_gtk/dialogs.py:1711
+msgid "Default Sort Column"
+msgstr "Columna de orden predeterminada"
+
+#: thongssh_gtk/dialogs.py:1702
+msgid "Ascending"
+msgstr "Ascendente"
+
+#: thongssh_gtk/dialogs.py:1702
+msgid "Descending"
+msgstr "Descendente"
+
+#: thongssh_gtk/dialogs.py:1703 thongssh_gtk/dialogs.py:1716
+msgid "Default Sort Direction"
+msgstr "Dirección de orden predeterminada"
+
+#: thongssh_gtk/dialogs.py:1708
+msgid "Remote Panel"
+msgstr "Panel remoto"
+
+#: thongssh_gtk/dialogs.py:1750
+msgid "Disable AI"
+msgstr "Desactivar IA"
+
+#: thongssh_gtk/dialogs.py:1751
+msgid ""
+"Turns the feature off entirely: no header-bar buttons, no local CLI tool "
+"detection, no keyring lookups, no requests of any kind."
+msgstr ""
+"Desactiva la función por completo: sin botones en la barra de cabecera, sin "
+"detección de herramientas CLI locales, sin consultas al llavero, sin ninguna"
+" solicitud."
+
+#: thongssh_gtk/dialogs.py:1758
+msgid "System Prompt"
+msgstr "Prompt del sistema"
+
+#: thongssh_gtk/dialogs.py:1759
+msgid ""
+"Shared by every provider on the API and CLI Client tabs below — sent as the "
+"system/initial prompt for every conversation."
+msgstr ""
+"Compartido por todos los proveedores en las pestañas de API y Cliente CLI de"
+" abajo — se envía como el prompt de sistema/inicial en cada conversación."
+
+#: thongssh_gtk/dialogs.py:1763
+msgid "Initial prompt"
+msgstr "Prompt inicial"
+
+#: thongssh_gtk/dialogs.py:1768
+msgid "Reset to default"
+msgstr "Restablecer valor predeterminado"
+
+#: thongssh_gtk/dialogs.py:1778
+msgid "Connection"
+msgstr "Conexión"
+
+#: thongssh_gtk/dialogs.py:1779
+msgid ""
+"Shared by every provider — raise it if requests to a slower/local model keep"
+" timing out."
+msgstr ""
+"Compartido por todos los proveedores — auméntalo si las solicitudes a un "
+"modelo local/más lento siguen agotando el tiempo de espera."
+
+#: thongssh_gtk/dialogs.py:1784
+msgid "Request timeout (seconds)"
+msgstr "Tiempo de espera de la solicitud (segundos)"
+
+#: thongssh_gtk/dialogs.py:1796 thongssh_gtk/dialogs.py:2015
+msgid "API"
+msgstr "API"
+
+#: thongssh_gtk/dialogs.py:1807
+msgid "Custom Providers"
+msgstr "Proveedores personalizados"
+
+#: thongssh_gtk/dialogs.py:1808
+msgid ""
+"Any OpenAI-compatible chat completions endpoint (self-hosted, OpenRouter, "
+"etc.)."
+msgstr ""
+"Cualquier endpoint de finalización de chat compatible con OpenAI "
+"(autoalojado, OpenRouter, etc.)."
+
+#: thongssh_gtk/dialogs.py:1817 thongssh_gtk/dialogs.py:1821
+msgid "New Provider"
+msgstr "Proveedor nuevo"
+
+#: thongssh_gtk/dialogs.py:1824
+msgid "Base URL"
+msgstr "URL base"
+
+#: thongssh_gtk/dialogs.py:1828
+msgid "API Key (optional)"
+msgstr "Clave de API (opcional)"
+
+#: thongssh_gtk/dialogs.py:1835 thongssh_gtk/dialogs.py:1892
+#: thongssh_gtk/dialogs.py:1939 thongssh_gtk/dialogs.py:1975
+msgid "Model"
+msgstr "Modelo"
+
+#: thongssh_gtk/dialogs.py:1868
+msgid "Add Custom Provider"
+msgstr "Añadir proveedor personalizado"
+
+#: thongssh_gtk/dialogs.py:1876
+msgid "Providers"
+msgstr "Proveedores"
+
+#: thongssh_gtk/dialogs.py:1877
+msgid "A header-bar button appears for each provider with a key saved here."
+msgstr ""
+"Aparece un botón en la barra de cabecera por cada proveedor que tenga una "
+"clave guardada aquí."
+
+#: thongssh_gtk/dialogs.py:1886
+msgid "API Key"
+msgstr "Clave de API"
+
+#: thongssh_gtk/dialogs.py:1905 thongssh_gtk/dialogs.py:2016
+msgid "CLI Client"
+msgstr "Cliente CLI"
+
+#: thongssh_gtk/dialogs.py:1909
+msgid "Standard Tools"
+msgstr "Herramientas estándar"
+
+#: thongssh_gtk/dialogs.py:1911
+#, python-brace-format
+msgid ""
+"Runs the command fresh for every message and reads its stdout as the reply —"
+" install the tool yourself first (npm, etc.). \"{message}\" and "
+"\"{system_prompt}\" are each substituted with their own argument (never "
+"through a shell, so both are always safe regardless of content) — use "
+"\"{system_prompt}\" if the tool has its own flag for one (e.g. Claude's "
+"--append-system-prompt), otherwise it's prepended into the message "
+"automatically."
+msgstr ""
+"Ejecuta el comando de cero para cada mensaje y lee su stdout como respuesta "
+"— instala tú mismo la herramienta primero (npm, etc.). «{message}» y "
+"«{system_prompt}» se sustituyen cada uno por su propio argumento (nunca a "
+"través de un shell, así que ambos son siempre seguros sea cual sea su "
+"contenido) — usa «{system_prompt}» si la herramienta tiene su propio "
+"parámetro para ello (p. ej. --append-system-prompt de Claude); en caso "
+"contrario, se antepone automáticamente al mensaje."
+
+#: thongssh_gtk/dialogs.py:1928
+msgid "AI is disabled"
+msgstr "La IA está desactivada"
+
+#: thongssh_gtk/dialogs.py:1930
+msgid "Found on PATH"
+msgstr "Encontrado en el PATH"
+
+#: thongssh_gtk/dialogs.py:1932
+msgid "Not found on PATH"
+msgstr "No encontrado en el PATH"
+
+#: thongssh_gtk/dialogs.py:1940 thongssh_gtk/dialogs.py:1976
+msgid ""
+"Leave empty to use the tool's own default — no --model flag is sent at all."
+msgstr ""
+"Déjalo vacío para usar el valor predeterminado de la herramienta — no se "
+"envía ningún parámetro --model."
+
+#: thongssh_gtk/dialogs.py:1953
+msgid "Custom Tools"
+msgstr "Herramientas personalizadas"
+
+#: thongssh_gtk/dialogs.py:1954
+msgid "Any other locally-installed CLI (gemini-cli, aider, ...)."
+msgstr "Cualquier otra CLI instalada localmente (gemini-cli, aider, ...)."
+
+#: thongssh_gtk/dialogs.py:1963 thongssh_gtk/dialogs.py:1967
+msgid "New Tool"
+msgstr "Herramienta nueva"
+
+#: thongssh_gtk/dialogs.py:2005
+msgid "Add Custom Tool"
+msgstr "Añadir herramienta personalizada"
+
+#: thongssh_gtk/dialogs.py:2077 thongssh_gtk/window.py:120
+msgid "AI"
+msgstr "IA"
+
+#: thongssh_gtk/dialogs.py:2088 thongssh_gtk/dialogs.py:2089
+#: thongssh_gtk/dialogs.py:2092 thongssh_gtk/window.py:2469
+msgid "Settings"
+msgstr "Preferencias"
+
+#: thongssh_gtk/dialogs.py:2093
+msgid "Apply"
+msgstr "Aplicar"
+
+#: thongssh_gtk/dialogs.py:2097
+msgid "Reset"
+msgstr "Restablecer"
+
+#: thongssh_gtk/dialogs.py:2115
+msgid "Choose from a list"
+msgstr "Elegir de una lista"
+
+#: thongssh_gtk/dialogs.py:2144
+msgid "No models found."
+msgstr "No se encontraron modelos."
+
+#: thongssh_gtk/dialogs.py:2186
+msgid "Loading…"
+msgstr "Cargando…"
+
+#: thongssh_gtk/dialogs.py:2195
+#, python-brace-format
+msgid "Could not fetch models: {error}"
+msgstr "No se pudieron obtener los modelos: {error}"
+
+#: thongssh_gtk/dialogs.py:2211
+msgid "Clear shortcut"
+msgstr "Borrar atajo"
+
+#: thongssh_gtk/dialogs.py:2459
+msgid "Select Log Directory"
+msgstr "Seleccionar directorio de registros"
+
+#: thongssh_gtk/dialogs.py:2479
+msgid "Select Sync Folder"
+msgstr "Seleccionar carpeta de sincronización"
+
+#: thongssh_gtk/dialogs.py:2499
+#, python-brace-format
+msgid "Last attempt failed: {error}"
+msgstr "El último intento falló: {error}"
+
+#: thongssh_gtk/dialogs.py:2502
+#, python-brace-format
+msgid "Last synced: {time}"
+msgstr "Última sincronización: {time}"
+
+#: thongssh_gtk/dialogs.py:2504
+msgid "Never synced"
+msgstr "Nunca sincronizado"
+
+#: thongssh_gtk/dialogs.py:2529 thongssh_gtk/window.py:1471
+msgid "Syncing…"
+msgstr "Sincronizando…"
+
+#: thongssh_gtk/dialogs.py:2546
+msgid "New Command"
+msgstr "Comando nuevo"
+
+#: thongssh_gtk/dialogs.py:2568
+msgid "New Quicky"
+msgstr "Rapidito nuevo"
+
+#: thongssh_gtk/dialogs.py:2691 thongssh_gtk/window.py:163
+#: thongssh_gtk/window.py:2456
+msgid "Batch Command"
+msgstr "Comando por lotes"
+
+#: thongssh_gtk/dialogs.py:2732
+msgid "Close window after send"
+msgstr "Cerrar ventana tras enviar"
+
+#: thongssh_gtk/dialogs.py:2737
+msgid "Select / Deselect All"
+msgstr "Seleccionar/Deseleccionar todo"
+
+#: thongssh_gtk/dialogs.py:2746
+msgid "Divs"
+msgstr "Divisiones"
+
+#: thongssh_gtk/dialogs.py:2752
+msgid "All divs"
+msgstr "Todas las divisiones"
+
+#: thongssh_gtk/dialogs.py:2765
+msgid "Split the view to filter by pane"
+msgstr "Divide la vista para filtrar por panel"
+
+#: thongssh_gtk/dialogs.py:2805
+msgid "Unnamed"
+msgstr "Sin nombre"
+
+#: thongssh_gtk/dialogs.py:2813
+msgid "No open terminal sessions."
+msgstr "No hay sesiones de terminal abiertas."
+
+#: thongssh_gtk/dialogs.py:2894
+msgid "Some terminals didn't receive the command"
+msgstr "Algunas terminales no recibieron el comando"
+
+#: thongssh_gtk/host_keys.py:113
+msgid "Unknown Host Key"
+msgstr "Clave de host desconocida"
+
+#: thongssh_gtk/host_keys.py:115
+#, python-brace-format
+msgid ""
+"The authenticity of host '{host}' can't be established.\n"
+"\n"
+"{key_type} key fingerprint:\n"
+"{fingerprint}\n"
+"\n"
+"Are you sure you want to continue connecting? This will save the key to ~/.ssh/known_hosts, trusting it for future connections too."
+msgstr ""
+"No se puede establecer la autenticidad del host «{host}».\n"
+"\n"
+"Huella digital de la clave {key_type}:\n"
+"{fingerprint}\n"
+"\n"
+"¿Seguro que quieres continuar con la conexión? Esto guardará la clave en ~/.ssh/known_hosts, confiando en ella también para futuras conexiones."
+
+#: thongssh_gtk/host_keys.py:120
+msgid "Trust and Connect"
+msgstr "Confiar y conectar"
+
+#: thongssh_gtk/markdown_view.py:255
+msgid "Copied!"
+msgstr "¡Copiado!"
+
+#: thongssh_gtk/send_file.py:105
+msgid "Send File"
+msgstr "Enviar archivo"
+
+#: thongssh_gtk/send_file.py:122
+msgid "No file selected"
+msgstr "Ningún archivo seleccionado"
+
+#: thongssh_gtk/send_file.py:124
+msgid "Choose local file"
+msgstr "Elegir archivo local"
+
+#: thongssh_gtk/send_file.py:131
+msgid "Remote directory:"
+msgstr "Directorio remoto:"
+
+#: thongssh_gtk/send_file.py:137
+msgid ""
+"Detect from terminal — runs 'pwd' there. Only use this when the terminal is "
+"at a plain shell prompt, not inside an editor or other full-screen program."
+msgstr ""
+"Detectar desde la terminal — ejecuta «pwd» allí. Úsalo solo cuando la "
+"terminal esté en un simple prompt de shell, no dentro de un editor u otro "
+"programa a pantalla completa."
+
+#: thongssh_gtk/send_file.py:152
+msgid "Select File to Send"
+msgstr "Seleccionar archivo para enviar"
+
+#: thongssh_gtk/send_file.py:172
+msgid ""
+"Detecting current directory (make sure the terminal is at a shell prompt)..."
+msgstr ""
+"Detectando el directorio actual (asegúrate de que la terminal esté en un "
+"prompt de shell)..."
+
+#: thongssh_gtk/send_file.py:178
+#, python-brace-format
+msgid "Detected: {path}"
+msgstr "Detectado: {path}"
+
+#: thongssh_gtk/send_file.py:180
+msgid "Could not detect the current directory."
+msgstr "No se pudo detectar el directorio actual."
+
+#: thongssh_gtk/send_file.py:188
+msgid "Paramiko is not installed."
+msgstr "Paramiko no está instalado."
+
+#: thongssh_gtk/send_file.py:197 thongssh_gtk/send_file.py:221
+#: thongssh_gtk/send_file.py:264 thongssh_gtk/send_file.py:316
+#: thongssh_gtk/send_file.py:333
+msgid "Connecting..."
+msgstr "Conectando..."
+
+#: thongssh_gtk/send_file.py:211 thongssh_gtk/sftp_widget.py:530
+#: thongssh_gtk/window.py:3798
+msgid "Username Required"
+msgstr "Se requiere nombre de usuario"
+
+#: thongssh_gtk/send_file.py:212
+#, python-brace-format
+msgid "Enter username for {host}"
+msgstr "Introduce el nombre de usuario para {host}"
+
+#: thongssh_gtk/send_file.py:216 thongssh_gtk/send_file.py:313
+#: thongssh_gtk/send_file.py:330
+msgid "Canceled."
+msgstr "Cancelado."
+
+#: thongssh_gtk/send_file.py:238
+msgid "Username missing from host config."
+msgstr "Falta el nombre de usuario en la configuración del host."
+
+#: thongssh_gtk/send_file.py:250
+msgid "Connecting with provided password..."
+msgstr "Conectando con la contraseña proporcionada..."
+
+#: thongssh_gtk/send_file.py:254
+msgid "Connecting with SSH key..."
+msgstr "Conectando con clave SSH..."
+
+#: thongssh_gtk/send_file.py:260
+msgid "Connecting with saved password..."
+msgstr "Conectando con la contraseña guardada..."
+
+#: thongssh_gtk/send_file.py:273
+msgid "Authentication failed."
+msgstr "Error de autenticación."
+
+#: thongssh_gtk/send_file.py:283 thongssh_gtk/sftp_widget.py:586
+#: thongssh_gtk/sftp_widget.py:630 thongssh_gtk/sftp_widget.py:658
+msgid "Host key not trusted — connection canceled."
+msgstr "Clave de host no confiable — conexión cancelada."
+
+#: thongssh_gtk/send_file.py:287
+#, python-brace-format
+msgid "Connection failed: {e}"
+msgstr "Error de conexión: {e}"
+
+#: thongssh_gtk/send_file.py:294
+#, python-brace-format
+msgid "Uploading {name}..."
+msgstr "Subiendo {name}..."
+
+#: thongssh_gtk/send_file.py:299
+#, python-brace-format
+msgid "Upload failed: {e}"
+msgstr "Error al subir: {e}"
+
+#: thongssh_gtk/send_file.py:307 thongssh_gtk/sftp_widget.py:615
+msgid "SSH Key Passphrase"
+msgstr "Frase de contraseña de la clave SSH"
+
+#: thongssh_gtk/send_file.py:308 thongssh_gtk/sftp_widget.py:616
+#, python-brace-format
+msgid "Enter passphrase for key '{key}'"
+msgstr "Introduce la frase de contraseña de la clave «{key}»"
+
+#: thongssh_gtk/send_file.py:324 thongssh_gtk/sftp_widget.py:668
+msgid "Password Required"
+msgstr "Se requiere contraseña"
+
+#: thongssh_gtk/send_file.py:325
+#, python-brace-format
+msgid "Enter password for {host}"
+msgstr "Introduce la contraseña para {host}"
+
+#: thongssh_gtk/send_file.py:339
+#, python-brace-format
+msgid "Sent to {path}"
+msgstr "Enviado a {path}"
+
+#: thongssh_gtk/settings_sync.py:158
+msgid "Sync file is unreadable/corrupted JSON."
+msgstr "El archivo de sincronización es JSON ilegible/corrupto."
+
+#: thongssh_gtk/settings_sync.py:162
+msgid ""
+"Sync file failed its integrity check (hash mismatch) — skipping this pass."
+msgstr ""
+"El archivo de sincronización no superó la comprobación de integridad (el "
+"hash no coincide) — se omite esta pasada."
+
+#: thongssh_gtk/settings_sync.py:424
+msgid "No sync folder configured."
+msgstr "No hay ninguna carpeta de sincronización configurada."
+
+#: thongssh_gtk/settings_sync.py:442
+#, python-brace-format
+msgid ""
+"Sync folder is missing ({folder}) even though this machine has synced before"
+" — it's most likely not mounted right now (e.g. a cloud-drive folder), not "
+"something deleted on purpose. Skipping this pass instead of treating that as"
+" \"everything was deleted\"."
+msgstr ""
+"Falta la carpeta de sincronización ({folder}) aunque este equipo ya se "
+"sincronizó antes — lo más probable es que ahora mismo no esté montada (p. "
+"ej. una carpeta de un servicio en la nube), no que se haya borrado a "
+"propósito. Se omite esta pasada en lugar de tratarlo como si «se hubiera "
+"borrado todo»."
+
+#: thongssh_gtk/settings_sync.py:453
+#, python-brace-format
+msgid "Can't access sync folder: {error}"
+msgstr "No se puede acceder a la carpeta de sincronización: {error}"
+
+#: thongssh_gtk/settings_sync.py:474
+msgid ""
+"The sync folder has no sync file yet, but this machine has synced before — "
+"it's most likely not mounted/accessible right now. Skipping this pass "
+"instead of treating that as \"everything was deleted\"."
+msgstr ""
+"La carpeta de sincronización todavía no tiene archivo de sincronización, "
+"pero este equipo ya se sincronizó antes — lo más probable es que ahora mismo"
+" no esté montada/accesible. Se omite esta pasada en lugar de tratarlo como "
+"si «se hubiera borrado todo»."
+
+#: thongssh_gtk/sftp_widget.py:122
+msgid "Upload selected to remote"
+msgstr "Subir selección al remoto"
+
+#: thongssh_gtk/sftp_widget.py:124
+msgid "Download selected to local"
+msgstr "Descargar selección al local"
+
+#: thongssh_gtk/sftp_widget.py:184
+msgid "Reconnecting..."
+msgstr "Reconectando..."
+
+#: thongssh_gtk/sftp_widget.py:215
+msgid "Connection lost. Attempting to reconnect..."
+msgstr "Conexión perdida. Intentando reconectar..."
+
+#: thongssh_gtk/sftp_widget.py:223
+msgid "Local"
+msgstr "Local"
+
+#: thongssh_gtk/sftp_widget.py:233 thongssh_gtk/sftp_widget.py:328
+msgid "Refresh"
+msgstr "Actualizar"
+
+#: thongssh_gtk/sftp_widget.py:258 thongssh_gtk/sftp_widget.py:360
+msgid "Date Modified"
+msgstr "Fecha de modificación"
+
+#: thongssh_gtk/sftp_widget.py:259 thongssh_gtk/sftp_widget.py:360
+msgid "Permissions"
+msgstr "Permisos"
+
+#: thongssh_gtk/sftp_widget.py:318
+#, python-brace-format
+msgid "Remote: {host}"
+msgstr "Remoto: {host}"
+
+#: thongssh_gtk/sftp_widget.py:448
+msgid "Error: SFTP client not connected."
+msgstr "Error: el cliente SFTP no está conectado."
+
+#: thongssh_gtk/sftp_widget.py:457
+msgid "Directory listing skipped: another SFTP operation is still running."
+msgstr ""
+"Se omitió el listado del directorio: todavía hay otra operación SFTP en "
+"curso."
+
+#: thongssh_gtk/sftp_widget.py:460
+#, python-brace-format
+msgid "Reading remote directory: {path}..."
+msgstr "Leyendo directorio remoto: {path}..."
+
+#: thongssh_gtk/sftp_widget.py:509
+#, python-brace-format
+msgid "Successfully listed remote directory: {path}"
+msgstr "Directorio remoto listado correctamente: {path}"
+
+#: thongssh_gtk/sftp_widget.py:512
+#, python-brace-format
+msgid "Error reading remote directory '{path}': {e}"
+msgstr "Error al leer el directorio remoto «{path}»: {e}"
+
+#: thongssh_gtk/sftp_widget.py:519
+msgid "SFTP is disabled. Please install 'paramiko'."
+msgstr "SFTP está desactivado. Instala «paramiko»."
+
+#: thongssh_gtk/sftp_widget.py:524
+msgid "Error: host is not set in the config."
+msgstr "Error: el host no está definido en la configuración."
+
+#: thongssh_gtk/sftp_widget.py:531 thongssh_gtk/window.py:3799
+#, python-brace-format
+msgid "Enter username for {host_str}"
+msgstr "Introduce el nombre de usuario para {host_str}"
+
+#: thongssh_gtk/sftp_widget.py:540
+msgid "SFTP connection canceled (no username provided)."
+msgstr "Conexión SFTP cancelada (no se proporcionó nombre de usuario)."
+
+#: thongssh_gtk/sftp_widget.py:543
+#, python-brace-format
+msgid "Connecting to {name}..."
+msgstr "Conectando a {name}..."
+
+#: thongssh_gtk/sftp_widget.py:559
+msgid "Authentication failed: Username is missing."
+msgstr "Error de autenticación: falta el nombre de usuario."
+
+#: thongssh_gtk/sftp_widget.py:567
+msgid "Attempting connection with provided password..."
+msgstr "Intentando conectar con la contraseña proporcionada..."
+
+#: thongssh_gtk/sftp_widget.py:572
+msgid "SFTP connection established successfully with provided password."
+msgstr ""
+"Conexión SFTP establecida correctamente con la contraseña proporcionada."
+
+#: thongssh_gtk/sftp_widget.py:590
+#, python-brace-format
+msgid "Provided password authentication failed: {e}"
+msgstr "Falló la autenticación con la contraseña proporcionada: {e}"
+
+#: thongssh_gtk/sftp_widget.py:595
+msgid "Attempting connection with SSH key..."
+msgstr "Intentando conectar con clave SSH..."
+
+#: thongssh_gtk/sftp_widget.py:607
+msgid "SFTP connection established successfully with key."
+msgstr "Conexión SFTP establecida correctamente con la clave."
+
+#: thongssh_gtk/sftp_widget.py:611
+msgid "SSH key is encrypted. Please enter the passphrase."
+msgstr "La clave SSH está cifrada. Introduce la frase de contraseña."
+
+#: thongssh_gtk/sftp_widget.py:623
+msgid "Key authentication failed. Falling back to password..."
+msgstr "Falló la autenticación con la clave. Recurriendo a la contraseña..."
+
+#: thongssh_gtk/sftp_widget.py:634
+#, python-brace-format
+msgid "SFTP connection failed with key: {e}"
+msgstr "Falló la conexión SFTP con la clave: {e}"
+
+#: thongssh_gtk/sftp_widget.py:641
+msgid "Attempting connection with saved password..."
+msgstr "Intentando conectar con la contraseña guardada..."
+
+#: thongssh_gtk/sftp_widget.py:650
+msgid "SFTP connection established successfully with password."
+msgstr "Conexión SFTP establecida correctamente con la contraseña."
+
+#: thongssh_gtk/sftp_widget.py:661
+#, python-brace-format
+msgid "Saved password authentication failed: {e}"
+msgstr "Falló la autenticación con la contraseña guardada: {e}"
+
+#: thongssh_gtk/sftp_widget.py:664
+msgid "No key or saved password. Please enter password."
+msgstr "No hay clave ni contraseña guardada. Introduce una contraseña."
+
+#: thongssh_gtk/sftp_widget.py:669
+#, python-brace-format
+msgid "Enter password for {user}@{host}"
+msgstr "Introduce la contraseña para {user}@{host}"
+
+#: thongssh_gtk/sftp_widget.py:676
+msgid "Connection canceled."
+msgstr "Conexión cancelada."
+
+#: thongssh_gtk/sftp_widget.py:690
+msgid "Authentication failed. Please check credentials and connection."
+msgstr "Error de autenticación. Comprueba las credenciales y la conexión."
+
+#: thongssh_gtk/sftp_widget.py:698
+msgid "No local files selected for upload."
+msgstr "No hay archivos locales seleccionados para subir."
+
+#: thongssh_gtk/sftp_widget.py:728
+#, python-brace-format
+msgid "Upload complete: {basename} ({size} in {time:.1f}s, {speed}/s)"
+msgstr "Subida completa: {basename} ({size} en {time:.1f}s, {speed}/s)"
+
+#: thongssh_gtk/sftp_widget.py:736 thongssh_gtk/sftp_widget.py:760
+#, python-brace-format
+msgid "Upload failed for {basename}: {e}"
+msgstr "Falló la subida de {basename}: {e}"
+
+#: thongssh_gtk/sftp_widget.py:741
+#, python-brace-format
+msgid "Uploading directory {local} to {remote}..."
+msgstr "Subiendo directorio {local} a {remote}..."
+
+#: thongssh_gtk/sftp_widget.py:755
+#, python-brace-format
+msgid "Directory upload successful: {basename}"
+msgstr "Directorio subido correctamente: {basename}"
+
+#: thongssh_gtk/sftp_widget.py:767
+msgid "No remote files selected for download."
+msgstr "No hay archivos remotos seleccionados para descargar."
+
+#: thongssh_gtk/sftp_widget.py:796
+#, python-brace-format
+msgid "Skipping circular symlink: {path}"
+msgstr "Omitiendo enlace simbólico circular: {path}"
+
+#: thongssh_gtk/sftp_widget.py:804
+#, python-brace-format
+msgid "Warning: File already exists: {path}. Will skip."
+msgstr "Aviso: el archivo ya existe: {path}. Se omitirá."
+
+#: thongssh_gtk/sftp_widget.py:819
+#, python-brace-format
+msgid "Download complete: {basename} ({size} in {time:.1f}s, {speed}/s)"
+msgstr "Descarga completa: {basename} ({size} en {time:.1f}s, {speed}/s)"
+
+#: thongssh_gtk/sftp_widget.py:827 thongssh_gtk/sftp_widget.py:868
+#, python-brace-format
+msgid "Download failed for {basename}: {e}"
+msgstr "Falló la descarga de {basename}: {e}"
+
+#: thongssh_gtk/sftp_widget.py:837
+#, python-brace-format
+msgid "Downloading directory {remote} to {local}..."
+msgstr "Descargando directorio {remote} a {local}..."
+
+#: thongssh_gtk/sftp_widget.py:842
+#, python-brace-format
+msgid "Cannot list directory {path}: {e}"
+msgstr "No se puede listar el directorio {path}: {e}"
+
+#: thongssh_gtk/sftp_widget.py:853
+#, python-brace-format
+msgid "Skipping broken symlink: {path}"
+msgstr "Omitiendo enlace simbólico roto: {path}"
+
+#: thongssh_gtk/sftp_widget.py:863
+#, python-brace-format
+msgid "Directory download successful: {basename}"
+msgstr "Directorio descargado correctamente: {basename}"
+
+#: thongssh_gtk/sftp_widget.py:927
+#, python-brace-format
+msgid "Failed to open local file {path}: {e}"
+msgstr "No se pudo abrir el archivo local {path}: {e}"
+
+#: thongssh_gtk/sftp_widget.py:946
+#, python-brace-format
+msgid "Opening remote file for editing: {path}"
+msgstr "Abriendo archivo remoto para editar: {path}"
+
+#: thongssh_gtk/sftp_widget.py:959
+#, python-brace-format
+msgid "Downloading {basename} to temporary location..."
+msgstr "Descargando {basename} a una ubicación temporal..."
+
+#: thongssh_gtk/sftp_widget.py:976
+#, python-brace-format
+msgid "Now monitoring {basename} for changes."
+msgstr "Ahora se vigilan los cambios en {basename}."
+
+#: thongssh_gtk/sftp_widget.py:979
+#, python-brace-format
+msgid "Failed to open or monitor temporary file: {e}"
+msgstr "No se pudo abrir o vigilar el archivo temporal: {e}"
+
+#: thongssh_gtk/sftp_widget.py:984
+#, python-brace-format
+msgid "Failed to download file for editing: {e}"
+msgstr "No se pudo descargar el archivo para editar: {e}"
+
+#: thongssh_gtk/sftp_widget.py:990
+#, python-brace-format
+msgid "Detected changes in {basename}. Uploading back to server..."
+msgstr "Se detectaron cambios en {basename}. Subiendo de nuevo al servidor..."
+
+#: thongssh_gtk/sftp_widget.py:1119
+msgid "Transfer"
+msgstr "Transferir"
+
+#: thongssh_gtk/sftp_widget.py:1120 thongssh_gtk/window.py:2661
+msgid "Rename..."
+msgstr "Cambiar nombre..."
+
+#: thongssh_gtk/sftp_widget.py:1121
+msgid "Change Permissions..."
+msgstr "Cambiar permisos..."
+
+#: thongssh_gtk/sftp_widget.py:1122 thongssh_gtk/sftp_widget.py:1275
+#: thongssh_gtk/window.py:2464 thongssh_gtk/window.py:2655
+#: thongssh_gtk/window.py:2662 thongssh_gtk/window.py:2686
+#: thongssh_gtk/window.py:3615
+msgid "Delete"
+msgstr "Eliminar"
+
+#: thongssh_gtk/sftp_widget.py:1125
+msgid "New Folder..."
+msgstr "Carpeta nueva..."
+
+#: thongssh_gtk/sftp_widget.py:1181
+msgid "Rename"
+msgstr "Cambiar nombre"
+
+#: thongssh_gtk/sftp_widget.py:1181 thongssh_gtk/window.py:3563
+#, python-brace-format
+msgid "New name for '{old_name}':"
+msgstr "Nuevo nombre para «{old_name}»:"
+
+#: thongssh_gtk/sftp_widget.py:1200
+#, python-brace-format
+msgid "Renamed '{old}' to '{new}'"
+msgstr "Se cambió el nombre de «{old}» a «{new}»"
+
+#: thongssh_gtk/sftp_widget.py:1202
+#, python-brace-format
+msgid "Rename failed: {e}"
+msgstr "Error al cambiar el nombre: {e}"
+
+#: thongssh_gtk/sftp_widget.py:1214
+msgid "Cannot create folder: no current directory."
+msgstr "No se puede crear la carpeta: no hay directorio actual."
+
+#: thongssh_gtk/sftp_widget.py:1217
+msgid "New Folder"
+msgstr "Carpeta nueva"
+
+#: thongssh_gtk/sftp_widget.py:1217
+msgid "Folder name:"
+msgstr "Nombre de la carpeta:"
+
+#: thongssh_gtk/sftp_widget.py:1235
+#, python-brace-format
+msgid "Created directory: {path}"
+msgstr "Directorio creado: {path}"
+
+#: thongssh_gtk/sftp_widget.py:1237
+#, python-brace-format
+msgid "Failed to create directory '{name}': {e}"
+msgstr "No se pudo crear el directorio «{name}»: {e}"
+
+#: thongssh_gtk/sftp_widget.py:1264
+#, python-brace-format
+msgid "Delete '{name}'?"
+msgstr "¿Eliminar «{name}»?"
+
+#: thongssh_gtk/sftp_widget.py:1265 thongssh_gtk/window.py:3602
+msgid "This action cannot be undone."
+msgstr "Esta acción no se puede deshacer."
+
+#: thongssh_gtk/sftp_widget.py:1268
+#, python-brace-format
+msgid "Delete non-empty directory '{name}'?"
+msgstr "¿Eliminar el directorio no vacío «{name}»?"
+
+#: thongssh_gtk/sftp_widget.py:1269
+msgid ""
+"This will recursively delete all its contents.\n"
+"This action cannot be undone."
+msgstr ""
+"Esto eliminará recursivamente todo su contenido.\n"
+"Esta acción no se puede deshacer."
+
+#: thongssh_gtk/sftp_widget.py:1302
+#, python-brace-format
+msgid "Deleted: {path}"
+msgstr "Eliminado: {path}"
+
+#: thongssh_gtk/sftp_widget.py:1304
+#, python-brace-format
+msgid "Delete failed: {e}"
+msgstr "Error al eliminar: {e}"
+
+#: thongssh_gtk/sftp_widget.py:1321
+#, python-brace-format
+msgid "Recursively deleted remote directory: {path}"
+msgstr "Directorio remoto eliminado recursivamente: {path}"
+
+#: thongssh_gtk/sftp_widget.py:1363
+msgid "Multi-file drag not yet supported. Please drag one file at a time."
+msgstr ""
+"Todavía no se admite arrastrar varios archivos. Arrastra un archivo a la "
+"vez."
+
+#: thongssh_gtk/sftp_widget.py:1427
+msgid "Cannot drop on the same panel"
+msgstr "No se puede soltar en el mismo panel"
+
+#: thongssh_gtk/sftp_widget.py:1434
+#, python-brace-format
+msgid "Drag and drop: uploading {path}..."
+msgstr "Arrastrar y soltar: subiendo {path}..."
+
+#: thongssh_gtk/sftp_widget.py:1441
+#, python-brace-format
+msgid "Drag and drop: downloading {path}..."
+msgstr "Arrastrar y soltar: descargando {path}..."
+
+#: thongssh_gtk/sftp_widget.py:1487
+#, python-brace-format
+msgid "Permissions changed for {path} to {mode}"
+msgstr "Permisos de {path} cambiados a {mode}"
+
+#: thongssh_gtk/sftp_widget.py:1489
+#, python-brace-format
+msgid "Failed to change permissions for {path}: {e}"
+msgstr "No se pudieron cambiar los permisos de {path}: {e}"
+
+#: thongssh_gtk/widgets.py:68
+msgid "Press a key combination…"
+msgstr "Pulsa una combinación de teclas…"
+
+#: thongssh_gtk/widgets.py:103
+msgid "(none)"
+msgstr "(ninguno)"
+
+#: thongssh_gtk/window.py:121
+msgid "AI Chat"
+msgstr "Chat de IA"
+
+#: thongssh_gtk/window.py:140
+msgid "Sync now"
+msgstr "Sincronizar ahora"
+
+#: thongssh_gtk/window.py:149
+msgid "Reset Sync State (Start Fresh)…"
+msgstr "Restablecer estado de sincronización (empezar de cero)…"
+
+#: thongssh_gtk/window.py:156
+msgid "Toggle Sidebar"
+msgstr "Mostrar/ocultar panel lateral"
+
+#: thongssh_gtk/window.py:182
+msgid "Toggle terminal watermark"
+msgstr "Mostrar/ocultar marca de agua de la terminal"
+
+#: thongssh_gtk/window.py:202
+msgid "Toggle Quickies panel"
+msgstr "Mostrar/ocultar panel de rapiditos"
+
+#: thongssh_gtk/window.py:219
+msgid "Split view left/right"
+msgstr "Dividir vista izquierda/derecha"
+
+#: thongssh_gtk/window.py:224
+msgid "Split view top/bottom"
+msgstr "Dividir vista arriba/abajo"
+
+#: thongssh_gtk/window.py:229
+msgid "Split view into 4"
+msgstr "Dividir vista en 4"
+
+#: thongssh_gtk/window.py:335
+msgid "Search"
+msgstr "Buscar"
+
+#: thongssh_gtk/window.py:468
+msgid "Add Host"
+msgstr "Añadir host"
+
+#: thongssh_gtk/window.py:473
+msgid "Create Group"
+msgstr "Crear grupo"
+
+#: thongssh_gtk/window.py:478
+msgid "Remove Selected"
+msgstr "Quitar selección"
+
+#: thongssh_gtk/window.py:907
+msgid "Local Terminal"
+msgstr "Terminal local"
+
+#: thongssh_gtk/window.py:1057
+msgid "New local terminal"
+msgstr "Terminal local nueva"
+
+#: thongssh_gtk/window.py:1237
+msgid "Left"
+msgstr "Izquierda"
+
+#: thongssh_gtk/window.py:1237
+msgid "Right"
+msgstr "Derecha"
+
+#: thongssh_gtk/window.py:1242
+msgid "Top-Left"
+msgstr "Superior izquierda"
+
+#: thongssh_gtk/window.py:1242
+msgid "Top-Right"
+msgstr "Superior derecha"
+
+#: thongssh_gtk/window.py:1243
+msgid "Bottom-Left"
+msgstr "Inferior izquierda"
+
+#: thongssh_gtk/window.py:1243
+msgid "Bottom-Right"
+msgstr "Inferior derecha"
+
+#: thongssh_gtk/window.py:1441
+msgid "Reset Sync State?"
+msgstr "¿Restablecer el estado de sincronización?"
+
+#: thongssh_gtk/window.py:1443
+msgid ""
+"The next sync will treat THIS machine's local hosts/settings/quickies as authoritative and push them into the current sync folder, instead of merging based on history.\n"
+"\n"
+"Only do this after pointing Sync at a new or empty folder you want to seed — not because a normal sync failed."
+msgstr ""
+"La próxima sincronización tratará los hosts/ajustes/rapiditos locales de ESTE equipo como autoritativos y los subirá a la carpeta de sincronización actual, en lugar de fusionarlos según el historial.\n"
+"\n"
+"Haz esto solo tras apuntar la sincronización a una carpeta nueva o vacía que quieras inicializar — no porque haya fallado una sincronización normal."
+
+#: thongssh_gtk/window.py:1450
+msgid "Reset and Sync Now"
+msgstr "Restablecer y sincronizar ahora"
+
+#: thongssh_gtk/window.py:1486
+#, python-brace-format
+msgid "Sync now (last: {time})"
+msgstr "Sincronizar ahora (última: {time})"
+
+#: thongssh_gtk/window.py:1488
+#, python-brace-format
+msgid "Sync failed: {error}"
+msgstr "Falló la sincronización: {error}"
+
+#: thongssh_gtk/window.py:1775
+msgid "Quickies search"
+msgstr "Buscar rapiditos"
+
+#: thongssh_gtk/window.py:1866
+msgid "Edit"
+msgstr "Editar"
+
+#: thongssh_gtk/window.py:1873
+msgid "Send and Run"
+msgstr "Enviar y ejecutar"
+
+#: thongssh_gtk/window.py:2451
+msgid "Quit"
+msgstr "Salir"
+
+#: thongssh_gtk/window.py:2461
+msgid "Add Host..."
+msgstr "Añadir host..."
+
+#: thongssh_gtk/window.py:2462
+msgid "Create Group..."
+msgstr "Crear grupo..."
+
+#: thongssh_gtk/window.py:2463
+msgid "Edit/Rename"
+msgstr "Editar/Cambiar nombre"
+
+#: thongssh_gtk/window.py:2474
+msgid "About"
+msgstr "Acerca de"
+
+#: thongssh_gtk/window.py:2650
+msgid "Connect"
+msgstr "Conectar"
+
+#: thongssh_gtk/window.py:2651 thongssh_gtk/window.py:2682
+msgid "Edit..."
+msgstr "Editar..."
+
+#: thongssh_gtk/window.py:2652
+msgid "Clone"
+msgstr "Clonar"
+
+#: thongssh_gtk/window.py:2653 thongssh_gtk/window.py:2675
+msgid "Connect SFTP"
+msgstr "Conectar SFTP"
+
+#: thongssh_gtk/window.py:2654 thongssh_gtk/window.py:2677
+msgid "Copy to Clipboard"
+msgstr "Copiar al portapapeles"
+
+#: thongssh_gtk/window.py:2667
+msgid "Send File..."
+msgstr "Enviar archivo..."
+
+#: thongssh_gtk/window.py:2668
+msgid "Find... (Ctrl+Shift+F)"
+msgstr "Buscar... (Ctrl+Mayús+F)"
+
+#: thongssh_gtk/window.py:2669
+msgid "Save log"
+msgstr "Guardar registro"
+
+#: thongssh_gtk/window.py:2672
+msgid "Disconnect"
+msgstr "Desconectar"
+
+#: thongssh_gtk/window.py:2673
+msgid "Reconnect"
+msgstr "Reconectar"
+
+#: thongssh_gtk/window.py:2674
+msgid "Duplicate"
+msgstr "Duplicar"
+
+#: thongssh_gtk/window.py:2676
+msgid "Connect SSH"
+msgstr "Conectar SSH"
+
+#: thongssh_gtk/window.py:2680
+msgid "Insert into Terminal"
+msgstr "Insertar en la terminal"
+
+#: thongssh_gtk/window.py:2683
+msgid "Send to Batch Command"
+msgstr "Enviar a comando por lotes"
+
+#: thongssh_gtk/window.py:2684
+msgid "Move Up"
+msgstr "Subir"
+
+#: thongssh_gtk/window.py:2685
+msgid "Move Down"
+msgstr "Bajar"
+
+#: thongssh_gtk/window.py:2923
+msgid "Previous match"
+msgstr "Coincidencia anterior"
+
+#: thongssh_gtk/window.py:2925
+msgid "Next match"
+msgstr "Coincidencia siguiente"
+
+#: thongssh_gtk/window.py:2928
+msgid "Close"
+msgstr "Cerrar"
+
+#: thongssh_gtk/window.py:2936
+msgid "Case sensitive"
+msgstr "Distinguir mayúsculas/minúsculas"
+
+#: thongssh_gtk/window.py:2937
+msgid "Regular expression"
+msgstr "Expresión regular"
+
+#: thongssh_gtk/window.py:2939
+msgid "Wrap around"
+msgstr "Volver al principio"
+
+#: thongssh_gtk/window.py:3037
+msgid "Invalid pattern"
+msgstr "Patrón no válido"
+
+#: thongssh_gtk/window.py:3052 thongssh_gtk/window.py:3059
+#: thongssh_gtk/window.py:3066
+msgid "Not found"
+msgstr "No encontrado"
+
+#: thongssh_gtk/window.py:3389
+msgid "SSH client with a tree-like host structure"
+msgstr "Cliente SSH con una estructura de hosts en árbol"
+
+#: thongssh_gtk/window.py:3563
+msgid "Rename Group"
+msgstr "Cambiar nombre del grupo"
+
+#: thongssh_gtk/window.py:3601
+#, python-brace-format
+msgid "Delete {node_type} '{name}'?"
+msgstr "¿Eliminar {node_type} «{name}»?"
+
+#: thongssh_gtk/window.py:3606
+#, python-brace-format
+msgid "Delete group '{name}' and ALL its contents?"
+msgstr "¿Eliminar el grupo «{name}» y TODO su contenido?"
+
+#: thongssh_gtk/window.py:3607
+msgid ""
+"All hosts and subgroups inside will be recursively deleted.\n"
+"This action cannot be undone."
+msgstr ""
+"Se eliminarán recursivamente todos los hosts y subgrupos que contiene.\n"
+"Esta acción no se puede deshacer."
+
+#: thongssh_gtk/window.py:3699
+msgid "Server name"
+msgstr "Nombre del servidor"
+
+#: thongssh_gtk/window.py:3701
+msgid "user@hostname"
+msgstr "usuario@hostname"
+
+#: thongssh_gtk/window.py:4131
+msgid "VTE Spawn Error"
+msgstr "Error de inicio de VTE"
+
+#: thongssh_gtk/window.py:4132
+#, python-brace-format
+msgid ""
+"Failed to start the terminal. Check the command and permissions.\n"
+"\n"
+"Command: {cmd_str}"
+msgstr ""
+"No se pudo iniciar la terminal. Comprueba el comando y los permisos.\n"
+"\n"
+"Comando: {cmd_str}"
+
+#: thongssh_gtk/window.py:4237
+msgid "SSH Launch Error"
+msgstr "Error al iniciar SSH"
+
+#: thongssh_gtk/window.py:4238
+#, python-brace-format
+msgid ""
+"Failed to start the process. Make sure /usr/bin/ssh exists.\n"
+"\n"
+"Error: {error}"
+msgstr ""
+"No se pudo iniciar el proceso. Comprueba que /usr/bin/ssh existe.\n"
+"\n"
+"Error: {error}"
+
+#: thongssh_gtk/window.py:4540
+#, python-brace-format
+msgid ""
+"\n"
+"\n"
+"--- Session finished with exit code: {status} ---"
+msgstr ""
+"\n"
+"\n"
+"--- Sesión finalizada con código de salida: {status} ---"

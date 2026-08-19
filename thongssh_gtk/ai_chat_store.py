@@ -21,7 +21,7 @@ import uuid
 
 from .paths import CACHE_DIR
 
-_ = lambda s: s
+from .i18n import _
 
 CHATS_DIR = CACHE_DIR / "ai_chats"
 

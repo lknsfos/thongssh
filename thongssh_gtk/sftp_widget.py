@@ -31,8 +31,7 @@ try:
 except ImportError:
     logging.warning("SFTP functionality is disabled. Please install 'paramiko' (`pip install paramiko`).")
 
-# Placeholder for future internationalization (i18n)
-_ = lambda s: s
+from .i18n import _
 
 # --- Constants for the local file list store ---
 (

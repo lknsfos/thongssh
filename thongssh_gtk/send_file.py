@@ -23,8 +23,7 @@ try:
 except ImportError:
     logging.warning("Send File is disabled. Please install 'paramiko' (`pip install paramiko`).")
 
-# Placeholder for future internationalization (i18n)
-_ = lambda s: s
+from .i18n import _
 
 
 def guess_remote_cwd(terminal):

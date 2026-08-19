@@ -30,7 +30,7 @@ from gi.repository import Gtk, Adw, GLib
 
 from .dialogs import MessageDialog
 
-_ = lambda s: s
+from .i18n import _
 
 IS_PARAMIKO_AVAILABLE = False
 try:

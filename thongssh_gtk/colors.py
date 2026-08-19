@@ -6,8 +6,7 @@ import logging
 
 from .paths import CONFIG_DIR
 
-# Placeholder for future internationalization (i18n)
-_ = lambda s: s
+from .i18n import _
 
 # Saved separately from settings.json (not inline) so it can hold a full
 # 16-color palette + background/foreground without bloating/coupling to

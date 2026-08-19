@@ -11,8 +11,7 @@ from .markdown_view import render_markdown_into_box
 from .provider_badges import icon_name_for, badge_family, badge_text
 from .ai_chat_store import new_chat_id, save_chat, load_chat, delete_chat, list_chats, search_chats
 
-# Placeholder for future internationalization (i18n)
-_ = lambda s: s
+from .i18n import _
 
 
 class AiPanel(Gtk.Box):

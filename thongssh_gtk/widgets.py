@@ -15,7 +15,7 @@ from gi.repository import Gtk, Adw, Gdk, GObject
 
 from .constants import WATERMARK_POSITIONS
 
-_ = lambda s: s
+from .i18n import _
 
 # Ignored on their own while listening for a new shortcut — a bare modifier
 # press isn't a combination yet, just wait for the actual key that goes

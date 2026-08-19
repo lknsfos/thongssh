@@ -25,6 +25,7 @@ from gi.repository import Adw, Gio, Gtk, GdkPixbuf
 from .window import ThongSSHWindow # Keep relative import
 from .constants import APP_ID, resource_path # Import our new function
 from .settings import SettingsManager
+from . import i18n
 
 # --- Application Class ---
 class ThongSSHApp(Adw.Application):
@@ -38,6 +39,12 @@ class ThongSSHApp(Adw.Application):
             logging.debug("Resources already registered, skipping.")
         self._apply_native_font()
         self.apply_macos_dock_icon()
+        # Forced Arabic/Hebrew doesn't also flip GTK's own default text
+        # direction for free — that's driven by the process locale, which
+        # picking a translation via gettext (see i18n.py) doesn't change.
+        # Must run before ThongSSHWindow is constructed, so every widget
+        # in it is built with the right direction from the start.
+        i18n.apply_language_direction()
         self.connect('activate', self.on_activate)
 
     def apply_macos_dock_icon(self):

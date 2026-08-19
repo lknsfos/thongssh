@@ -43,7 +43,7 @@ from . import config as hosts_config
 from . import colors as colors_module
 from .paths import CONFIG_DIR
 
-_ = lambda s: s
+from .i18n import _
 
 SYNC_FILE_NAME = "thongssh_sync.json"
 SYNC_STATE_FILE = CONFIG_DIR / "sync_state.json"

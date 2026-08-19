@@ -35,8 +35,7 @@ from .widgets import PositionGrid, set_split_button_active_style
 from . import settings_sync
 import threading
 
-# Placeholder for future internationalization (i18n)
-_ = lambda s: s
+from .i18n import _
 
 # Window size/maximized state cache. Deliberately separate from
 # settings.json (SettingsManager) — it's regenerated on every close and

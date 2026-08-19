@@ -34,7 +34,7 @@ from gi.repository import GLib
 
 from .constants import CLI_STANDARD_PROVIDERS
 
-_ = lambda s: s
+from .i18n import _
 
 DEFAULT_TIMEOUT = 120
 

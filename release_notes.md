@@ -1,5 +1,19 @@
 # Release Notes
 
+### 🌍 What's New in 0.9.3
+
+ThongSSH now speaks 13 languages, and a handful of Quickies-panel rough edges got sanded down:
+
+* **Real internationalization, not a stub** — a standard GNU gettext setup (the same one every Linux/Unix desktop app uses), following the system language by default. Settings → General → Language lets you force a specific one instead ("Takes effect the next time ThongSSH starts"): English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Hebrew, Arabic, Simplified Chinese, Traditional Chinese, and Japanese, all professionally translated (feature names like "Quickies" translated by meaning, not word-for-word — e.g. "Шпаргалки" in Russian, "Rapidini" in Italian, "サクコマ" in Japanese). Arabic and Hebrew also correctly flip the whole UI to right-to-left.
+* **Fixed focus not returning to the terminal after using a Quicky's Run button** — you had to click back into the terminal by hand to keep typing; Run (and Send, and double-click, and the right-click menu) all hand focus back to the terminal now.
+* **New: configurable keyboard shortcuts for the first 10 Quickies** — Settings → Shortcuts gained a compact 2×10 grid, Paste and Run side by side. Defaults are Ctrl+1–9/0 to paste a Quicky and Ctrl+Shift+1–9/0 to send-and-run it (slot 10 = the 0 key); any of them can be rebound or cleared like the other shortcuts.
+* **New: a "Clear shortcut" button** next to every keyboard shortcut in Settings — previously the only way to remove one was to rebind it to something else.
+* **New: reorder your Quickies** — drag rows in Settings' Quickies editor (or use "Move Up"/"Move Down" from the panel's right-click menu) to change their order; both surfaces now show each Quicky's position number, since that position is what determines which hotkey (1–10) triggers it.
+* **Quickies panel decluttered** — removed the redundant "Quickies" title row; the "+" (add) button now lives in the search row instead, which itself carries a "Quickies search" placeholder so it doesn't read as the host search box.
+* **Added a clear divider between the host list and the Quickies panel** — a thin line-gap-line separator, so the add/remove host buttons no longer look like they belong to Quickies (or vice versa, depending on which panel is on top).
+* **Fixed a missing bottom margin on the Quickies search box** when Quickies' search row is positioned at the bottom of the panel — it was sitting flush against the panel's edge instead of matching the spacing every other search box gets.
+* **About → Legal's copyright year is dynamic now** instead of hardcoded — it'll say the right year on its own from here on.
+
 ### 🆕 What's New in 0.9.2
 
 A real AppImage crash fixed, a quicker way to spin up a local terminal, and the project is now officially MIT-licensed:

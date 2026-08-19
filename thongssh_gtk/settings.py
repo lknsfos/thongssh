@@ -8,8 +8,7 @@ import shutil
 from .colors import COLOR_SCHEMES
 from .paths import CONFIG_DIR
 
-# Placeholder for future internationalization (i18n)
-_ = lambda s: s
+from .i18n import _
 
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
 
@@ -32,6 +31,7 @@ DEFAULT_SETTINGS = {
     "terminal.reconnect_prompt_username": False, # Only relevant when the above is off — ask again instead of reusing the last username when reconnecting to a disconnected tab
     "terminal.inherit_cwd_for_new_local_tab": True, # Whether the "+" new-local-terminal button starts in the current tab's working directory instead of always $HOME
     "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
+    "interface.language": "system", # "system" (follow the OS/locale, the normal gettext default) or a code from i18n.LANGUAGES — takes effect on next launch, see i18n.py
     "interface.tree_row_striping": False,
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default
     "interface.host_search_position": "bottom", # "top" or "bottom" — where the host-tree search bar sits
