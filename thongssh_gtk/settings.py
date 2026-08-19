@@ -46,6 +46,31 @@ DEFAULT_SETTINGS = {
     "shortcuts.find_in_terminal": "<Control><Shift>f",
     "shortcuts.copy": "<Control><Shift>c",
     "shortcuts.paste": "<Control><Shift>v",
+    # Quick-access bindings for the first 10 Quickies, by position (see the
+    # Quickies panel) — "paste" inserts the snippet without running it
+    # (same as the panel's own Send ▶ button), "run" inserts and executes
+    # immediately (same as Send and Run ⏩). Slot 10 uses the "0" key, same
+    # convention as most terminal emulators' Alt+0-9 tab switching.
+    "shortcuts.quicky_paste_1": "<Control>1",
+    "shortcuts.quicky_paste_2": "<Control>2",
+    "shortcuts.quicky_paste_3": "<Control>3",
+    "shortcuts.quicky_paste_4": "<Control>4",
+    "shortcuts.quicky_paste_5": "<Control>5",
+    "shortcuts.quicky_paste_6": "<Control>6",
+    "shortcuts.quicky_paste_7": "<Control>7",
+    "shortcuts.quicky_paste_8": "<Control>8",
+    "shortcuts.quicky_paste_9": "<Control>9",
+    "shortcuts.quicky_paste_10": "<Control>0",
+    "shortcuts.quicky_run_1": "<Control><Shift>1",
+    "shortcuts.quicky_run_2": "<Control><Shift>2",
+    "shortcuts.quicky_run_3": "<Control><Shift>3",
+    "shortcuts.quicky_run_4": "<Control><Shift>4",
+    "shortcuts.quicky_run_5": "<Control><Shift>5",
+    "shortcuts.quicky_run_6": "<Control><Shift>6",
+    "shortcuts.quicky_run_7": "<Control><Shift>7",
+    "shortcuts.quicky_run_8": "<Control><Shift>8",
+    "shortcuts.quicky_run_9": "<Control><Shift>9",
+    "shortcuts.quicky_run_10": "<Control><Shift>0",
     "interface.watermark_enabled": False, # mirrored by the header toggle button, not a Settings-page switch
     "interface.watermark_text": "$user@$host", # see constants.py's _prepare_command note: $name, $host, $user
     "interface.watermark_position": "center", # one of constants.WATERMARK_POSITIONS' ids

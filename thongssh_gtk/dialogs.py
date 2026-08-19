@@ -1470,6 +1470,23 @@ class SettingsDialog(Adw.Window):
             self.quickies_store.append([quicky.get("name", ""), quicky.get("text", "")])
 
         self.quickies_view = Gtk.TreeView(model=self.quickies_store, hexpand=True)
+        # Drag rows to reorder — GtkTreeView's own built-in support, which
+        # physically reorders self.quickies_store's rows on drop, so
+        # on_apply's "for row in self.quickies_store" loop below already
+        # picks up the new order with no extra code.
+        self.quickies_view.set_reorderable(True)
+
+        # Position column — recomputed at render time from each row's
+        # actual current path (not stored data), so it stays correct
+        # through drag-reorder/add/remove with no manual renumbering.
+        # Only the first 10 have a keyboard shortcut (Settings ->
+        # Shortcuts -> Quickies), so it also visually shows which rows
+        # (if any) fall outside that range.
+        renderer_quicky_index = Gtk.CellRendererText()
+        col_quicky_index = Gtk.TreeViewColumn(_("#"))
+        col_quicky_index.pack_start(renderer_quicky_index, True)
+        col_quicky_index.set_cell_data_func(renderer_quicky_index, self._quicky_index_cell_data_func)
+        self.quickies_view.append_column(col_quicky_index)
 
         renderer_quicky_name = Gtk.CellRendererText(editable=True)
         renderer_quicky_name.connect("edited", self.on_quicky_row_edited, 0)
@@ -1495,7 +1512,12 @@ class SettingsDialog(Adw.Window):
         quickies_box.append(quickies_buttons_box)
 
         quickies_note_label = Gtk.Label(
-            label=_("Inserted into the active terminal, not executed.\nAvailable variables: $name, $host, $user"),
+            label=_(
+                "Drag rows to reorder — the first 10 get a keyboard shortcut "
+                "(Settings → Shortcuts → Quickies).\n"
+                "Inserted into the active terminal, not executed.\n"
+                "Available variables: $name, $host, $user"
+            ),
             halign=Gtk.Align.START,
             css_classes=["dim-label"]
         )
@@ -1585,8 +1607,57 @@ class SettingsDialog(Adw.Window):
             picker = ShortcutPicker(self.settings_manager.get(key))
             picker.set_valign(Gtk.Align.CENTER)
             row.add_suffix(picker)
+            row.add_suffix(self._build_clear_shortcut_button(picker))
             group_shortcuts.add(row)
             self._shortcut_pickers[key] = picker
+
+        # --- Quickies shortcuts: Ctrl+1..5 (paste) / Ctrl+Shift+1..5 (run)
+        # for the first 5 Quickies, by position in the panel. A plain
+        # per-item ActionRow list (like the group above) would mean 5 rows
+        # x 2 pickers x 2 clear buttons = a lot of vertical space for
+        # something meant to be glanced at once — a compact grid instead,
+        # one row per Quicky slot, "Paste"/"Run" as column headers.
+        group_quickies_shortcuts = Adw.PreferencesGroup(
+            title=_("Quickies"),
+            description=_(
+                "Quick-access bindings for the first 10 Quickies, by their "
+                "position in the panel (slot 10 uses the \"0\" key) — Paste "
+                "inserts without running (same as Send ▶), Run inserts and "
+                "executes (same as Send and Run ⏩)."
+            ),
+        )
+        page_shortcuts.add(group_quickies_shortcuts)
+
+        quickies_grid = Gtk.Grid(row_spacing=6, column_spacing=12)
+        quickies_grid.set_margin_top(6)
+        quickies_grid.set_margin_bottom(6)
+        quickies_grid.set_margin_start(12)
+        quickies_grid.set_margin_end(12)
+
+        paste_header = Gtk.Label(label=_("Paste"))
+        paste_header.add_css_class("heading")
+        run_header = Gtk.Label(label=_("Run"))
+        run_header.add_css_class("heading")
+        quickies_grid.attach(paste_header, 1, 0, 1, 1)
+        quickies_grid.attach(run_header, 2, 0, 1, 1)
+
+        for i in range(1, 11):
+            index_label = Gtk.Label(label=str(i))
+            index_label.set_halign(Gtk.Align.START)
+            index_label.add_css_class("dim-label")
+            quickies_grid.attach(index_label, 0, i, 1, 1)
+
+            for col, action in ((1, "paste"), (2, "run")):
+                key = f"shortcuts.quicky_{action}_{i}"
+                picker = ShortcutPicker(self.settings_manager.get(key))
+                picker.set_valign(Gtk.Align.CENTER)
+                cell = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+                cell.append(picker)
+                cell.append(self._build_clear_shortcut_button(picker))
+                quickies_grid.attach(cell, col, i, 1, 1)
+                self._shortcut_pickers[key] = picker
+
+        group_quickies_shortcuts.add(quickies_grid)
 
         # --- SFTP Page ---
         page_sftp = Adw.PreferencesPage()
@@ -2107,6 +2178,18 @@ class SettingsDialog(Adw.Window):
 
         fetch_models(family, api_key, base_url, on_models, on_error)
 
+    def _build_clear_shortcut_button(self, picker):
+        """A small "unbind this shortcut" button for a ShortcutPicker row —
+        picker.set_accelerator(None) already renders as "(none)" and
+        _shortcut_matches already treats an empty accelerator as "never
+        matches", so this needs no other wiring anywhere."""
+        button = Gtk.Button(icon_name="edit-clear-symbolic")
+        button.add_css_class("flat")
+        button.set_valign(Gtk.Align.CENTER)
+        button.set_tooltip_text(_("Clear shortcut"))
+        button.connect("clicked", lambda _b: picker.set_accelerator(None))
+        return button
+
     def on_apply(self, button):
         """Save settings and close the window."""
         self.settings_manager.set("terminal.font", self.font_button.get_font())
@@ -2443,6 +2526,13 @@ class SettingsDialog(Adw.Window):
         model, tree_iter = selection.get_selected()
         if tree_iter:
             model.remove(tree_iter)
+
+    def _quicky_index_cell_data_func(self, column, cell, model, tree_iter, data):
+        """Renders a row's 1-based position, read fresh from its actual
+        current path — not stored data — so it's always correct after a
+        drag-reorder/add/remove with no manual renumbering anywhere."""
+        index = model.get_path(tree_iter).get_indices()[0] + 1
+        cell.set_property("text", str(index))
 
     def on_quicky_row_edited(self, widget, path, text, column_index):
         """Saves the edited text in the Quickies ListStore."""

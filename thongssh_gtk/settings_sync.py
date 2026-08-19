@@ -97,7 +97,8 @@ GENERAL_SETTINGS_KEYS = [
 SHORTCUTS_SETTINGS_KEYS = [
     "shortcuts.close_tab", "shortcuts.focus_search", "shortcuts.find_in_terminal",
     "shortcuts.copy", "shortcuts.paste",
-]
+] + [f"shortcuts.quicky_paste_{i}" for i in range(1, 11)] \
+  + [f"shortcuts.quicky_run_{i}" for i in range(1, 11)]
 
 _EMPTY_ROOT = {"type": "group", "name": "Root", "children": []}
 

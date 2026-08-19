@@ -672,6 +672,28 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             min-width: 20px;
             min-height: 20px;
         }
+        /* Visible divider between the host tree and Quickies panels (see
+           _build_left_panel_root) — two earlier attempts didn't read as a
+           real divider: a bare margin-gap was too subtle (both panels
+           share the same light background), and a single solid bar across
+           the whole handle just looked like a drop-shadow cast by the
+           panel above, not a deliberate boundary. A tiny linear-gradient
+           on the handle itself (line/gap/line in one strip) didn't work
+           out either — at only a few px tall it rendered as a blurred
+           smear, not two crisp lines; GTK's gradient rendering isn't
+           pixel-hard at that scale. What actually gives two distinct
+           lines is simpler: a real border on each panel's own facing
+           edge (thongssh-panel-divider-top/-bottom, applied in
+           _build_left_panel_root to whichever box ends up on which side),
+           with the handle's own natural thickness between them as the
+           gap. alpha() (not color-mix()) for the same older-GTK4
+           compatibility reason as .watermark-toggle-active above. */
+        .thongssh-panel-divider-top {
+            border-bottom: 1px solid alpha(currentColor, 0.25);
+        }
+        .thongssh-panel-divider-bottom {
+            border-top: 1px solid alpha(currentColor, 0.25);
+        }
         .terminal-watermark {
             /* Color/size/opacity are set per-label from Settings (they're
                dynamic values, not fixed classes) — this just keeps the text
@@ -1661,16 +1683,29 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             self.hosts_box.reorder_child_after(self.search_bar, self.tree_scrolled_window)
 
     def apply_quickies_search_position(self):
-        """Moves the Quickies search box above or below the snippet list
-        per quickies.search_position ("top"/"bottom") — same idea as
-        apply_search_bar_position above, just relative to
-        quickies_scroller instead of tree_scrolled_window. The header row
-        (title + Add button) always stays first regardless."""
+        """Moves the Quickies search row (search entry + Add button, now
+        one and the same row — see _build_quickies_box) above or below the
+        snippet list per quickies.search_position ("top"/"bottom") — same
+        idea as apply_search_bar_position above, just relative to
+        quickies_scroller instead of tree_scrolled_window.
+
+        "top" already reads fine as-is: the row's own margin_top (see
+        _build_quickies_box) gives it breathing room from whatever's above
+        it, and quickies_box's own spacing puts a clean gap below it before
+        the list. "bottom" had no equivalent on its trailing edge though —
+        as the LAST child there, it sat flush against quickies_box's own
+        bottom edge with nothing to give it room, unlike every other
+        search box in the app. margin_bottom here (only in this branch,
+        cleared in the other) is that missing edge; the leading edge
+        already gets its gap for free from quickies_box's own spacing
+        against the scroller above it."""
         position = self.settings_manager.get("quickies.search_position")
         if position == "top":
-            self.quickies_box.reorder_child_after(self.quickies_search_entry, self.quickies_header_row)
+            self.quickies_box.reorder_child_after(self.quickies_search_row, None)
+            self.quickies_search_row.set_margin_bottom(0)
         else:
-            self.quickies_box.reorder_child_after(self.quickies_search_entry, self.quickies_scroller)
+            self.quickies_box.reorder_child_after(self.quickies_search_row, self.quickies_scroller)
+            self.quickies_search_row.set_margin_bottom(6)
 
     def on_quickies_search_changed(self, entry):
         """Exact substring match (name or text, case-insensitive) first;
@@ -1708,45 +1743,52 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         return False
 
     def _build_quickies_box(self):
-        """The 'Quickies' section — a header row (label + Add button) above
-        a scrollable list of pre-written snippets; clicking one inserts it
-        into the active terminal (see on_quicky_row_activated)."""
+        """The 'Quickies' section — a search row (doubling as the section's
+        only label, via its own placeholder text) above a scrollable list
+        of pre-written snippets; clicking one inserts it into the active
+        terminal (see on_quicky_row_activated)."""
         self.quickies_items = list(self.settings_manager.get("quickies.items") or [])
 
         self.quickies_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.quickies_box.set_vexpand(True)
 
-        header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        # No standalone "Quickies" title row anymore — the search entry's
+        # own placeholder text ("Quickies") IS the section label, and Add
+        # moved from its own header button into this same row, packed at
+        # the end. One row instead of two, same information.
+        search_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         # Mirror image of button_box's fix above: as quickies_box's FIRST
         # child, this naturally gets 0px gap from the Paned divider above it
         # (box spacing only applies *between* siblings) but a real 6px gap
         # below it (from quickies_box's own spacing, before the scroller) —
         # so it visually hugs the divider. Matching that same 6px on top
         # centers it the same way.
-        header_row.set_margin_top(6)
-        quickies_label = Gtk.Label(label=_("Quickies"), xalign=0)
-        quickies_label.set_hexpand(True)
-        header_row.append(quickies_label)
-        add_quicky_btn = Gtk.Button(icon_name="list-add-symbolic")
-        add_quicky_btn.set_tooltip_text(_("Add Quicky"))
-        add_quicky_btn.set_valign(Gtk.Align.CENTER)
-        add_quicky_btn.connect("clicked", self.on_add_quicky_clicked)
-        header_row.append(add_quicky_btn)
-        self.quickies_header_row = header_row
-        self.quickies_box.append(header_row)
+        search_row.set_margin_top(6)
 
         # Same look as the host search box: no magnifying-glass icon (its
         # own dimmed placeholder is cue enough), position configurable
         # (see apply_quickies_search_position), one-typo-tolerant fuzzy
         # fallback (see _quickies_filter_func) — same fuzzy helpers the
-        # host tree search already uses.
+        # host tree search already uses. Placeholder reads "Quickies
+        # search" instead of plain "Search" now that it's also standing
+        # in for the removed title label.
         self.quickies_search_entry = Gtk.SearchEntry()
-        self.quickies_search_entry.set_placeholder_text(_("Search"))
+        self.quickies_search_entry.set_placeholder_text(_("Quickies search"))
+        self.quickies_search_entry.set_hexpand(True)
         _quickies_search_leading_icon = self.quickies_search_entry.get_first_child()
         if _quickies_search_leading_icon is not None:
             _quickies_search_leading_icon.set_visible(False)
         self.quickies_search_entry.connect("search-changed", self.on_quickies_search_changed)
-        self.quickies_box.append(self.quickies_search_entry)
+        search_row.append(self.quickies_search_entry)
+
+        add_quicky_btn = Gtk.Button(icon_name="list-add-symbolic")
+        add_quicky_btn.set_tooltip_text(_("Add Quicky"))
+        add_quicky_btn.set_valign(Gtk.Align.CENTER)
+        add_quicky_btn.connect("clicked", self.on_add_quicky_clicked)
+        search_row.append(add_quicky_btn)
+
+        self.quickies_search_row = search_row
+        self.quickies_box.append(search_row)
 
         self.quickies_listbox = Gtk.ListBox()
         self.quickies_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -1797,7 +1839,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         for index, quicky in enumerate(self.quickies_items):
             preview = quicky.get("text", "").replace("\n", " ").strip()
 
-            name_line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            name_line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+
+            # 1-based position — matches the quick-access shortcut (if any,
+            # first 10 only, see Settings -> Shortcuts -> Quickies) that
+            # runs/pastes this exact slot. Reordering is via the row's
+            # right-click menu (Move Up/Move Down), not a button here —
+            # same "not every action needs a permanently-visible button"
+            # reasoning as Delete below.
+            index_label = Gtk.Label(label=str(index + 1), xalign=0)
+            index_label.add_css_class("dim-label")
+            index_label.add_css_class("caption")
+            index_label.set_valign(Gtk.Align.CENTER)
+            name_line.append(index_label)
 
             name_label = Gtk.Label(label=quicky.get("name", ""), xalign=0)
             name_label.set_hexpand(True)
@@ -1860,14 +1914,38 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         this whole Paned is rebuilt from scratch on every Quickies off/on
         toggle, see _apply_left_panel_layout — and across app restarts."""
         if not self.settings_manager.get("quickies.enabled"):
+            self.hosts_box.set_margin_bottom(0)
+            self.hosts_box.remove_css_class("thongssh-panel-divider-top")
+            self.hosts_box.remove_css_class("thongssh-panel-divider-bottom")
             return self.hosts_box
 
         paned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
         paned.set_vexpand(True)
+        # wide_handle gives the handle itself a bit more thickness, which
+        # doubles as the "gap" between the two divider lines below.
+        paned.set_wide_handle(True)
+
+        # thongssh-panel-divider-top/-bottom (defined in setup_css) draw a
+        # light line on whichever box's edge actually faces the divider —
+        # applied to the whole box, not a specific child inside it, so
+        # it's correct regardless of each box's own internal top/bottom
+        # search-position setting (whatever ends up at that edge — the
+        # host tree's Add/Remove buttons, or Quickies' search+Add row —
+        # gets the line right after it). Both classes are cleared from
+        # both boxes first since they're reused across position toggles.
+        for box in (self.hosts_box, self.quickies_box):
+            box.remove_css_class("thongssh-panel-divider-top")
+            box.remove_css_class("thongssh-panel-divider-bottom")
+            box.set_margin_bottom(0)
+
         if self.settings_manager.get("quickies.position") == "above":
+            self.quickies_box.add_css_class("thongssh-panel-divider-top")
+            self.hosts_box.add_css_class("thongssh-panel-divider-bottom")
             paned.set_start_child(self.quickies_box)
             paned.set_end_child(self.hosts_box)
         else:
+            self.hosts_box.add_css_class("thongssh-panel-divider-top")
+            self.quickies_box.add_css_class("thongssh-panel-divider-bottom")
             paned.set_start_child(self.hosts_box)
             paned.set_end_child(self.quickies_box)
         paned.set_resize_start_child(True)
@@ -1938,6 +2016,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         del self.quickies_items[index]
         self._save_quickies()
 
+    def _move_quicky(self, index, direction):
+        """direction: -1 for up, +1 for down. No-op at either end of the
+        list rather than wrapping around — reordering past the edge isn't
+        an obviously-meaningful action, so it's simplest to just ignore it."""
+        new_index = index + direction
+        if not (0 <= index < len(self.quickies_items)) or not (0 <= new_index < len(self.quickies_items)):
+            return
+        self.quickies_items[index], self.quickies_items[new_index] = (
+            self.quickies_items[new_index],
+            self.quickies_items[index],
+        )
+        self._save_quickies()
+
     def _open_quicky_dialog(self, index):
         existing = self.quickies_items[index] if index is not None else None
         dialog = QuickyDialog(self, existing)
@@ -1982,6 +2073,12 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if run:
             text += "\n"
         terminal.feed_child(text.encode("utf-8"))
+        # Without this, focus stays on whatever Quickies-panel widget was
+        # clicked (or wherever it was for a keyboard shortcut), so typing
+        # right after Send/Run did nothing until the terminal was clicked
+        # by hand — feed_child() injects text into the pty, it doesn't
+        # touch focus at all.
+        terminal.grab_focus()
 
     def on_quicky_right_click(self, gesture, n_press, x, y):
         """Shows the Quicky context menu — Insert/Run/Edit/Delete plus
@@ -2015,6 +2112,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     def on_menu_quicky_delete(self, action, param):
         if self.last_clicked_quicky_index is not None:
             self.on_delete_quicky_clicked(None, self.last_clicked_quicky_index)
+
+    def on_menu_quicky_move_up(self, action, param):
+        if self.last_clicked_quicky_index is not None:
+            self._move_quicky(self.last_clicked_quicky_index, -1)
+
+    def on_menu_quicky_move_down(self, action, param):
+        if self.last_clicked_quicky_index is not None:
+            self._move_quicky(self.last_clicked_quicky_index, 1)
 
     def on_menu_quicky_send_to_batch(self, action, param):
         """Opens Batch Command with this Quicky's (template-rendered)
@@ -2286,6 +2391,22 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         if self._shortcut_matches("shortcuts.focus_search", is_ctrl, is_shift, letter):
             self.on_toggle_search()
             return True
+
+        # Quick-access bindings for the first 10 Quickies (Settings ->
+        # Shortcuts -> Quickies), by position — Ctrl+1..9,0 to paste,
+        # Ctrl+Shift+1..9,0 to paste-and-run (slot 10 = the "0" key), same
+        # digit-key-regardless-of-layout resolution as the letter
+        # shortcuts above.
+        digit = self._resolve_physical_digit(keyval, keycode) if is_ctrl else None
+        if digit:
+            for i in range(1, 11):
+                if self._quicky_shortcut_matches(f"shortcuts.quicky_paste_{i}", is_ctrl, is_shift, digit):
+                    self._insert_quicky_into_terminal(i - 1, run=False)
+                    return True
+                if self._quicky_shortcut_matches(f"shortcuts.quicky_run_{i}", is_ctrl, is_shift, digit):
+                    self._insert_quicky_into_terminal(i - 1, run=True)
+                    return True
+
         return False
 
     def setup_global_menu(self, header_bar):
@@ -2498,6 +2619,14 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         action_quicky_delete.connect("activate", self.on_menu_quicky_delete)
         self.add_action(action_quicky_delete)
 
+        action_quicky_move_up = Gio.SimpleAction.new("quicky-move-up", None)
+        action_quicky_move_up.connect("activate", self.on_menu_quicky_move_up)
+        self.add_action(action_quicky_move_up)
+
+        action_quicky_move_down = Gio.SimpleAction.new("quicky-move-down", None)
+        action_quicky_move_down.connect("activate", self.on_menu_quicky_move_down)
+        self.add_action(action_quicky_move_down)
+
         self.last_clicked_quicky_index = None
 
         # 2. Create GMenu (models)
@@ -2553,6 +2682,8 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         quicky_menu.append(_("Run"), "win.quicky-run")
         quicky_menu.append(_("Edit..."), "win.quicky-edit")
         quicky_menu.append(_("Send to Batch Command"), "win.quicky-send-to-batch")
+        quicky_menu.append(_("Move Up"), "win.quicky-move-up")
+        quicky_menu.append(_("Move Down"), "win.quicky-move-down")
         quicky_menu.append(_("Delete"), "win.quicky-delete")
 
         # 3. Create Popover (widgets)
@@ -4268,6 +4399,38 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         elif Gdk.KEY_A <= keyval <= Gdk.KEY_Z:
             want_letter = chr(keyval).lower()
         return bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift and letter == want_letter
+
+    def _resolve_physical_digit(self, keyval, keycode):
+        """Digit-key counterpart to _resolve_latin_letter, same physical-
+        key-regardless-of-layout approach — needed for the quicky_paste_N/
+        quicky_run_N shortcuts (Ctrl+1..5 / Ctrl+Shift+1..5 by default)."""
+        if Gdk.KEY_0 <= keyval <= Gdk.KEY_9:
+            return chr(keyval)
+
+        display = self.get_display()
+        if display is None:
+            return None
+        success, _keys, keyvals = display.map_keycode(keycode)
+        if not success:
+            return None
+        for kv in keyvals:
+            if Gdk.KEY_0 <= kv <= Gdk.KEY_9:
+                return chr(kv)
+        return None
+
+    def _quicky_shortcut_matches(self, settings_key, is_ctrl, is_shift, digit):
+        """Digit counterpart to _shortcut_matches, for the quicky_paste_N/
+        quicky_run_N shortcuts — see that method for the general shape."""
+        accel = self.settings_manager.get(settings_key)
+        if not accel:
+            return False
+        success, keyval, mods = Gtk.accelerator_parse(accel)
+        if not success:
+            return False
+        want_ctrl = bool(mods & Gdk.ModifierType.CONTROL_MASK)
+        want_shift = bool(mods & Gdk.ModifierType.SHIFT_MASK)
+        want_digit = chr(keyval) if Gdk.KEY_0 <= keyval <= Gdk.KEY_9 else None
+        return bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift and digit == want_digit
 
     def on_terminal_key_pressed(self, controller, keyval, keycode, modifier):
         """Handles key presses directly on the Vte.Terminal widget."""
