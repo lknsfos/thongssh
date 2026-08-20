@@ -2139,3 +2139,9 @@ msgstr ""
 "\n"
 "\n"
 "--- Sesión finalizada con código de salida: {status} ---"
+
+msgid "Automatically save session logs"
+msgstr "Guardar automáticamente los registros de sesión"
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "Iniciar cada nueva conexión de terminal con el registro ya activado"

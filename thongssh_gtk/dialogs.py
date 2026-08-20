@@ -990,6 +990,20 @@ class SettingsDialog(Adw.Window):
         self.inherit_cwd_row.set_active(self.settings_manager.get("terminal.inherit_cwd_for_new_local_tab"))
         group_behavior.add(self.inherit_cwd_row)
 
+        # Per-host "Save session log" (the switch further down this dialog,
+        # on each host's own edit page) still exists and still wins for a
+        # host that sets it explicitly — this is just the default new
+        # connections start with, including the sidebar's "local" terminal
+        # and "+"-button tabs, neither of which has a per-host page of its
+        # own to carry that switch at all. Where logs actually land is
+        # still Settings -> Client -> Log Directory.
+        self.auto_save_log_row = Adw.SwitchRow(
+            title=_("Automatically save session logs"),
+            subtitle=_("Start every new terminal connection with logging already turned on")
+        )
+        self.auto_save_log_row.set_active(self.settings_manager.get("terminal.auto_save_log"))
+        group_behavior.add(self.auto_save_log_row)
+
         # --- Watermark (the header-bar button next to the split buttons is
         # the same live on/off switch as the row below — either one flips
         # interface.watermark_enabled, so they never fall out of sync) ---
@@ -2219,7 +2233,8 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("terminal.close_on_disconnect", self.close_on_disconnect_row.get_active())
         self.settings_manager.set("terminal.reconnect_prompt_username", self.reconnect_prompt_username_row.get_active())
         self.settings_manager.set("terminal.inherit_cwd_for_new_local_tab", self.inherit_cwd_row.get_active())
-        
+        self.settings_manager.set("terminal.auto_save_log", self.auto_save_log_row.get_active())
+
         selected_idx = self.scheme_row.get_selected()
         base_scheme_key = _BASE_SCHEME_IDS[selected_idx]
         self.settings_manager.set("terminal.custom_scheme_base", base_scheme_key)
@@ -2584,6 +2599,7 @@ class SettingsDialog(Adw.Window):
             self.close_on_disconnect_row.set_active(DEFAULT_SETTINGS["terminal.close_on_disconnect"])
             self.reconnect_prompt_username_row.set_active(DEFAULT_SETTINGS["terminal.reconnect_prompt_username"])
             self.inherit_cwd_row.set_active(DEFAULT_SETTINGS["terminal.inherit_cwd_for_new_local_tab"])
+            self.auto_save_log_row.set_active(DEFAULT_SETTINGS["terminal.auto_save_log"])
             self.font_button.set_font(DEFAULT_SETTINGS["terminal.font"])
             
             default_scheme_key = DEFAULT_SETTINGS["terminal.color_scheme"]

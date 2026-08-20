@@ -2143,3 +2143,9 @@ msgstr ""
 "\n"
 "\n"
 "--- Sitzung beendet mit Exit-Code: {status} ---"
+
+msgid "Automatically save session logs"
+msgstr "Sitzungsprotokolle automatisch speichern"
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "Jede neue Terminalverbindung mit bereits aktivierter Protokollierung starten"

@@ -30,6 +30,7 @@ DEFAULT_SETTINGS = {
     "terminal.close_on_disconnect": True, # ✨ NEW: Whether to close tab on disconnect
     "terminal.reconnect_prompt_username": False, # Only relevant when the above is off — ask again instead of reusing the last username when reconnecting to a disconnected tab
     "terminal.inherit_cwd_for_new_local_tab": True, # Whether the "+" new-local-terminal button starts in the current tab's working directory instead of always $HOME
+    "terminal.auto_save_log": False, # Whether every new terminal connection (host or local) starts with session logging already on, instead of needing the per-host switch or the terminal's own "Save log" menu item by hand
     "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
     "interface.language": "system", # "system" (follow the OS/locale, the normal gettext default) or a code from i18n.LANGUAGES — takes effect on next launch, see i18n.py
     "interface.tree_row_striping": False,

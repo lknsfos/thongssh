@@ -2112,3 +2112,9 @@ msgstr ""
 "\n"
 "\n"
 "--- انتهت الجلسة برمز الخروج: {status} ---"
+
+msgid "Automatically save session logs"
+msgstr "حفظ سجلات الجلسات تلقائيًا"
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "بدء كل اتصال طرفية جديد بتسجيل مفعّل مسبقًا"

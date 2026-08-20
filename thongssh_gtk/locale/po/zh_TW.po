@@ -2070,3 +2070,9 @@ msgstr ""
 "\n"
 "\n"
 "--- 工作階段已結束,結束碼:{status} ---"
+
+msgid "Automatically save session logs"
+msgstr "自動儲存工作階段記錄"
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "讓每個新的終端機連線從一開始就啟用記錄功能"

@@ -2074,3 +2074,9 @@ msgstr ""
 "\n"
 "\n"
 "--- セッションが終了コード {status} で終了しました ---"
+
+msgid "Automatically save session logs"
+msgstr "セッションログを自動保存"
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "新しい端末接続をログ記録がオンの状態で開始します"

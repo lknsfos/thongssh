@@ -2035,3 +2035,9 @@ msgid ""
 "\n"
 "--- Session finished with exit code: {status} ---"
 msgstr ""
+
+msgid "Automatically save session logs"
+msgstr ""
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr ""

@@ -2106,3 +2106,9 @@ msgstr ""
 "\n"
 "\n"
 "--- ההפעלה הסתיימה עם קוד יציאה: {status} ---"
+
+msgid "Automatically save session logs"
+msgstr "שמירה אוטומטית של יומני הפעלה"
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "התחלת כל חיבור מסוף חדש כשהיומן כבר פעיל"

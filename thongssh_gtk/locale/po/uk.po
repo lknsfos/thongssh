@@ -2135,3 +2135,9 @@ msgstr ""
 "\n"
 "\n"
 "--- Сеанс завершено з кодом виходу: {status} ---"
+
+msgid "Automatically save session logs"
+msgstr "Автоматично зберігати журнали сеансів"
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "Починати кожне нове підключення термінала з уже увімкненим журналюванням"

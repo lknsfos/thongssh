@@ -2068,3 +2068,9 @@ msgstr ""
 "\n"
 "\n"
 "--- 会话已结束,退出代码:{status} ---"
+
+msgid "Automatically save session logs"
+msgstr "自动保存会话日志"
+
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "让每个新的终端连接从一开始就启用日志记录"

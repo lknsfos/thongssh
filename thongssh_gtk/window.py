@@ -4280,7 +4280,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                 }
                 close_btn.connect("clicked", self.on_tab_close_button_clicked, term_overlay, pid)
                 terminal.connect("child-exited", self.on_ssh_process_exited, term_overlay)
-                if config.get("save_log", False):
+                # Per-host "save_log" (set on the host's own edit page) wins
+                # when present; terminal.auto_save_log covers everything
+                # else — including the "local" entry and "+"-button tabs,
+                # which have no per-host page of their own to carry it.
+                if config.get("save_log", False) or self.settings_manager.get("terminal.auto_save_log"):
                     self._start_session_logging(term_overlay)
                 if protocol == "local":
                     self._start_local_cwd_tracking(term_overlay)
@@ -4296,7 +4300,11 @@ class ThongSSHWindow(Adw.ApplicationWindow):
                     # applied in on_ssh_process_exited, if any.
                     tab_info["disconnected"] = False
                     self._set_tab_label_disconnected(tab_info.get("tab_label"), False)
-                if config.get("save_log", False):
+                # Per-host "save_log" (set on the host's own edit page) wins
+                # when present; terminal.auto_save_log covers everything
+                # else — including the "local" entry and "+"-button tabs,
+                # which have no per-host page of their own to carry it.
+                if config.get("save_log", False) or self.settings_manager.get("terminal.auto_save_log"):
                     self._start_session_logging(existing_terminal_widget)
                 if protocol == "local":
                     self._start_local_cwd_tracking(existing_terminal_widget)
