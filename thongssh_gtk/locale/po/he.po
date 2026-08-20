@@ -2109,3 +2109,9 @@ msgstr "שמירה אוטומטית של יומני הפעלה"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "התחלת כל חיבור מסוף חדש כשהיומן כבר פעיל"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "דילוג על יישומים אינטראקטיביים במסך מלא ביומנים"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "משאיר מחוץ ליומן עורכים, מנהלי קבצים ויישומי מסוף אחרים במסך מלא (vim, mc, tmux, htop, less…) — אחרת כל הקשה מציירת מחדש את כל המסך, וכל ציור מחדש נרשם ביומן"

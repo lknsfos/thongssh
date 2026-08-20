@@ -1028,6 +1028,15 @@ class SettingsDialog(Adw.Window):
         self.auto_save_log_row.set_active(self.settings_manager.get("terminal.auto_save_log"))
         group_logging.add(self.auto_save_log_row)
 
+        self.log_skip_interactive_row = Adw.SwitchRow(
+            title=_("Skip full-screen interactive apps in logs"),
+            subtitle=_("Leaves editors, file managers, and other full-screen terminal apps "
+                       "(vim, mc, tmux, htop, less…) out of the log — otherwise every single "
+                       "keystroke redraws the whole screen, and every redraw gets logged")
+        )
+        self.log_skip_interactive_row.set_active(self.settings_manager.get("terminal.log_skip_interactive_screens"))
+        group_logging.add(self.log_skip_interactive_row)
+
         self.log_dir_row = Adw.EntryRow(title=_("Log Directory"))
         self.log_dir_row.set_text(self.settings_manager.get("client.log_dir"))
         log_dir_button = Gtk.Button(icon_name="folder-open-symbolic")
@@ -2229,6 +2238,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("terminal.reconnect_prompt_username", self.reconnect_prompt_username_row.get_active())
         self.settings_manager.set("terminal.inherit_cwd_for_new_local_tab", self.inherit_cwd_row.get_active())
         self.settings_manager.set("terminal.auto_save_log", self.auto_save_log_row.get_active())
+        self.settings_manager.set("terminal.log_skip_interactive_screens", self.log_skip_interactive_row.get_active())
 
         selected_idx = self.scheme_row.get_selected()
         base_scheme_key = _BASE_SCHEME_IDS[selected_idx]
@@ -2598,6 +2608,7 @@ class SettingsDialog(Adw.Window):
             self.telnet_path_row.set_text(DEFAULT_SETTINGS["client.telnet_path"])
             self.sshpass_path_row.set_text(DEFAULT_SETTINGS["client.sshpass_path"])
             self.auto_save_log_row.set_active(DEFAULT_SETTINGS["terminal.auto_save_log"])
+            self.log_skip_interactive_row.set_active(DEFAULT_SETTINGS["terminal.log_skip_interactive_screens"])
             self.log_dir_row.set_text(DEFAULT_SETTINGS["client.log_dir"])
             self.font_button.set_font(DEFAULT_SETTINGS["terminal.font"])
             

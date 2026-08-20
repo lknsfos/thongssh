@@ -2078,3 +2078,9 @@ msgstr "セッションログを自動保存"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "新しい端末接続をログ記録がオンの状態で開始します"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "ログでフルスクリーンの対話型アプリをスキップ"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "エディタやファイルマネージャなど、フルスクリーンで動作する端末アプリ(vim、mc、tmux、htop、less など)をログから除外します。そうしないと、キー入力のたびに画面全体が再描画され、その再描画がすべて記録されてしまいます"

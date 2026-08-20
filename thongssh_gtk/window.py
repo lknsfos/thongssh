@@ -3100,6 +3100,19 @@ class ThongSSHWindow(Adw.ApplicationWindow):
     # before the next poll would be missed. That's a rare edge case for
     # interactive use, and far better than an unreadable or perpetually
     # empty log.
+    #
+    # Full-screen TUI apps (vim, mc, tmux, htop, less, ...) hit that same
+    # "diff isn't a clean append" path on essentially every keystroke —
+    # they redraw the same screen region in place rather than printing new
+    # lines at the bottom, so the new dump doesn't start with the old one
+    # even though nothing scrolled away. Left alone, that means a full
+    # screen dump logged every ~500ms for as long as the app has focus.
+    # There's no public VTE API for "is the alternate screen active right
+    # now" to detect this directly, so terminal.log_skip_interactive_screens
+    # (on by default — see _tick_session_log) uses the symptom itself: two
+    # non-append diffs in a row is treated as "we're inside a redrawing
+    # TUI app", and further screens are skipped until a real appended diff
+    # (the app exited, back to a normal scrolling shell) shows up again.
 
     def on_menu_toggle_log_tab(self, action, param):
         """Activates the terminal context menu's "Save log" checkbox item —
@@ -3141,6 +3154,10 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         tab_info["log_path"] = log_path
         tab_info["_log_file"] = log_file
         tab_info["_log_last_text"] = initial_text
+        # Reset every time logging (re)starts — see the "Full-screen TUI
+        # apps" comment above and _tick_session_log below.
+        tab_info["_log_redraw_streak"] = 0
+        tab_info["_log_suspended"] = False
         tab_info["_log_timeout_id"] = GLib.timeout_add(500, self._tick_session_log, page_widget)
 
     def _dump_terminal_text(self, terminal):
@@ -3192,19 +3209,48 @@ class ThongSSHWindow(Adw.ApplicationWindow):
             return True
 
         last_text = tab_info.get("_log_last_text", "")
-        if current_text != last_text:
-            if current_text.startswith(last_text):
-                new_part = current_text[len(last_text):]
-            else:
-                # The common-prefix invariant broke — scrollback evicted
-                # content before we got a chance to log it. Can't recover
-                # the gap, so just note it and carry on from here.
-                new_part = "\n--- (older output lost; scrollback limit reached) ---\n" + current_text
-            log_file = tab_info.get("_log_file")
-            if log_file and new_part:
-                log_file.write(new_part)
-                log_file.flush()
-            tab_info["_log_last_text"] = current_text
+        if current_text == last_text:
+            return True
+
+        is_append = current_text.startswith(last_text)
+        log_file = tab_info.get("_log_file")
+
+        if not is_append and self.settings_manager.get("terminal.log_skip_interactive_screens"):
+            # Two non-append diffs in a row -> treat this as a full-screen
+            # TUI app redrawing in place (see the comment above this
+            # section), not a one-off scrollback-overflow burst, and stop
+            # logging its screens until a real appended diff shows up
+            # again. The first occurrence alone isn't enough to tell the
+            # two apart, so it still falls through to the normal
+            # "older output lost" handling below.
+            streak = tab_info.get("_log_redraw_streak", 0) + 1
+            tab_info["_log_redraw_streak"] = streak
+            if streak >= 2:
+                if not tab_info.get("_log_suspended") and log_file:
+                    tab_info["_log_suspended"] = True
+                    log_file.write("\n--- (interactive screen redraws not logged — "
+                                    "see Settings → Terminal → Logging) ---\n")
+                    log_file.flush()
+                tab_info["_log_last_text"] = current_text
+                return True
+        else:
+            tab_info["_log_redraw_streak"] = 0
+            if tab_info.get("_log_suspended"):
+                tab_info["_log_suspended"] = False
+                if log_file:
+                    log_file.write("--- (resuming log) ---\n")
+
+        if is_append:
+            new_part = current_text[len(last_text):]
+        else:
+            # The common-prefix invariant broke — scrollback evicted
+            # content before we got a chance to log it. Can't recover
+            # the gap, so just note it and carry on from here.
+            new_part = "\n--- (older output lost; scrollback limit reached) ---\n" + current_text
+        if log_file and new_part:
+            log_file.write(new_part)
+            log_file.flush()
+        tab_info["_log_last_text"] = current_text
         return True
 
     def _stop_session_logging(self, page_widget):

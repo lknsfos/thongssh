@@ -2074,3 +2074,9 @@ msgstr "自動儲存工作階段記錄"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "讓每個新的終端機連線從一開始就啟用記錄功能"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "在記錄中略過全螢幕互動式應用程式"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "將編輯器、檔案管理員等全螢幕終端機應用程式(vim、mc、tmux、htop、less 等)排除在記錄之外——否則每按一次按鍵都會重繪整個畫面,每次重繪都會被記錄"

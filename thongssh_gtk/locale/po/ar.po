@@ -2114,3 +2114,9 @@ msgstr "حفظ سجلات الجلسات تلقائيًا"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "بدء كل اتصال طرفية جديد بتسجيل مفعّل مسبقًا"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "تخطي التطبيقات التفاعلية بملء الشاشة في السجلات"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "يستبعد من السجل المحررات ومديري الملفات وتطبيقات الطرفية الأخرى بملء الشاشة (vim وmc وtmux وhtop وless…) — وإلا فإن كل ضغطة مفتاح تعيد رسم الشاشة بأكملها، وكل إعادة رسم تُسجَّل"

@@ -2141,3 +2141,9 @@ msgstr "Guardar automáticamente los registros de sesión"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "Iniciar cada nueva conexión de terminal con el registro ya activado"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "Omitir aplicaciones interactivas a pantalla completa en los registros"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "Excluye del registro los editores, gestores de archivos y demás aplicaciones de terminal a pantalla completa (vim, mc, tmux, htop, less…) — de lo contrario, cada pulsación de tecla redibuja toda la pantalla, y cada redibujado queda registrado"

@@ -2136,3 +2136,9 @@ msgstr "Автоматически сохранять журналы сеанс�
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "Начинать каждое новое подключение терминала с уже включённым журналированием"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "Не записывать в лог полноэкранные интерактивные приложения"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "Исключает из журнала редакторы, файловые менеджеры и другие полноэкранные приложения терминала (vim, mc, tmux, htop, less…) — иначе каждое нажатие клавиши перерисовывает весь экран, и каждая перерисовка попадает в журнал"

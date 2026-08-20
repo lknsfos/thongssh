@@ -2144,3 +2144,9 @@ msgstr "Enregistrer automatiquement les journaux de session"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "Démarrer chaque nouvelle connexion au terminal avec la journalisation déjà activée"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "Ignorer les applications interactives plein écran dans les journaux"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "Exclut du journal les éditeurs, gestionnaires de fichiers et autres applications de terminal plein écran (vim, mc, tmux, htop, less…) — sinon, chaque frappe redessine tout l'écran, et chaque redessin est journalisé"

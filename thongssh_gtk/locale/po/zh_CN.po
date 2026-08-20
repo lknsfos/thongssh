@@ -2072,3 +2072,9 @@ msgstr "自动保存会话日志"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "让每个新的终端连接从一开始就启用日志记录"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "在日志中跳过全屏交互式应用"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "将编辑器、文件管理器等全屏终端应用(vim、mc、tmux、htop、less 等)排除在日志之外——否则每按一次键都会重绘整个屏幕,每次重绘都会被记录"

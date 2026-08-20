@@ -2145,3 +2145,9 @@ msgstr "Sitzungsprotokolle automatisch speichern"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "Jede neue Terminalverbindung mit bereits aktivierter Protokollierung starten"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "Vollbild-Anwendungen in Protokollen überspringen"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "Lässt Editoren, Dateimanager und andere Vollbild-Terminalanwendungen (vim, mc, tmux, htop, less…) aus dem Protokoll heraus — sonst zeichnet jeder einzelne Tastendruck den ganzen Bildschirm neu, und jede Neuzeichnung wird protokolliert"

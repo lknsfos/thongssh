@@ -2140,3 +2140,9 @@ msgstr "Guardar automaticamente os registos de sessão"
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr "Iniciar cada nova ligação de terminal com o registo já ativado"
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr "Ignorar aplicações interativas de ecrã inteiro nos registos"
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "Deixa editores, gestores de ficheiros e outras aplicações de terminal de ecrã inteiro (vim, mc, tmux, htop, less…) fora do registo — caso contrário, cada tecla pressionada redesenha todo o ecrã, e cada redesenho é registado"

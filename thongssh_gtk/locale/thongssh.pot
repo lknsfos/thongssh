@@ -2039,3 +2039,9 @@ msgstr ""
 
 msgid "Start every new terminal connection with logging already turned on"
 msgstr ""
+
+msgid "Skip full-screen interactive apps in logs"
+msgstr ""
+
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr ""
