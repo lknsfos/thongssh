@@ -914,7 +914,9 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         # rebuild_config_and_save() (which only understands "group"/"host"
         # nodes) nor editable/removable (guarded in on_remove_selected_clicked
         # and skipped in on_tree_right_click).
-        local_config = {"name": _("Local Terminal"), "protocol": "local"}
+        # "local" is a fixed label, not translated — like "ThongSSH" itself,
+        # it's meant to read the same in every language (user request).
+        local_config = {"name": "local", "protocol": "local"}
         self.main_tree_store.append(None, [local_config["name"], "local", "computer-symbolic", local_config])
 
         def iter_nodes(node_data, parent_iter):
@@ -1097,7 +1099,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         tab is itself a local terminal (read via /proc/<pid>/cwd — the
         actual live cwd of its shell, not just wherever it started out) —
         otherwise, or with the setting off, falls back to $HOME. Named
-        "Local:<dir>" (short form: "~" for home, or the last path
+        "local: <dir>" (short form: "~" for home, or the last path
         component otherwise) so several local tabs stay distinguishable at
         a glance."""
         cwd = os.environ.get("HOME", os.path.expanduser("~"))
@@ -1116,7 +1118,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         label = self._dir_short_label(cwd)
         self._set_active_pane(notebook)
-        self.start_session({"name": f"Local:{label}", "protocol": "local", "cwd": cwd})
+        self.start_session({"name": f"local: {label}", "protocol": "local", "cwd": cwd})
 
     def _on_pane_tab_drop(self, drop_target, value, x, y, dest_notebook):
         """Accepts a tab dragged from another pane, OR reordered within the
@@ -3219,7 +3221,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
     def _dir_short_label(self, path):
         """"~" for $HOME, otherwise just the last path component — the
-        display form used for "Local:<dir>" tab names (see
+        display form used for "local: <dir>" tab names (see
         _on_new_local_terminal_clicked / _tick_local_cwd)."""
         home = os.environ.get("HOME", os.path.expanduser("~"))
         return "~" if path == home else (os.path.basename(path.rstrip("/")) or path)
@@ -3274,12 +3276,13 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         return None
 
     def _start_local_cwd_tracking(self, page_widget):
-        """Keeps a local-terminal tab's title live-updated to its shell's
-        actual current directory ("Local:~", "Local:.config", ...) by
-        polling the shell process's cwd once a second (see
-        _get_process_cwd). Local-protocol tabs only: an ssh/telnet tab's
-        pid is the local ssh client, whose own cwd never reflects
-        anything happening on the remote session. VTE/OSC-7 based
+        """Keeps a local-terminal tab's title (and, if the watermark
+        template references $name, its watermark too — see _tick_local_cwd)
+        live-updated to its shell's actual current directory ("local: ~",
+        "local: .config", ...) by polling the shell process's cwd once a
+        second (see _get_process_cwd). Local-protocol tabs only: an
+        ssh/telnet tab's pid is the local ssh client, whose own cwd never
+        reflects anything happening on the remote session. VTE/OSC-7 based
         tracking would need the connecting shell's rc files to opt in
         (most don't, by default); reading the process's cwd directly
         needs nothing from the shell at all.
@@ -3315,9 +3318,16 @@ class ThongSSHWindow(Adw.ApplicationWindow):
 
         if cwd != tab_info.get("_cwd_last"):
             tab_info["_cwd_last"] = cwd
+            new_name = f"local: {self._dir_short_label(cwd)}"
             tab_label = tab_info.get("tab_label")
             if tab_label is not None:
-                tab_label.set_text(f"Local:{self._dir_short_label(cwd)}")
+                tab_label.set_text(new_name)
+            # Keep config["name"] in sync too — it's what $name in the
+            # watermark template (and any Quicky/command template) actually
+            # reads, and it was otherwise frozen at whatever directory the
+            # tab started in, never reflecting a `cd` afterwards.
+            tab_info["config"]["name"] = new_name
+            self._update_watermark_for_tab(page_widget)
         return True
 
     def _stop_local_cwd_tracking(self, page_widget):
@@ -4558,7 +4568,7 @@ class ThongSSHWindow(Adw.ApplicationWindow):
         """Closes the tab immediately, then cleans up the underlying
         process in the background — the user shouldn't have to wait
         however long that process takes to actually exit just to see the
-        tab go away. This matters most for the "Local Terminal" tab: it
+        tab go away. This matters most for a "local" tab: it
         runs the user's real login shell, and whether (and how fast) a
         plain SIGTERM kills that depends entirely on their shell config
         (traps, job control, a foreground child process) — previously the
