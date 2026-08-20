@@ -437,7 +437,7 @@ class HostDialog(ResponseDialog):
 
         self.switch_save_log = Adw.SwitchRow(
             title=_("Save session log"),
-            subtitle=_("Records every session to a file in the configured log directory (see Settings → Client Options)")
+            subtitle=_("Records every session to a file in the configured log directory (see Settings → Terminal → Logging)")
         )
         group_logging.add(self.switch_save_log)
 
@@ -990,19 +990,52 @@ class SettingsDialog(Adw.Window):
         self.inherit_cwd_row.set_active(self.settings_manager.get("terminal.inherit_cwd_for_new_local_tab"))
         group_behavior.add(self.inherit_cwd_row)
 
-        # Per-host "Save session log" (the switch further down this dialog,
-        # on each host's own edit page) still exists and still wins for a
-        # host that sets it explicitly — this is just the default new
-        # connections start with, including the sidebar's "local" terminal
-        # and "+"-button tabs, neither of which has a per-host page of its
-        # own to carry that switch at all. Where logs actually land is
-        # still Settings -> Client -> Log Directory.
+        # --- Executable Paths + Logging (formerly their own "Client
+        # Options" page — merged in here since both are really just more
+        # terminal settings, not a separate concern) ---
+        group_paths = Adw.PreferencesGroup(title=_("Executable Paths"))
+        page_terminal.add(group_paths)
+
+        self.ssh_path_row = Adw.EntryRow(title=_("SSH Client Path"))
+        self.ssh_path_row.set_text(self.settings_manager.get("client.ssh_path"))
+        group_paths.add(self.ssh_path_row)
+
+        self.sshpass_path_row = Adw.EntryRow(title=_("sshpass Client Path"))
+        self.sshpass_path_row.set_text(self.settings_manager.get("client.sshpass_path"))
+        group_paths.add(self.sshpass_path_row)
+
+        self.telnet_path_row = Adw.EntryRow(title=_("Telnet Client Path"))
+        self.telnet_path_row.set_text(self.settings_manager.get("client.telnet_path"))
+        group_paths.add(self.telnet_path_row)
+
+        group_logging = Adw.PreferencesGroup(
+            title=_("Logging"),
+            description=_("Per-host \"Save session log\" (on that host's own edit page) still wins "
+                           "when set explicitly — the switch below just controls what every new "
+                           "connection starts with. Leave the directory empty to use the "
+                           ".config_path pointer's terminal_logs_path, or the config directory if "
+                           "that's empty too.")
+        )
+        page_terminal.add(group_logging)
+
+        # Per-host "Save session log" also covers the sidebar's "local"
+        # terminal and "+"-button tabs, which have no per-host page of
+        # their own to carry that switch at all.
         self.auto_save_log_row = Adw.SwitchRow(
             title=_("Automatically save session logs"),
             subtitle=_("Start every new terminal connection with logging already turned on")
         )
         self.auto_save_log_row.set_active(self.settings_manager.get("terminal.auto_save_log"))
-        group_behavior.add(self.auto_save_log_row)
+        group_logging.add(self.auto_save_log_row)
+
+        self.log_dir_row = Adw.EntryRow(title=_("Log Directory"))
+        self.log_dir_row.set_text(self.settings_manager.get("client.log_dir"))
+        log_dir_button = Gtk.Button(icon_name="folder-open-symbolic")
+        log_dir_button.set_valign(Gtk.Align.CENTER)
+        log_dir_button.set_tooltip_text(_("Choose a folder"))
+        log_dir_button.connect("clicked", self.on_choose_log_dir_clicked)
+        self.log_dir_row.add_suffix(log_dir_button)
+        group_logging.add(self.log_dir_row)
 
         # --- Watermark (the header-bar button next to the split buttons is
         # the same live on/off switch as the row below — either one flips
@@ -1236,43 +1269,6 @@ class SettingsDialog(Adw.Window):
                 widget.set_sensitive(enabled)
         self.watermark_enabled_row.connect("notify::active", _update_watermark_sensitivity)
         _update_watermark_sensitivity()
-
-        # --- Client Options Page ---
-        page_client = Adw.PreferencesPage()
-        page_client.set_title(_("Client Options"))
-        page_client.set_icon_name("network-wired-symbolic")
-
-        group_paths = Adw.PreferencesGroup(title=_("Executable Paths"))
-        page_client.add(group_paths)
-
-        self.ssh_path_row = Adw.EntryRow(title=_("SSH Client Path"))
-        self.ssh_path_row.set_text(self.settings_manager.get("client.ssh_path"))
-        group_paths.add(self.ssh_path_row)
-
-        self.sshpass_path_row = Adw.EntryRow(title=_("sshpass Client Path"))
-        self.sshpass_path_row.set_text(self.settings_manager.get("client.sshpass_path"))
-        group_paths.add(self.sshpass_path_row)
-
-        self.telnet_path_row = Adw.EntryRow(title=_("Telnet Client Path"))
-        self.telnet_path_row.set_text(self.settings_manager.get("client.telnet_path"))
-        group_paths.add(self.telnet_path_row)
-
-        group_logging = Adw.PreferencesGroup(
-            title=_("Logging"),
-            description=_("Used for hosts with \"Save session log\" enabled. Leave empty to use "
-                           "the .config_path pointer's terminal_logs_path, or the config directory "
-                           "if that's empty too.")
-        )
-        page_client.add(group_logging)
-
-        self.log_dir_row = Adw.EntryRow(title=_("Log Directory"))
-        self.log_dir_row.set_text(self.settings_manager.get("client.log_dir"))
-        log_dir_button = Gtk.Button(icon_name="folder-open-symbolic")
-        log_dir_button.set_valign(Gtk.Align.CENTER)
-        log_dir_button.set_tooltip_text(_("Choose a folder"))
-        log_dir_button.connect("clicked", self.on_choose_log_dir_clicked)
-        self.log_dir_row.add_suffix(log_dir_button)
-        group_logging.add(self.log_dir_row)
 
         # --- Sync Page ---
         page_sync = Adw.PreferencesPage()
@@ -2080,7 +2076,6 @@ class SettingsDialog(Adw.Window):
         self.stack.add_titled_with_icon(page_interface, "interface", _("General"), "preferences-desktop-appearance-symbolic")
         self.stack.add_titled_with_icon(page_shortcuts, "shortcuts", _("Shortcuts"), "preferences-desktop-keyboard-shortcuts-symbolic")
         self.stack.add_titled_with_icon(page_terminal, "terminal", _("Terminal"), "utilities-terminal-symbolic")
-        self.stack.add_titled_with_icon(page_client, "client", _("Client Options"), "network-wired-symbolic")
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
         self.stack.add_titled_with_icon(page_quickies, "quickies", _("Quickies"), "insert-text-symbolic")
         self.stack.add_titled_with_icon(page_sync, "sync", _("Sync"), "emblem-synchronizing-symbolic")
@@ -2090,7 +2085,7 @@ class SettingsDialog(Adw.Window):
         # top-level sidebar entries.
         self.stack.add_titled_with_icon(page_ai_scrolled, "ai", _("AI"), "dialog-messages-symbolic")
 
-        for page in (page_terminal, page_sftp, page_client, page_commands, page_interface, page_shortcuts, page_ai_shared, page_api, page_cli, page_sync):
+        for page in (page_terminal, page_sftp, page_commands, page_interface, page_shortcuts, page_ai_shared, page_api, page_cli, page_sync):
             _widen_preferences_clamp(page)
 
         for page in self.stack.get_pages():
@@ -2599,7 +2594,11 @@ class SettingsDialog(Adw.Window):
             self.close_on_disconnect_row.set_active(DEFAULT_SETTINGS["terminal.close_on_disconnect"])
             self.reconnect_prompt_username_row.set_active(DEFAULT_SETTINGS["terminal.reconnect_prompt_username"])
             self.inherit_cwd_row.set_active(DEFAULT_SETTINGS["terminal.inherit_cwd_for_new_local_tab"])
+            self.ssh_path_row.set_text(DEFAULT_SETTINGS["client.ssh_path"])
+            self.telnet_path_row.set_text(DEFAULT_SETTINGS["client.telnet_path"])
+            self.sshpass_path_row.set_text(DEFAULT_SETTINGS["client.sshpass_path"])
             self.auto_save_log_row.set_active(DEFAULT_SETTINGS["terminal.auto_save_log"])
+            self.log_dir_row.set_text(DEFAULT_SETTINGS["client.log_dir"])
             self.font_button.set_font(DEFAULT_SETTINGS["terminal.font"])
             
             default_scheme_key = DEFAULT_SETTINGS["terminal.color_scheme"]
@@ -2630,11 +2629,6 @@ class SettingsDialog(Adw.Window):
             self._clear_watermark_rule_rows()
             for rule in DEFAULT_SETTINGS.get("interface.watermark_rules", []):
                 self._add_watermark_rule_row(rule)
-        elif current_page_name == "client":
-            self.ssh_path_row.set_text(DEFAULT_SETTINGS["client.ssh_path"])
-            self.telnet_path_row.set_text(DEFAULT_SETTINGS["client.telnet_path"])
-            self.sshpass_path_row.set_text(DEFAULT_SETTINGS["client.sshpass_path"])
-            self.log_dir_row.set_text(DEFAULT_SETTINGS["client.log_dir"])
         elif current_page_name == "commands":
             self.commands_store.clear()
             default_commands = DEFAULT_SETTINGS.get("user_commands", [])

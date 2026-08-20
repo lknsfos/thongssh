@@ -324,12 +324,8 @@ msgid "Save session log"
 msgstr "Sitzungsprotokoll speichern"
 
 #: thongssh_gtk/dialogs.py:440
-msgid ""
-"Records every session to a file in the configured log directory (see "
-"Settings → Client Options)"
-msgstr ""
-"Zeichnet jede Sitzung in einer Datei im konfigurierten Protokollverzeichnis "
-"auf (siehe Einstellungen → Client-Optionen)"
+msgid "Records every session to a file in the configured log directory (see Settings → Terminal → Logging)"
+msgstr "Zeichnet jede Sitzung in einer Datei im konfigurierten Protokollverzeichnis auf (siehe Einstellungen → Terminal → Protokollierung)"
 
 #: thongssh_gtk/dialogs.py:444
 msgid "SSH Options"

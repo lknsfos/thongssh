@@ -321,11 +321,8 @@ msgid "Save session log"
 msgstr "שמירת יומן הפעלה"
 
 #: thongssh_gtk/dialogs.py:440
-msgid ""
-"Records every session to a file in the configured log directory (see "
-"Settings → Client Options)"
-msgstr ""
-"רושם כל הפעלה לקובץ בתיקיית היומנים המוגדרת (ראו הגדרות → אפשרויות לקוח)"
+msgid "Records every session to a file in the configured log directory (see Settings → Terminal → Logging)"
+msgstr "רושם כל הפעלה לקובץ בתיקיית היומנים המוגדרת (ראו הגדרות → טרמינל → רישום)"
 
 #: thongssh_gtk/dialogs.py:444
 msgid "SSH Options"

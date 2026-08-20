@@ -321,12 +321,8 @@ msgid "Save session log"
 msgstr "حفظ سجل الجلسة"
 
 #: thongssh_gtk/dialogs.py:440
-msgid ""
-"Records every session to a file in the configured log directory (see "
-"Settings → Client Options)"
-msgstr ""
-"يسجّل كل جلسة في ملف داخل مجلد السجلات المحدد (راجع الإعدادات ← خيارات "
-"العميل)"
+msgid "Records every session to a file in the configured log directory (see Settings → Terminal → Logging)"
+msgstr "يسجّل كل جلسة في ملف داخل مجلد السجلات المحدد (راجع الإعدادات ← الطرفية ← التسجيل)"
 
 #: thongssh_gtk/dialogs.py:444
 msgid "SSH Options"
