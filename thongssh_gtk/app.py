@@ -65,7 +65,19 @@ class ThongSSHApp(Adw.Application):
             logging.warning("Dock icon: pyobjc-framework-Cocoa not installed; skipping native Dock icon.")
             return
         icon_stem = SettingsManager().get("interface.icon")
-        icon_path = resource_path(f"icons/{icon_stem}.png")
+        # icons/<stem>.png (used everywhere else — GTK window icon, Linux
+        # hicolor/.desktop) has a soft alpha fade at the edges, by design:
+        # it's meant to blend into whatever's behind it, which is exactly
+        # what Linux docks/app grids do with it. The static macOS .app
+        # bundle icon (built from the same source, see build-macos.sh)
+        # looks fine despite that fade because LaunchServices auto-composites
+        # a neutral backdrop behind "incomplete" icons — but
+        # setApplicationIconImage_ here does no such compositing, so the
+        # exact same file would show the logo floating on pure transparency
+        # instead. icons/<stem>_dock.png is that same artwork with alpha
+        # forced fully opaque (RGB untouched) — matches what the bundle
+        # icon already looks like, macOS-only, Linux assets untouched.
+        icon_path = resource_path(f"icons/{icon_stem}_dock.png")
         image = NSImage.alloc().initWithContentsOfFile_(icon_path)
         if image is None:
             logging.warning(f"Dock icon: could not load image from {icon_path}")

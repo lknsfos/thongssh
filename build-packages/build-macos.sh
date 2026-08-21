@@ -139,7 +139,16 @@ ${ARCH_PREFIX} python -c "import paramiko" || { echo >&2 "🛑 paramiko is missi
 
 # 3. Prepare resources
 echo "🎨 Creating .icns icon..."
-ICON_SOURCE_PATH="thongssh_gtk/icons/thongssh.png"
+# thongssh.png has a soft alpha fade at its edges (by design — Linux docks
+# blend it into the desktop background). Building the .icns from it still
+# looks fine at rest, since LaunchServices auto-composites a neutral
+# backdrop behind "incomplete" icons — but the *running* app's Dock icon
+# (set at runtime via setApplicationIconImage_, see
+# app.py:apply_macos_dock_icon) gets no such compositing and would show
+# the logo floating on transparency instead of matching. thongssh_dock.png
+# is the same artwork with alpha forced fully opaque, macOS-only, so both
+# the bundle icon and the runtime override render identically.
+ICON_SOURCE_PATH="thongssh_gtk/icons/thongssh_dock.png"
 ICON_DEST_PATH="thongssh_gtk/icons/thongssh.icns"
 if [ ! -f "$ICON_SOURCE_PATH" ]; then
     echo "🛑 Icon not found for build: $ICON_SOURCE_PATH"
