@@ -1131,6 +1131,48 @@ class ThongSSHWindow(TerminalPaneWindow):
                 return tv
         return None
 
+    def _pane_tabview_under_pointer(self, exclude):
+        """Overrides TerminalPaneWindow's default (which has nothing else
+        to check) — see on_tabview_create_window's macOS workaround for
+        why this exists. Only considers panes actually part of the visible
+        Gtk.Paned tree right now (get_mapped()) — with e.g. split_mode
+        None, panes 1-3 still exist and are still valid Adw.TabView
+        objects, just parked off-tree, so a stale translate_coordinates
+        against one of those would be meaningless at best."""
+        display = self.get_display()
+        if display is None:
+            return None
+        seat = display.get_default_seat()
+        pointer = seat.get_pointer() if seat else None
+        surface = self.get_surface()
+        if pointer is None or surface is None:
+            return None
+        ok, px, py, _mask = surface.get_device_position(pointer)
+        if not ok:
+            return None
+        for tv in self.pane_tabviews:
+            if tv is exclude:
+                continue
+            box = self._pane_box_by_tabview.get(tv)
+            if box is None or not box.get_mapped():
+                continue
+            # translate_coordinates' return arity is inconsistent across
+            # GTK/PyGObject versions in the wild — some drop the leading
+            # success bool and just return (x, y), others keep (ok, x, y).
+            # Handle both rather than assume one (this crashed here once
+            # already — see on_tabview_create_window's docstring).
+            result = box.translate_coordinates(self, 0, 0)
+            if len(result) == 3:
+                ok, bx, by = result
+            else:
+                bx, by = result
+                ok = True
+            if not ok:
+                continue
+            if bx <= px <= bx + box.get_width() and by <= py <= by + box.get_height():
+                return tv
+        return None
+
     def _get_region_options(self):
         """The (key, label) regions selectable in Batch Command's div
         filter: the current split-mode's panes, PLUS one entry per

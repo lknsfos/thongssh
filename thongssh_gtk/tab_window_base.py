@@ -287,6 +287,14 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         copy_actions["userhost"].set_enabled(not is_local and has_user)
         self._populate_tab_copy_host_menu(None if is_local else host_config)
 
+    def _pane_tabview_under_pointer(self, exclude):
+        """Which of this window's OTHER live panes the pointer is currently
+        over, if any — used by on_tabview_create_window's macOS workaround
+        below. Default: none (a DetachedTabWindow only ever has the one
+        pane, `exclude` itself, so there's never another one to land in).
+        ThongSSHWindow overrides this to check its up-to-4 split panes."""
+        return None
+
     def on_tabview_create_window(self, tabview):
         """Handles Adw.TabView's "create-window" signal — fired when a tab
         is dragged out of its tab strip far enough to tear off into a new
@@ -296,7 +304,39 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         realized/mapped for the drag-out to complete visually, hence the
         present() here (not spelled out in adw_tab_view's own minimal
         signal contract, but needed in practice — an unpresented window
-        has no surface for GTK to position/complete the native DnD onto)."""
+        has no surface for GTK to position/complete the native DnD onto).
+
+        macOS workaround: AdwTabView's native cross-TabView drag hands the
+        dragged AdwTabPage across as a GObject-typed content value during
+        the underlying native (OS-level) drag round-trip. This project
+        already hit the macOS-Quartz-backend version of this exact bug
+        once before, with the old hand-rolled Gtk.Notebook panes (see git
+        history for _create_pane_notebook / _on_pane_tab_drop — a
+        GObject-typed DropTarget payload "didn't survive the drag
+        round-trip on macOS's Quartz backend"). AdwTabView's own internal
+        DnD hits the same wall: dropping a tab squarely onto one of this
+        window's OTHER panes still fails to be recognized as a valid
+        target there, and falls through to this "give up, tear off into a
+        new window" signal instead. Detect that specific case (pointer
+        genuinely over another live pane in the SAME window right now)
+        and hand back that pane's own TabView instead of a freshly created
+        one — wrapped defensively: this is returning something outside
+        this signal's documented contract (a TabView from an *existing*
+        window, not "a new window positioned as needed"), so if AdwTabView
+        or the target pane ever reacts badly to that in some situation
+        this hasn't been tested against, fall back to the always-worked
+        plain-detach behavior rather than let a raised exception (or an
+        unexpected no-op) take down the drag entirely — see the earlier,
+        crash-in-this-exact-spot regression this went through before the
+        fallback was added."""
+        if sys.platform == "darwin":
+            try:
+                target = self._pane_tabview_under_pointer(exclude=tabview)
+            except Exception:
+                logging.exception("_pane_tabview_under_pointer failed — falling back to a new window")
+                target = None
+            if target is not None:
+                return target
         new_window = self.get_application().create_detached_window()
         new_window.present()
         return new_window.tabview
