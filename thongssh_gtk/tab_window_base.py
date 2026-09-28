@@ -811,7 +811,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         return (bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift
                 and bool(is_alt) == want_alt and letter == want_letter)
 
-    def _keyval_shortcut_matches(self, settings_key, is_ctrl, is_alt, is_shift, keyval, check_shift=True):
+    def _keyval_shortcut_matches(self, settings_key, is_ctrl, is_alt, is_shift, keyval, keycode=None, check_shift=True):
         """Raw-keyval counterpart to _shortcut_matches, for shortcuts whose
         key isn't a plain Latin letter or digit — arrows, the backtick
         (`grave`) key, `<`/`>` — where physical-key/layout resolution isn't
@@ -829,7 +829,22 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         a real, reported bug (Alt+</Alt+> never fired on this system's
         layout). Arrows/grave don't have this problem (Shift+Up is a
         distinct, real combo from plain Up, both sharing one keyval), so
-        they keep the default of actually checking it."""
+        they keep the default of actually checking it.
+
+        check_shift=False ALSO switches key matching from the delivered
+        keyval to a physical-keycode resolution (needs `keycode`): holding
+        Option on macOS does real Unicode composition on punctuation keys
+        (Option+Shift+Comma can come out as some unrelated composed
+        symbol, not plain "<"), unlike Linux/X11 where Alt is a pure
+        modifier bit that never changes which character comma/period
+        produce. Comparing the delivered keyval directly against "<"/">"
+        would just never match on macOS — the key press falls through
+        entirely to the terminal instead (a real, reported bug). Resolving
+        by keycode instead asks "is this physical key even *capable* of
+        producing '<' at some unmodified level", ignoring whatever the
+        actual Option-composed keyval happened to be this time — the same
+        keycode-based approach _resolve_latin_letter already uses for
+        Ctrl+<letter>, generalized to punctuation."""
         accel = self.settings_manager.get(settings_key)
         if not accel:
             return False
@@ -839,7 +854,21 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         want_ctrl = bool(mods & Gdk.ModifierType.CONTROL_MASK)
         want_alt = bool(mods & Gdk.ModifierType.ALT_MASK)
         shift_ok = (bool(is_shift) == bool(mods & Gdk.ModifierType.SHIFT_MASK)) if check_shift else True
-        return bool(is_ctrl) == want_ctrl and shift_ok and bool(is_alt) == want_alt and keyval == want_keyval
+        if check_shift or keycode is None:
+            key_ok = keyval == want_keyval
+        else:
+            key_ok = keyval == want_keyval or self._keycode_produces(keycode, want_keyval)
+        return bool(is_ctrl) == want_ctrl and shift_ok and bool(is_alt) == want_alt and key_ok
+
+    def _keycode_produces(self, keycode, target_keyval):
+        """Whether the physical key at `keycode` is capable of producing
+        `target_keyval` at some shift level/group of the active layout —
+        see _keyval_shortcut_matches' check_shift=False branch above."""
+        display = self.get_display()
+        if display is None:
+            return False
+        success, _keys, keyvals = display.map_keycode(keycode)
+        return success and target_keyval in keyvals
 
     def _close_all_tabs_in_tabview(self, tabview):
         """Closes (killing any live session, same as the tab's own "x")

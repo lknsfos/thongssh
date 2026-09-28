@@ -12,7 +12,7 @@ import re
 import datetime
 
 from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS
-from .widgets import PositionGrid, set_split_button_active_style, ShortcutPicker
+from .widgets import PositionGrid, set_split_button_active_style, ShortcutPicker, install_shortcut_capture
 from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
 from .settings import DEFAULT_SETTINGS
 from .launcher_icon import apply_launcher_icon
@@ -918,6 +918,7 @@ class SettingsDialog(Adw.Window):
         self.parent_window = parent_window
         self.settings_manager = settings_manager
         self.keyring = KeyringManager()
+        install_shortcut_capture(self)
 
         self.set_default_size(800, 620)
 

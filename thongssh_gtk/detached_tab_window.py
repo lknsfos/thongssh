@@ -214,10 +214,10 @@ class DetachedTabWindow(TerminalPaneWindow):
         if self._shortcut_matches("shortcuts.rename_tab", is_ctrl, is_shift, letter, is_alt=is_alt):
             self.rename_active_tab()
             return True
-        if self._keyval_shortcut_matches("shortcuts.tab_prev", is_ctrl, is_alt, is_shift, keyval, check_shift=False):
+        if self._keyval_shortcut_matches("shortcuts.tab_prev", is_ctrl, is_alt, is_shift, keyval, keycode=keycode, check_shift=False):
             self._switch_tab(-1)
             return True
-        if self._keyval_shortcut_matches("shortcuts.tab_next", is_ctrl, is_alt, is_shift, keyval, check_shift=False):
+        if self._keyval_shortcut_matches("shortcuts.tab_next", is_ctrl, is_alt, is_shift, keyval, keycode=keycode, check_shift=False):
             self._switch_tab(1)
             return True
         # Closes every tab in this window's one pane — which, unlike the

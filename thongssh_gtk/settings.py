@@ -3,6 +3,7 @@
 
 import json
 import logging
+import sys
 from pathlib import Path
 import shutil
 from .colors import COLOR_SCHEMES
@@ -162,6 +163,40 @@ DEFAULT_SETTINGS = {
     "sync.last_sync_error": "", # empty = last sync attempt was clean
 }
 
+if sys.platform == "darwin":
+    # No arrow key combination reaches GTK at all on macOS, with or
+    # without modifiers — confirmed two different ways: a CAPTURE-phase
+    # window-level key controller (which reliably sees every other
+    # Alt-combo) logs zero output for Option+Arrow, and ShortcutPicker's
+    # own window-level capture (install_shortcut_capture, widgets.py)
+    # still can't record a bare arrow press either. That first, narrower
+    # theory (Option+Arrow specifically claimed by Cocoa's default text
+    # word/paragraph-navigation key bindings — the same interpretKeyEvents:
+    # machinery that makes Option-key Unicode composition work in the
+    # first place, see i18n.py/tab_window_base.py for the other bugs it
+    # caused) doesn't actually explain a PLAIN, unmodified arrow also
+    # going unseen, so the real interception must sit even earlier than
+    # that — before GDK generates a key event at all, not just before our
+    # own widgets see one. No amount of GTK-level controller/phase
+    # wrangling can reach a key event that's never generated to begin
+    # with. Arrow keys are simply unusable for custom shortcuts on macOS
+    # in this app; these defaults use the classic vim h/j/k/l directional
+    # letters instead, to sidestep the problem entirely, rather than a
+    # Control+Alt+Arrow variant that (also confirmed) is just as
+    # unrecordable. Deliberately NOT e/i/u/n/` (grave) — those are the
+    # standard US Mac layout's dead-key prefixes (´ˆ¨~`, e.g. Option+i
+    # starts a circumflex, waiting for a vowel to combine with), so Option
+    # held with any of THOSE doesn't produce a plain letter keyval either,
+    # same underlying trap as the arrow keys just in a narrower, letter-
+    # only form. h/j/k/l aren't in that set. This is exactly the kind of
+    # per-OS keybinding difference sync.sync_shortcuts (above) is already
+    # meant to keep from clobbering a Linux machine's plain Alt+Arrow, or
+    # vice versa.
+    DEFAULT_SETTINGS["shortcuts.focus_pane_up"] = "<Alt>k"
+    DEFAULT_SETTINGS["shortcuts.focus_pane_down"] = "<Alt>j"
+    DEFAULT_SETTINGS["shortcuts.focus_pane_left"] = "<Alt>h"
+    DEFAULT_SETTINGS["shortcuts.focus_pane_right"] = "<Alt>l"
+
 class SettingsManager:
     def __init__(self):
         self.settings = DEFAULT_SETTINGS.copy()
@@ -180,10 +215,48 @@ class SettingsManager:
             for key in self.settings:
                 if key in loaded_settings:
                     self.settings[key] = loaded_settings[key]
+            self._migrate_macos_focus_pane_shortcuts(loaded_settings)
         except (json.JSONDecodeError, IOError) as e:
             logging.error(f"Failed to load settings: {e}. Using defaults.")
             if SETTINGS_FILE.exists():
                 SETTINGS_FILE.rename(f"{SETTINGS_FILE}.bak")
+
+    def _migrate_macos_focus_pane_shortcuts(self, loaded_settings):
+        """A settings.json saved before the current h/j/k/l macOS default
+        (see DEFAULT_SETTINGS' darwin block above) already has an older,
+        since-discovered-broken value baked in from its very first save —
+        the "only update existing keys" load loop above just faithfully
+        copies that stale value back in, so the new platform default never
+        gets a chance to apply on its own. Two prior defaults existed
+        before this one (both turned out to never reach GTK on macOS at
+        all — plain arrows, then Control+Alt+Arrow), hence a list, not a
+        single value. Only touches a value that's *exactly* one of the
+        old hardcoded defaults, on the assumption that an exact match
+        means "never customized" rather than "user deliberately chose
+        this" — a real customization is left alone either way. Linux/
+        Windows are unaffected: DEFAULT_SETTINGS never had a darwin-only
+        override for these keys there, so none of old_defaults below is
+        ever darwin's actual current default off this platform and the
+        comparison always misses."""
+        if sys.platform != "darwin":
+            return
+        old_defaults = {
+            "shortcuts.focus_pane_up": ("<Alt>Up", "<Control><Alt>Up"),
+            "shortcuts.focus_pane_down": ("<Alt>Down", "<Control><Alt>Down"),
+            "shortcuts.focus_pane_left": ("<Alt>Left", "<Control><Alt>Left"),
+            "shortcuts.focus_pane_right": ("<Alt>Right", "<Control><Alt>Right"),
+        }
+        changed = False
+        for key, candidates in old_defaults.items():
+            # DEFAULT_SETTINGS[key] is guaranteed to already be the new
+            # h/j/k/l value here (the darwin block above patches it in at
+            # import time, before any SettingsManager exists), so this
+            # can't accidentally "migrate" a value that's already current.
+            if loaded_settings.get(key) in candidates:
+                self.settings[key] = DEFAULT_SETTINGS[key]
+                changed = True
+        if changed:
+            self.save()
 
     def save(self):
         try:

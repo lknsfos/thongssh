@@ -2643,7 +2643,18 @@ class ThongSSHWindow(TerminalPaneWindow):
         is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
         is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
         is_alt = modifier & Gdk.ModifierType.ALT_MASK
-        is_super = modifier & Gdk.ModifierType.SUPER_MASK
+        # There's no physical "Super" key on a Mac keyboard, and GTK's
+        # macOS backend doesn't fake one: Command is reported as GDK's
+        # Meta_L/Meta_R keyval (confirmed in GDK's own macOS keymap source,
+        # which maps Command's keycodes straight to Meta, the way Option's
+        # map to Alt) and sets META_MASK, never SUPER_MASK. A shortcut
+        # stored as "<Alt><Super>1" (split_close_1..4's default) would
+        # then never fire on macOS — nothing can produce that bit at all.
+        # Treating Meta as an alias for Super here (not the other way
+        # around — accelerator strings still say "Super") means Option+
+        # Command+1..4 satisfies it on macOS, while Linux/Windows keep
+        # working exactly as before off a real Super key.
+        is_super = modifier & (Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.META_MASK)
         letter = self._resolve_latin_letter(keyval, keycode) if (is_ctrl or is_alt) else None
 
         if self._shortcut_matches("shortcuts.close_tab", is_ctrl, is_shift, letter):
@@ -2674,10 +2685,10 @@ class ThongSSHWindow(TerminalPaneWindow):
         if self._shortcut_matches("shortcuts.rename_tab", is_ctrl, is_shift, letter, is_alt=is_alt):
             self.rename_active_tab()
             return True
-        if self._keyval_shortcut_matches("shortcuts.tab_prev", is_ctrl, is_alt, is_shift, keyval, check_shift=False):
+        if self._keyval_shortcut_matches("shortcuts.tab_prev", is_ctrl, is_alt, is_shift, keyval, keycode=keycode, check_shift=False):
             self._switch_tab(-1)
             return True
-        if self._keyval_shortcut_matches("shortcuts.tab_next", is_ctrl, is_alt, is_shift, keyval, check_shift=False):
+        if self._keyval_shortcut_matches("shortcuts.tab_next", is_ctrl, is_alt, is_shift, keyval, keycode=keycode, check_shift=False):
             self._switch_tab(1)
             return True
         if self._shortcut_matches("shortcuts.close_div", is_ctrl, is_shift, letter, is_alt=is_alt):

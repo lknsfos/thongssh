@@ -51,34 +51,44 @@ class ShortcutPicker(Gtk.Button):
         "changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
+    # Which instance (if any) is currently listening for a key combination
+    # — at most one at a time in practice (clicking a second picker while
+    # another is still listening just moves the "active" one). Checked by
+    # the window-level capture controller install_shortcut_capture sets up
+    # below; see there for why a plain per-widget controller isn't enough.
+    _active = None
+
     def __init__(self, accel=None):
         super().__init__()
         self.add_css_class("flat")
         self._accel = None
         self._listening = False
         self.set_accelerator(accel)
-
-        key_controller = Gtk.EventControllerKey.new()
-        key_controller.connect("key-pressed", self._on_key_pressed)
-        self.add_controller(key_controller)
         self.connect("clicked", self._on_clicked)
 
     def _on_clicked(self, *_args):
         self._listening = True
+        ShortcutPicker._active = self
         self.set_label(_("Press a key combination…"))
         self.grab_focus()
 
-    def _on_key_pressed(self, _controller, keyval, _keycode, state):
+    def _on_key_pressed(self, keyval, state):
+        """Called only via install_shortcut_capture's window-level
+        controller (below) while this picker is the active listener — see
+        there for why this isn't wired to a controller on the button
+        itself."""
         if not self._listening:
             return False
         if keyval == Gdk.KEY_Escape:
             self._listening = False
+            ShortcutPicker._active = None
             self._refresh_label()
             return True
         if keyval in _MODIFIER_ONLY_KEYVALS:
             return True  # not a full combination yet — keep listening
         mods = state & Gtk.accelerator_get_default_mod_mask()
         self._listening = False
+        ShortcutPicker._active = None
         self.set_accelerator(Gtk.accelerator_name(keyval, mods))
         return True
 
@@ -101,6 +111,40 @@ class ShortcutPicker(Gtk.Button):
                 self.set_label(Gtk.accelerator_get_label(keyval, mods))
                 return
         self.set_label(_("(none)"))
+
+
+def install_shortcut_capture(window):
+    """Call once on the toplevel window hosting any ShortcutPicker rows
+    (Settings -> Keyboard Shortcuts) — without this, arrow keys (and,
+    depending on the exact container, possibly Tab) can never actually be
+    recorded.
+
+    Why a plain per-widget Gtk.EventControllerKey on the button itself
+    (tried first, wasn't enough) doesn't work: ShortcutPicker rows live
+    inside an Adw.PreferencesGroup, which is really a Gtk.ListBox under
+    the hood, and Gtk.ListBox has its own built-in Up/Down-arrow handling
+    to move focus between rows. That's registered on the ListBox — an
+    ANCESTOR of the button — and CAPTURE-phase propagation always visits
+    ancestors before descendants, so the ListBox's own arrow handling
+    fires and consumes the key before a same-or-later-phase controller on
+    the button ever sees it, no matter what phase that one uses.
+
+    The fix has to sit at or above the ListBox instead: one CAPTURE-phase
+    controller on the window itself (the outermost ancestor of everything,
+    guaranteed to run first) that, while any ShortcutPicker is actively
+    listening (ShortcutPicker._active), forwards the raw key straight to
+    it and stops propagation right there — before it ever reaches the
+    ListBox's own navigation or anything else in between."""
+    controller = Gtk.EventControllerKey.new()
+    controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+
+    def on_key_pressed(_controller, keyval, _keycode, state):
+        if ShortcutPicker._active is None:
+            return False
+        return ShortcutPicker._active._on_key_pressed(keyval, state)
+
+    controller.connect("key-pressed", on_key_pressed)
+    window.add_controller(controller)
 
 
 def set_split_button_active_style(split_button, active):
