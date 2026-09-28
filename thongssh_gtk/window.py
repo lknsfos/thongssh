@@ -665,19 +665,69 @@ class ThongSSHWindow(TerminalPaneWindow):
         .watermark-toggle-active {
             background: alpha(currentColor, 0.07);
         }
-        /* Compact tab headers — the theme's own default notebook-tab
-           padding plus a full-size flat button for the close "x" adds up
-           to a lot of dead space per tab, most visible once there are
-           enough tabs to make the strip scrollable. These override that
-           down to just enough to stay clickable/legible. */
-        notebook > header > tabs > tab {
-            padding: 2px 4px;
-            min-height: 0;
-        }
-        .thongssh-tab-close {
+        /* Compact tab strip — the row's real height isn't capped by
+           `tab`/`tabbox`'s own min-height (a plain floor — content
+           already exceeds it, so lowering it alone does nothing, and
+           was confirmed live to do nothing across several attempts); it's
+           driven by the label's font metrics and the close/indicator
+           buttons' own default clickable-target sizing. Shrinking THOSE
+           is what actually reduces the row: */
+        tabbar .box {
             padding: 0;
-            min-width: 20px;
-            min-height: 20px;
+        }
+        tabbar tabbox {
+            min-height: 0;
+            padding-top: 1px;
+            padding-bottom: 1px;
+        }
+        tabbar tab {
+            min-height: 0;
+            padding: 2px 4px;
+        }
+        tabbar tab label {
+            font-size: 0.85em;
+        }
+        tabbar .tab-close-button,
+        tabbar .tab-indicator {
+            min-width: 18px;
+            min-height: 18px;
+            padding: 1px;
+        }
+        tabbar .tab-close-button image,
+        tabbar .tab-indicator image {
+            min-width: 12px;
+            min-height: 12px;
+        }
+        tabbar tab image {
+            min-width: 14px;
+            min-height: 14px;
+            -gtk-icon-size: 14px;
+        }
+        /* The "+" new-local-terminal button's own wrapper (.start-action)
+           turned out to be the REAL remaining bottleneck once the tab row
+           itself shrank below it — its default theme padding (6px 5px)
+           plus the flat image-button's own ~34px default target size add
+           up to 46px, taller than everything above once that got fixed.
+           Confirmed via widget.measure() (natural/minimum request, not
+           get_height()'s post-allocation/stretched size — measuring the
+           wrong one is what made earlier attempts here look like they had
+           no effect when they actually did, just not on the true
+           bottleneck). */
+        tabbar .start-action,
+        tabbar .end-action {
+            padding: 2px;
+        }
+        tabbar .start-action button,
+        tabbar .end-action button {
+            min-width: 18px;
+            min-height: 18px;
+            padding: 1px;
+        }
+        tabbar .start-action button image,
+        tabbar .end-action button image {
+            min-width: 14px;
+            min-height: 14px;
+            -gtk-icon-size: 14px;
         }
         /* Visible divider between the host tree and Quickies panels (see
            _build_left_panel_root) — two earlier attempts didn't read as a
