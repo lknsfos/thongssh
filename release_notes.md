@@ -2,15 +2,12 @@
 
 ### 🆕 What's New in 0.10.0
 
-Detachable tabs — the headline feature this release was built around — plus a round of tab-strip polish and Batch Command fixes that came out of using it:
+The tab strip has been rebuilt from the ground up, headlined by a feature people have been asking for:
 
-* **New: detachable tabs** — drag a tab out of its strip (or right-click a tab → "Detach") to pop it into its own minimal window, just a title bar with native close/minimize/maximize, no sidebar or menus. Drag that window's title bar onto any tab strip — the main window, either side of a split, or another detached window — to reattach it there. A lone tab in a detached window can't be drag-started at all (GTK's own tab bar refuses to let you drag away a window's last tab, so the window that most needs to reattach is the one case native drag can't do) — it gets an explicit "Attach to Main Window" button in its header bar instead.
-* **Fixed: Batch Command losing detached tabs from its list** once any split layout was active — it now correctly shows terminals from the main window's panes, any split region, and any detached window together.
-* **Batch Command: all tabs now start deselected** by default, so you don't accidentally send a command to a tab you didn't mean to. The input box now sends on Enter and inserts a newline on Shift+Enter, with a small caption underneath as a reminder.
-* **Fixed: disconnected tabs losing their strikethrough title** — they went back to showing only an offline icon during this release's tab-strip rework; the struck-through name is back.
-* **Tabs are compact and left-aligned again** — matches how the tab strip looked before this release, instead of stretching tabs to fill the available width.
-* **The tab strip is about 45% shorter by default**, leaving more room for the terminal itself. If that reads as too small, Settings → General → Tabs → "Tab bar height" makes it configurable — raising it adds breathing room around the tabs, it doesn't blow up the font or icons past their normal size (they only ever shrink, if you pick a height smaller than default).
-* Drag-to-detach/reattach is built on libadwaita's own native tab-drag mechanism and has been tested thoroughly on Linux; macOS's GTK backend has had unrelated drag quirks in the past, so treat this feature as provisional on macOS until confirmed there.
+* **New: detachable tabs** — drag a tab out of its strip (or right-click a tab → "Detach") to pop it into its own minimal window, just a title bar with native close/minimize/maximize, no sidebar or menus. Drag that window's title bar onto any tab strip — the main window, either side of a split, or another detached window — to reattach it there. A lone tab in a detached window gets an explicit "Attach to Main Window" button in its header bar, for when there's nothing left to drag it back with.
+* **New: resizable tab bar** — Settings → General → Tabs → "Tab bar height" lets you make the tab strip taller if the new compact default feels too small to click comfortably.
+* **Batch Command: all tabs now start deselected** by default, so you don't accidentally send a command to a tab you didn't mean to.
+* **Batch Command: Enter sends the command, Shift+Enter inserts a newline** instead.
 
 ### 🐛 What's New in 0.9.5.1
 
