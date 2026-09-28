@@ -1751,15 +1751,33 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
     def _set_tab_page_disconnected(self, page, disconnected):
         """Toggles the "disconnected" visual cue on a terminal tab's page —
         its session has ended but the tab itself was kept open (see
-        terminal.close_on_disconnect). Adw.TabPage titles are plain strings
-        (no strikethrough/rich-text API, unlike the old Gtk.Label-based tab
-        title), so this uses the indicator icon slot instead — a small
-        "network-offline" glyph next to the tab's own icon, with a tooltip
-        explaining it."""
+        terminal.close_on_disconnect). Adw.TabPage.set_title is a plain
+        string, no Pango markup/attributes (confirmed against libadwaita's
+        own adw-tab.ui template — the title is an AdwFadingLabel bound
+        straight to AdwTabPage.title with no use-markup), so real
+        strikethrough isn't available through the title property itself.
+        Unicode combining strikethrough (U+0336) inserted after every
+        character gets a visually struck-through title using nothing but
+        that plain string — the original clean title is stashed in
+        tab_data so it can be restored exactly, not just re-derived, once
+        reconnected. The indicator icon stays too as a second, distinct
+        cue (a glyph, not a replacement for the strikethrough)."""
         if page is None:
             return
-        page.set_indicator_icon(Gio.ThemedIcon.new("network-offline-symbolic") if disconnected else None)
-        page.set_indicator_tooltip(_("Disconnected") if disconnected else "")
+        tab_info = self.tab_data.get(page)
+        if disconnected:
+            clean_title = page.get_title() or ""
+            if tab_info is not None:
+                tab_info["_clean_title"] = clean_title
+            page.set_title("".join(ch + "̶" for ch in clean_title))
+            page.set_indicator_icon(Gio.ThemedIcon.new("network-offline-symbolic"))
+            page.set_indicator_tooltip(_("Disconnected"))
+        else:
+            clean_title = tab_info.pop("_clean_title", None) if tab_info is not None else None
+            if clean_title is not None:
+                page.set_title(clean_title)
+            page.set_indicator_icon(None)
+            page.set_indicator_tooltip("")
 
     def on_ssh_process_exited(self, terminal, status, page):
         """Handles the 'child-exited' signal from Vte.Terminal.
