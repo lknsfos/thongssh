@@ -1629,6 +1629,18 @@ class SettingsDialog(Adw.Window):
         )
         group_host_tree.add(self.search_position_row)
 
+        group_tabs = Adw.PreferencesGroup(title=_("Tabs"))
+        page_interface.add(group_tabs)
+
+        self.tabbar_height_row = Adw.SpinRow(
+            title=_("Tab bar height"),
+            subtitle=_("Compact by default — raise it if tabs feel too small to click"),
+            adjustment=Gtk.Adjustment(
+                value=self.settings_manager.get("interface.tabbar_height"), lower=20, upper=48, step_increment=1
+            )
+        )
+        group_tabs.add(self.tabbar_height_row)
+
         group_debug = Adw.PreferencesGroup(title=_("Debugging"))
         page_interface.add(group_debug)
 
@@ -2326,6 +2338,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("interface.language", language_code)
 
         self.settings_manager.set("interface.tree_row_striping", self.tree_row_striping_row.get_active())
+        self.settings_manager.set("interface.tabbar_height", int(self.tabbar_height_row.get_value()))
 
         search_position_map_rev = {0: "top", 1: "bottom"}
         self.settings_manager.set(
@@ -2453,6 +2466,11 @@ class SettingsDialog(Adw.Window):
 
         # Ditto for the search bar's position in the host panel.
         self.parent_window.apply_search_bar_position()
+
+        # And for the tab bar height — rebuild+reapply the shared CSS
+        # provider (setup_css is safe to call again, see its own docstring)
+        # so every open window's tab strip resizes immediately.
+        self.parent_window.setup_css()
 
         # And for the terminal color scheme — every already-open terminal
         # gets recolored immediately, not just the next new tab.
@@ -2705,6 +2723,7 @@ class SettingsDialog(Adw.Window):
                 default_language_index = 0
             self.language_row.set_selected(default_language_index)
             self.tree_row_striping_row.set_active(DEFAULT_SETTINGS["interface.tree_row_striping"])
+            self.tabbar_height_row.set_value(DEFAULT_SETTINGS["interface.tabbar_height"])
             search_position_map = {"top": 0, "bottom": 1}
             self.search_position_row.set_selected(
                 search_position_map.get(DEFAULT_SETTINGS["interface.host_search_position"], 1)

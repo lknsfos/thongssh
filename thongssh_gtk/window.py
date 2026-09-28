@@ -633,9 +633,118 @@ class ThongSSHWindow(TerminalPaneWindow):
         self._save_window_state(state)
         return False # Allow the window to close
 
+    def _tab_bar_css(self):
+        """Builds the "tabbar ..." CSS block, every pixel scaled off
+        interface.tabbar_height (Settings -> General). 26 is the baseline
+        this whole block was hand-tuned against (see setup_css's own
+        comment on that investigation) — scale=1 at the default reproduces
+        those exact numbers.
+
+        Two separate scales, not one: boxes/padding (sc) follow the full
+        ratio either way, so a taller setting actually gets taller rows.
+        Font/icon size (sci) is capped at 1.0 — never grown past their
+        normal/standard size, only shrunk below it when the chosen height
+        is smaller than the baseline. Growing text/icons past standard size
+        read as "everything got comically huge", not "the row got roomier",
+        which is what a user raising this setting actually wants: more
+        breathing room around normal-sized content, not blown-up glyphs."""
+        height = self.settings_manager.get("interface.tabbar_height")
+        scale = height / 26.0
+        scale_icon = min(scale, 1.0)
+
+        def sc(value):
+            return max(1, round(value * scale))
+
+        def sci(value):
+            return max(1, round(value * scale_icon))
+
+        font_em = max(0.5, round(0.85 * scale_icon, 2))
+
+        # A pane with zero open tabs never lays out an actual "tab" node at
+        # all (confirmed via a real widget-tree dump: its tabbox collapses
+        # to a near-zero natural size, indicator-gizmos only) — summing up
+        # scaled paddings/button sizes and hoping the with-tab and
+        # without-tab branches land on the same total by coincidence only
+        # worked at the original baseline (26px); at other heights they
+        # drifted apart by a couple px, same mismatch the user reported.
+        # Fixing it for real: pick one authoritative content height
+        # (tabbox_content) and force EVERY branch that can end up being the
+        # tallest one — the per-tab row, the always-present empty tabbox,
+        # and the always-present "+" (.start-action) wrapper — to that same
+        # explicit min-height, instead of deriving it from the sum of
+        # smaller pieces. Those pieces (close-button, icons, font) now only
+        # decide what's drawn *inside* that fixed-height row, not how tall
+        # the row itself ends up being.
+        pad = sc(1)
+        tabbox_content = max(1, height - 2 * pad)
+        return f"""
+        tabbar {{
+            min-height: {height}px;
+        }}
+        tabbar .box {{
+            padding: 0;
+        }}
+        tabbar tabbox {{
+            min-height: {tabbox_content}px;
+            padding-top: {pad}px;
+            padding-bottom: {pad}px;
+        }}
+        tabbar tab {{
+            min-height: {tabbox_content}px;
+            padding: 0 {sc(4)}px;
+        }}
+        tabbar tab label {{
+            font-size: {font_em}em;
+        }}
+        tabbar .tab-close-button,
+        tabbar .tab-indicator {{
+            min-width: {sc(18)}px;
+            min-height: {sc(18)}px;
+            padding: {sc(1)}px;
+        }}
+        tabbar .tab-close-button image,
+        tabbar .tab-indicator image {{
+            min-width: {sci(12)}px;
+            min-height: {sci(12)}px;
+        }}
+        tabbar tab image {{
+            min-width: {sci(14)}px;
+            min-height: {sci(14)}px;
+            -gtk-icon-size: {sci(14)}px;
+        }}
+        tabbar .start-action,
+        tabbar .end-action {{
+            min-height: {height}px;
+            padding: 0 {sc(2)}px;
+        }}
+        tabbar .start-action button,
+        tabbar .end-action button {{
+            min-width: {sc(18)}px;
+            min-height: {sc(18)}px;
+            padding: {sc(1)}px;
+        }}
+        tabbar .start-action button image,
+        tabbar .end-action button image {{
+            min-width: {sci(14)}px;
+            min-height: {sci(14)}px;
+            -gtk-icon-size: {sci(14)}px;
+        }}
+        """
+
     def setup_css(self):
-        """Applies custom CSS to the application."""
-        css_provider = Gtk.CssProvider()
+        """Applies custom CSS to the application. Re-callable: reuses the
+        same Gtk.CssProvider (added to the display exactly once) so this
+        can be invoked again from SettingsDialog.on_apply whenever
+        interface.tabbar_height changes, instead of stacking a fresh
+        provider on the display every time."""
+        if getattr(self, "_css_provider", None) is None:
+            self._css_provider = Gtk.CssProvider()
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(),
+                self._css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+        css_provider = self._css_provider
         css_data = """
         menuitem > label[label^=">_"] {
             -gtk-icon-source: none;
@@ -672,63 +781,6 @@ class ThongSSHWindow(TerminalPaneWindow):
            driven by the label's font metrics and the close/indicator
            buttons' own default clickable-target sizing. Shrinking THOSE
            is what actually reduces the row: */
-        tabbar .box {
-            padding: 0;
-        }
-        tabbar tabbox {
-            min-height: 0;
-            padding-top: 1px;
-            padding-bottom: 1px;
-        }
-        tabbar tab {
-            min-height: 0;
-            padding: 2px 4px;
-        }
-        tabbar tab label {
-            font-size: 0.85em;
-        }
-        tabbar .tab-close-button,
-        tabbar .tab-indicator {
-            min-width: 18px;
-            min-height: 18px;
-            padding: 1px;
-        }
-        tabbar .tab-close-button image,
-        tabbar .tab-indicator image {
-            min-width: 12px;
-            min-height: 12px;
-        }
-        tabbar tab image {
-            min-width: 14px;
-            min-height: 14px;
-            -gtk-icon-size: 14px;
-        }
-        /* The "+" new-local-terminal button's own wrapper (.start-action)
-           turned out to be the REAL remaining bottleneck once the tab row
-           itself shrank below it — its default theme padding (6px 5px)
-           plus the flat image-button's own ~34px default target size add
-           up to 46px, taller than everything above once that got fixed.
-           Confirmed via widget.measure() (natural/minimum request, not
-           get_height()'s post-allocation/stretched size — measuring the
-           wrong one is what made earlier attempts here look like they had
-           no effect when they actually did, just not on the true
-           bottleneck). */
-        tabbar .start-action,
-        tabbar .end-action {
-            padding: 2px;
-        }
-        tabbar .start-action button,
-        tabbar .end-action button {
-            min-width: 18px;
-            min-height: 18px;
-            padding: 1px;
-        }
-        tabbar .start-action button image,
-        tabbar .end-action button image {
-            min-width: 14px;
-            min-height: 14px;
-            -gtk-icon-size: 14px;
-        }
         /* Visible divider between the host tree and Quickies panels (see
            _build_left_panel_root) — two earlier attempts didn't read as a
            real divider: a bare margin-gap was too subtle (both panels
@@ -863,6 +915,7 @@ class ThongSSHWindow(TerminalPaneWindow):
             padding: 2px;
         }
         """
+        css_data += self._tab_bar_css()
         if sys.platform == "darwin":
             # Modern macOS clips every NSWindow to a rounded rect on all
             # four corners (not just the top, unlike GNOME's traditional
@@ -887,11 +940,6 @@ class ThongSSHWindow(TerminalPaneWindow):
             css_provider.load_from_data(css_data.encode("utf-8"))
         except TypeError:
             css_provider.load_from_data(css_data, -1)
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
 
     def rebuild_config_and_save(self):
         """Parses the Gtk.TreeStore and saves it to hosts.json."""
