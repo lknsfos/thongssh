@@ -1028,6 +1028,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         tab_bar = Adw.TabBar()
         tab_bar.set_view(tabview)
         tab_bar.set_autohide(False)
+        tab_bar.set_expand_tabs(False)  # compact, left-aligned — old Notebook look
 
         # "+" new-local-terminal button, packed as the tab bar's own START
         # action widget — same "always at the left edge" placement the old

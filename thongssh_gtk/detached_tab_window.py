@@ -93,6 +93,7 @@ class DetachedTabWindow(TerminalPaneWindow):
         self.tab_bar = Adw.TabBar()
         self.tab_bar.set_view(self.tabview)
         self.tab_bar.set_autohide(False)
+        self.tab_bar.set_expand_tabs(False)  # compact, left-aligned — old Notebook look
 
         new_local_btn = Gtk.Button(icon_name="list-add-symbolic")
         new_local_btn.set_tooltip_text(_("New local terminal"))
