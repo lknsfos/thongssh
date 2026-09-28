@@ -2757,8 +2757,8 @@ class BatchCommandDialog(Adw.Window):
         # A multi-row, auto-expanding box (grows with content up to
         # max_content_height, then scrolls) rather than a single-line Entry
         # — so a long command is visible in full instead of scrolling off
-        # to the side. Ctrl+Enter sends (see on_command_key_pressed); plain
-        # Enter inserts a newline, same as any other multi-line text input.
+        # to the side. Enter sends (see on_command_key_pressed);
+        # Shift+Enter inserts a newline for a genuinely multi-line command.
         self.command_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
         self.command_view.add_css_class("card")
         self.command_view.set_top_margin(6)
@@ -2779,12 +2779,21 @@ class BatchCommandDialog(Adw.Window):
         command_scroller.set_child(self.command_view)
         main_box.append(command_scroller)
 
+        command_hint = Gtk.Label(
+            label=_("Enter to send, Shift+Enter for a new line"),
+            xalign=0, css_classes=["dim-label", "caption"],
+        )
+        main_box.append(command_hint)
+
         self.close_after_send_check = Gtk.CheckButton(label=_("Close window after send"), active=True)
         main_box.append(self.close_after_send_check)
 
         # --- "Select / Deselect All" + the div filter dropdown beside it ---
         top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, margin_top=6)
-        self.select_all_check = Gtk.CheckButton(label=_("Select / Deselect All"), active=True)
+        # Off by default — sending to every open tab by accident (a
+        # misclick, or forgetting a stale selection from last time) is
+        # exactly the kind of mistake this dialog exists to prevent.
+        self.select_all_check = Gtk.CheckButton(label=_("Select / Deselect All"), active=False)
         self.select_all_check.connect("toggled", self.on_select_all_toggled)
         top_row.append(self.select_all_check)
 
@@ -2858,7 +2867,7 @@ class BatchCommandDialog(Adw.Window):
                 if region_key not in active_regions:
                     continue
             name = info.get("config", {}).get("name", _("Unnamed"))
-            check = Gtk.CheckButton(label=name, active=True)
+            check = Gtk.CheckButton(label=name, active=False)
             check.connect("toggled", self.on_individual_toggled)
             self.terminal_list_box.append(check)
             self.terminal_checks.append((check, page_widget))
@@ -2910,11 +2919,13 @@ class BatchCommandDialog(Adw.Window):
         self._syncing_select_all = False
 
     def on_command_key_pressed(self, controller, keyval, keycode, modifier):
-        """Ctrl+Enter sends, mirroring the old single-line Entry's
-        activate-on-Enter — plain Enter is left alone to insert a newline,
-        like any other multi-line text view."""
-        is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
-        if is_ctrl and keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+        """Plain Enter sends, mirroring the old single-line Entry's
+        activate-on-Enter. Shift+Enter inserts a newline instead, for a
+        genuinely multi-line command."""
+        is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            if is_shift:
+                return False  # let the TextView insert the newline itself
             self.on_send_clicked()
             return True
         return False
