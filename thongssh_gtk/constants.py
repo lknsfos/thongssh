@@ -4,7 +4,7 @@
 import sys
 import os
 
-__version__ = "0.10.0"
+__version__ = "0.10.1"
 
 APP_ID = "terminal.thongssh"
 

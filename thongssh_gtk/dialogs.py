@@ -123,8 +123,9 @@ class InputDialog(ResponseDialog):
     A simple dialog with a single text entry.
     Used for "Rename" and "Login Prompt".
     """
-    def __init__(self, parent, title, message, default_text="", is_password=False):
+    def __init__(self, parent, title, message, default_text="", is_password=False, allow_empty=False):
         super().__init__(transient_for=parent, modal=True)
+        self.allow_empty = allow_empty
         self.set_default_size(400, -1)
 
         header_bar = Adw.HeaderBar()
@@ -164,7 +165,7 @@ class InputDialog(ResponseDialog):
 
     def on_validate(self, entry):
         text = entry.get_text().strip()
-        self.ok_button.set_sensitive(len(text) > 0)
+        self.ok_button.set_sensitive(len(text) > 0 or self.allow_empty)
 
     def get_text(self):
         return self.entry.get_text().strip()
@@ -178,6 +179,101 @@ class InputDialog(ResponseDialog):
 
         self.connect("response", on_response)
         self.present()
+
+
+class RenameTabDialog(ResponseDialog):
+    """"Rename Tab" (Alt+R / a tab's own context menu / the terminal
+    right-click menu) — either appends a short tag after the tab's own
+    auto-managed name ("Add Tag", the default — e.g. "myserver [prod-db]",
+    for telling apart several tabs that would otherwise look identical),
+    or replaces that name outright ("Full Rename"). "Reset to Default"
+    clears whichever of those is active and closes, restoring the fully
+    automatic name. Escape closes the window without changing anything,
+    same as Cancel.
+
+    run_async's callback receives one of:
+    - None: cancelled (Escape or Cancel) — leave everything as it was.
+    - ("tag", text): apply text as the tag (empty clears it).
+    - ("full", text): apply text as a full rename (empty clears it).
+    - ("reset", None): explicit Reset to Default.
+    """
+    def __init__(self, parent, current_tag, current_custom_title):
+        super().__init__(transient_for=parent, modal=True)
+        self.set_default_size(420, -1)
+
+        header_bar = Adw.HeaderBar()
+        header_bar.set_title_widget(Adw.WindowTitle(title=_("Rename Tab")))
+        self.ok_button = Gtk.Button(label=_("OK"), css_classes=["suggested-action"])
+        self.ok_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.OK))
+        header_bar.pack_end(self.ok_button)
+        cancel_button = Gtk.Button(label=_("Cancel"))
+        cancel_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.CANCEL))
+        header_bar.pack_start(cancel_button)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main_box.append(header_bar)
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                               margin_top=24, margin_bottom=24, margin_start=12, margin_end=12)
+        main_box.append(content_box)
+        self.set_content(main_box)
+
+        # A simple two-way toggle — not an Adw.ComboRow/dropdown — since
+        # both options are equally common and worth seeing at a glance
+        # rather than hidden behind a click.
+        self.mode_tag_button = Gtk.ToggleButton(label=_("Add Tag"), active=True)
+        self.mode_full_button = Gtk.ToggleButton(label=_("Full Rename"), group=self.mode_tag_button)
+        mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0, halign=Gtk.Align.CENTER,
+                            css_classes=["linked"])
+        mode_box.append(self.mode_tag_button)
+        mode_box.append(self.mode_full_button)
+        content_box.append(mode_box)
+
+        self.entry = Gtk.Entry()
+        self.entry.connect("activate", lambda e: self.response(Gtk.ResponseType.OK))
+        content_box.append(self.entry)
+
+        # A distinct response id (not Cancel/OK) — Reset means "forget
+        # this tab ever had a tag or a full rename", not just "close
+        # without applying the text currently in the entry".
+        reset_button = Gtk.Button(label=_("Reset to Default"), halign=Gtk.Align.START)
+        reset_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.REJECT))
+        content_box.append(reset_button)
+
+        if current_custom_title:
+            self.mode_full_button.set_active(True)
+            self.entry.set_text(current_custom_title)
+        else:
+            self.mode_tag_button.set_active(True)
+            self.entry.set_text(current_tag or "")
+        self.entry.grab_focus()
+        self.entry.select_region(0, -1)
+
+        escape_controller = Gtk.EventControllerKey.new()
+        escape_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        escape_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(escape_controller)
+
+    def _on_key_pressed(self, controller, keyval, keycode, modifier):
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+    def run_async(self, callback):
+        def on_response(dialog, response):
+            if response == Gtk.ResponseType.OK:
+                mode = "full" if self.mode_full_button.get_active() else "tag"
+                result = (mode, self.entry.get_text().strip())
+            elif response == Gtk.ResponseType.REJECT:
+                result = ("reset", None)
+            else:
+                result = None  # Cancel or Escape
+            self.destroy()
+            callback(result)
+
+        self.connect("response", on_response)
+        self.present()
+
 
 class MessageDialog(ResponseDialog):
     """
@@ -1570,6 +1666,24 @@ class SettingsDialog(Adw.Window):
         page_interface.set_title(_("General"))
         page_interface.set_icon_name("preferences-desktop-appearance-symbolic")
 
+        group_appearance = Adw.PreferencesGroup(title=_("Appearance"))
+        page_interface.add(group_appearance)
+
+        self._theme_options = [
+            (_("System"), "system"),
+            (_("Light"), "light"),
+            (_("Dark"), "dark"),
+        ]
+        theme_labels = [label for label, value in self._theme_options]
+        self.theme_row = Adw.ComboRow(title=_("Theme"), model=Gtk.StringList.new(theme_labels))
+        current_theme = self.settings_manager.get("interface.theme")
+        try:
+            current_theme_index = [value for label, value in self._theme_options].index(current_theme)
+        except ValueError:
+            current_theme_index = 0
+        self.theme_row.set_selected(current_theme_index)
+        group_appearance.add(self.theme_row)
+
         group_logo = Adw.PreferencesGroup(title=_("Logo"))
         page_interface.add(group_logo)
 
@@ -1677,6 +1791,13 @@ class SettingsDialog(Adw.Window):
             ("shortcuts.find_in_terminal", _("Find in Terminal")),
             ("shortcuts.copy", _("Copy")),
             ("shortcuts.paste", _("Paste")),
+            ("shortcuts.toggle_side_panel", _("Toggle Side Panel")),
+            ("shortcuts.batch_command", _("Open Batch Command")),
+            ("shortcuts.detach_tab", _("Detach Tab")),
+            ("shortcuts.attach_tab", _("Attach Tab (in a Detached Window)")),
+            ("shortcuts.rename_tab", _("Rename Tab")),
+            ("shortcuts.tab_prev", _("Previous Tab")),
+            ("shortcuts.tab_next", _("Next Tab")),
         ]:
             row = Adw.ActionRow(title=label)
             picker = ShortcutPicker(self.settings_manager.get(key))
@@ -1684,6 +1805,55 @@ class SettingsDialog(Adw.Window):
             row.add_suffix(picker)
             row.add_suffix(self._build_clear_shortcut_button(picker))
             group_shortcuts.add(row)
+            self._shortcut_pickers[key] = picker
+
+        # --- Split-layout shortcuts: the plain ones match the split
+        # buttons (merge tabs from panes being removed into the pane that
+        # stays); the "Close Others" ones close those tabs instead. See
+        # window.py's _apply_split_mode.
+        group_split_shortcuts = Adw.PreferencesGroup(
+            title=_("Split Panes"),
+            description=_(
+                "The plain shortcuts merge tabs from panes being removed into the pane "
+                "that stays; the \"Close Others\" ones close those tabs instead."
+            ),
+        )
+        page_shortcuts.add(group_split_shortcuts)
+
+        for key, label in [
+            ("shortcuts.split_1", _("Single Pane")),
+            ("shortcuts.split_2", _("Split Left/Right")),
+            ("shortcuts.split_3", _("Split Top/Bottom")),
+            ("shortcuts.split_4", _("Split Grid (4 Panes)")),
+            ("shortcuts.split_close_1", _("Close Others: Single Pane")),
+            ("shortcuts.split_close_2", _("Close Others: Left/Right")),
+            ("shortcuts.split_close_3", _("Close Others: Top/Bottom")),
+            ("shortcuts.split_close_4", _("Close Others: Grid (4 Panes)")),
+        ]:
+            row = Adw.ActionRow(title=label)
+            picker = ShortcutPicker(self.settings_manager.get(key))
+            picker.set_valign(Gtk.Align.CENTER)
+            row.add_suffix(picker)
+            row.add_suffix(self._build_clear_shortcut_button(picker))
+            group_split_shortcuts.add(row)
+            self._shortcut_pickers[key] = picker
+
+        group_pane_nav_shortcuts = Adw.PreferencesGroup(title=_("Pane Navigation"))
+        page_shortcuts.add(group_pane_nav_shortcuts)
+
+        for key, label in [
+            ("shortcuts.focus_pane_up", _("Move Focus Up")),
+            ("shortcuts.focus_pane_down", _("Move Focus Down")),
+            ("shortcuts.focus_pane_left", _("Move Focus Left")),
+            ("shortcuts.focus_pane_right", _("Move Focus Right")),
+            ("shortcuts.close_div", _("Close All Tabs in Pane")),
+        ]:
+            row = Adw.ActionRow(title=label)
+            picker = ShortcutPicker(self.settings_manager.get(key))
+            picker.set_valign(Gtk.Align.CENTER)
+            row.add_suffix(picker)
+            row.add_suffix(self._build_clear_shortcut_button(picker))
+            group_pane_nav_shortcuts.add(row)
             self._shortcut_pickers[key] = picker
 
         # --- Quickies shortcuts: Ctrl+1..5 (paste) / Ctrl+Shift+1..5 (run)
@@ -2337,6 +2507,8 @@ class SettingsDialog(Adw.Window):
         language_code = self._language_options[self.language_row.get_selected()][0]
         self.settings_manager.set("interface.language", language_code)
 
+        theme_value = self._theme_options[self.theme_row.get_selected()][1]
+        self.settings_manager.set("interface.theme", theme_value)
         self.settings_manager.set("interface.tree_row_striping", self.tree_row_striping_row.get_active())
         self.settings_manager.set("interface.tabbar_height", int(self.tabbar_height_row.get_value()))
 
@@ -2463,6 +2635,10 @@ class SettingsDialog(Adw.Window):
 
         # Debug logging can take effect immediately, no restart needed.
         logging.getLogger().setLevel(logging.DEBUG if self.debug_mode_row.get_active() else logging.WARNING)
+
+        # And for the app theme — takes effect immediately across every
+        # open window, no restart needed (Adw.StyleManager's own job).
+        self.parent_window.get_application().apply_theme()
 
         # Ditto for the search bar's position in the host panel.
         self.parent_window.apply_search_bar_position()
@@ -2722,6 +2898,13 @@ class SettingsDialog(Adw.Window):
             except ValueError:
                 default_language_index = 0
             self.language_row.set_selected(default_language_index)
+            try:
+                default_theme_index = [value for _label, value in self._theme_options].index(
+                    DEFAULT_SETTINGS["interface.theme"]
+                )
+            except ValueError:
+                default_theme_index = 0
+            self.theme_row.set_selected(default_theme_index)
             self.tree_row_striping_row.set_active(DEFAULT_SETTINGS["interface.tree_row_striping"])
             self.tabbar_height_row.set_value(DEFAULT_SETTINGS["interface.tabbar_height"])
             search_position_map = {"top": 0, "bottom": 1}
@@ -2789,6 +2972,15 @@ class BatchCommandDialog(Adw.Window):
         command_key_controller = Gtk.EventControllerKey.new()
         command_key_controller.connect("key-pressed", self.on_command_key_pressed)
         self.command_view.add_controller(command_key_controller)
+
+        # Escape closes the whole window, regardless of which widget
+        # currently has focus (a checkbox, the Send button, ...) — CAPTURE
+        # phase so it fires before command_view's own bubble-phase
+        # controller above would ever see it.
+        escape_key_controller = Gtk.EventControllerKey.new()
+        escape_key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        escape_key_controller.connect("key-pressed", self.on_window_key_pressed)
+        self.add_controller(escape_key_controller)
 
         command_scroller = Gtk.ScrolledWindow()
         command_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -2937,15 +3129,32 @@ class BatchCommandDialog(Adw.Window):
         self.select_all_check.set_active(all_active)
         self._syncing_select_all = False
 
+    def on_window_key_pressed(self, controller, keyval, keycode, modifier):
+        """Escape closes the window — see the CAPTURE-phase controller in
+        __init__ for why this catches it regardless of focus."""
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
     def on_command_key_pressed(self, controller, keyval, keycode, modifier):
         """Plain Enter sends, mirroring the old single-line Entry's
         activate-on-Enter. Shift+Enter inserts a newline instead, for a
-        genuinely multi-line command."""
+        genuinely multi-line command.
+
+        Tab/Shift+Tab move keyboard focus to the next/previous widget
+        instead of Gtk.TextView's own default of inserting a literal tab
+        character — without this, a mouse-free user typing a command had
+        no way to reach the terminal checkboxes or Send button at all."""
         is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
         if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
             if is_shift:
                 return False  # let the TextView insert the newline itself
             self.on_send_clicked()
+            return True
+        if keyval in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
+            backward = is_shift or keyval == Gdk.KEY_ISO_Left_Tab
+            self.child_focus(Gtk.DirectionType.TAB_BACKWARD if backward else Gtk.DirectionType.TAB_FORWARD)
             return True
         return False
 

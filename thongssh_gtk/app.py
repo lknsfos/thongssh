@@ -40,6 +40,7 @@ _APP_TAB_ACTION_METHODS = {
     "tab-reconnect": "on_menu_tab_reconnect",
     "tab-duplicate": "on_menu_tab_duplicate",
     "tab-detach": "detach_tab_page",
+    "tab-rename": "rename_tab_page",
     "open-sftp": "open_sftp_for_tab_page",
     "open-ssh-from-tab": "on_menu_open_ssh_from_tab",
 }
@@ -75,6 +76,7 @@ class ThongSSHApp(Adw.Application):
         except gi.repository.GLib.GError:
             logging.debug("Resources already registered, skipping.")
         self._apply_native_font()
+        self.apply_theme()
         self.apply_macos_dock_icon()
         # Forced Arabic/Hebrew doesn't also flip GTK's own default text
         # direction for free — that's driven by the process locale, which
@@ -131,7 +133,7 @@ class ThongSSHApp(Adw.Application):
         if method is None:
             logging.warning(f"App tab action '{action.get_name()}': window has no method '{method_name}'.")
             return
-        if method_name == "detach_tab_page" or method_name == "open_sftp_for_tab_page":
+        if method_name in ("detach_tab_page", "open_sftp_for_tab_page", "rename_tab_page"):
             method(page)
         else:
             method(None, None, page=page)
@@ -151,6 +153,26 @@ class ThongSSHApp(Adw.Application):
         menu-driven path presents explicitly after its own transfer_page
         call)."""
         return DetachedTabWindow(application=self)
+
+    def apply_theme(self):
+        """Applies interface.theme (Settings -> General -> Appearance) to
+        libadwaita's own app-wide style manager. Called once at startup and
+        again from SettingsDialog.on_apply for an immediate live switch —
+        Adw.StyleManager handles restyling every already-open window on its
+        own, no per-window wiring needed.
+
+        FORCE_*, not PREFER_* — confirmed live on GNOME (which reports
+        system-supports-color-schemes=True) that PREFER_LIGHT/PREFER_DARK
+        are only weak hints there and lose outright to the desktop's own
+        light/dark portal setting, silently making "Light"/"Dark" a no-op
+        whenever they disagree with it. FORCE_* is the only pair that
+        actually overrides the system choice, which is the entire point of
+        offering this as an explicit setting."""
+        scheme = {
+            "light": Adw.ColorScheme.FORCE_LIGHT,
+            "dark": Adw.ColorScheme.FORCE_DARK,
+        }.get(self.settings_manager.get("interface.theme"), Adw.ColorScheme.DEFAULT)
+        Adw.StyleManager.get_default().set_color_scheme(scheme)
 
     def apply_macos_dock_icon(self):
         # GTK's icon-theme machinery (set_icon_name, etc.) has no reach into

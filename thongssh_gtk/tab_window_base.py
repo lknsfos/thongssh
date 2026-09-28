@@ -29,7 +29,7 @@ from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio
 
 from .config import CONFIG_DIR
 from .paths import resolve_log_dir
-from .dialogs import InputDialog
+from .dialogs import InputDialog, RenameTabDialog
 from .send_file import SendFileDialog, guess_remote_cwd
 from .colors import get_scheme_colors
 from .i18n import _
@@ -184,6 +184,74 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         if select:
             tabview.set_selected_page(page)
         return page
+
+    def _effective_display_name(self, tab_info):
+        """The tab's name before the "N: " position prefix and the
+        disconnected strikethrough — tab_data["custom_title"] (a "Full
+        Rename", see rename_tab_page) wins outright over ["base_title"]
+        (the plain, auto-managed name — "local: ~", a host's own name,
+        kept live-updated by e.g. _tick_local_cwd); an optional ["tag"] is
+        appended in [brackets] on top of either one. Also what $name
+        resolves to in watermarks/Quicky templates (see _render_tab_title
+        syncing tab_data["config"]["name"] to this same value) — so a tag
+        or rename shows up there too, not just in the tab strip."""
+        name = tab_info.get("custom_title") or tab_info.get("base_title") or ""
+        tag = tab_info.get("tag")
+        if tag:
+            name = f"{name} [{tag}]"
+        return name
+
+    def _render_tab_title(self, tabview, page, position=None):
+        """Recomputes and applies one tab's displayed title from its
+        stored pieces: _effective_display_name(tab_info), its 1-based
+        position within tabview (so it lines up with Adw.TabView's own
+        native Alt+1..9 switch-to-tab-N shortcuts), and whether it's
+        currently marked disconnected. This is the one place all of those
+        combine — every call site that used to call page.set_title(...)
+        directly now updates the relevant piece of tab_data and calls this
+        (or _renumber_tabview) instead.
+
+        Also keeps tab_data["config"]["name"] (what $name resolves to
+        elsewhere) in sync with the same name, refreshing the watermark
+        when it actually changed — this is the one place THAT happens too
+        now, so a rename/tag change is reflected there automatically
+        without every caller needing to remember to do it separately.
+
+        position=None (the default) means "figure it out by scanning
+        tabview" — callers that already know it from their own loop (see
+        _renumber_tabview) can skip that scan by passing it directly."""
+        tab_info = self.tab_data.get(page)
+        if tab_info is None:
+            return
+        if position is None and tabview is not None:
+            position = next(
+                (i for i in range(tabview.get_n_pages()) if tabview.get_nth_page(i) is page), None
+            )
+        name = self._effective_display_name(tab_info)
+        title = f"{position + 1}: {name}" if position is not None else name
+        if tab_info.get("disconnected"):
+            title = "".join(ch + "̶" for ch in title)
+        page.set_title(title)
+
+        config = tab_info.get("config")
+        if config is not None and config.get("name") != name:
+            config["name"] = name
+            self._update_watermark_for_tab(page)
+
+    def _renumber_tabview(self, tabview, *_signal_args):
+        """Re-renders every page's title in one TabView — needed whenever
+        the pages themselves or their order changes (added, closed, drag-
+        reordered, or transferred to/from another TabView), since the "N:"
+        prefix _render_tab_title adds depends on each page's live position.
+        Connected to every pane's/detached window's own TabView "page-
+        attached"/"page-detached"/"page-reordered" signals (see
+        _create_pane_tabview and DetachedTabWindow.__init__) — those all
+        share this same (AdwTabPage, gint) signature, so it doubles as
+        their handler directly."""
+        if tabview is None:
+            return
+        for i in range(tabview.get_n_pages()):
+            self._render_tab_title(tabview, tabview.get_nth_page(i), position=i)
 
     # --- Adw.TabView signal handlers (connected once per TabView, by
     # whichever subclass creates it) ---
@@ -362,7 +430,8 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         tabview = self._get_active_tabview()
         page = self._create_tab_page(tabview, sftp_view, "folder-remote-symbolic", host_config['name'])
         sftp_view.grab_focus()
-        self.tab_data[page] = {"type": "sftp", "config": host_config}
+        self.tab_data[page] = {"type": "sftp", "config": host_config, "base_title": host_config['name'], "tag": None}
+        self._renumber_tabview(tabview)
         return page
 
     def open_sftp_for_tab_page(self, page):
@@ -424,6 +493,50 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         new_window = self.get_application().create_detached_window()
         src_tabview.transfer_page(page, new_window.tabview, 0)
         new_window.present()
+
+    def rename_tab_page(self, page):
+        """app.tab-rename trampoline target (app.py) for the tab context
+        menu's "Rename Tab" item — RenameTabDialog either appends a short
+        tag in [brackets] after the tab's own name (e.g. "myserver
+        [prod-db]", the default) or replaces it outright, to tell apart
+        several tabs that would otherwise look identical (the same server
+        connected more than once, or the same local directory open in
+        more than one tab). Persists in tab_data (not just the displayed
+        title), so it survives whatever else re-renders the title later —
+        cwd changes, reconnects, position renumbering — and is mirrored
+        into tab_data["config"]["name"] (see _render_tab_title), so
+        watermarks and Quicky templates pick it up too."""
+        if page is None:
+            return
+        tab_info = self.tab_data.get(page)
+        if tab_info is None:
+            return
+        dialog = RenameTabDialog(self, tab_info.get("tag"), tab_info.get("custom_title"))
+        def on_response(result):
+            if result is None:
+                return  # cancelled
+            mode, text = result
+            if mode == "reset":
+                tab_info["tag"] = None
+                tab_info["custom_title"] = None
+            elif mode == "tag":
+                tab_info["tag"] = text or None
+                tab_info["custom_title"] = None
+            elif mode == "full":
+                tab_info["custom_title"] = text or None
+                tab_info["tag"] = None
+            self._render_tab_title(self._find_tabview_for_page(page), page)
+        dialog.run_async(on_response)
+
+    def rename_active_tab(self):
+        """Alt+R and the terminal right-click menu's own "Rename Tab" item
+        (win.rename-tab) both mean "the currently active tab" — unlike the
+        tab strip's own context menu item (app.tab-rename), which targets
+        whichever tab was actually right-clicked, not necessarily the
+        active one."""
+        tabview = self._get_active_tabview()
+        page = tabview.get_selected_page() if tabview is not None else None
+        self.rename_tab_page(page)
 
     def on_menu_tab_disconnect(self, action, param, page=None):
         """Closes the given tab (or the active one) — app.tab-disconnect /
@@ -542,6 +655,10 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         action_find_in_terminal.connect("activate", self.on_menu_find_in_terminal)
         self.add_action(action_find_in_terminal)
 
+        action_rename_tab = Gio.SimpleAction.new("rename-tab", None)
+        action_rename_tab.connect("activate", lambda a, p: self.rename_active_tab())
+        self.add_action(action_rename_tab)
+
         # Stateful (checkbox) action — see on_terminal_right_click for how
         # its state/enabled are kept in sync with the right-clicked tab.
         action_save_log_tab = Gio.SimpleAction.new_stateful("save-log-tab", None, GLib.Variant.new_boolean(False))
@@ -553,6 +670,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         terminal_menu.append(_("Paste"), "win.paste-clipboard")
         terminal_menu.append(_("Send File..."), "win.send-file")
         terminal_menu.append(_("Find... (Ctrl+Shift+F)"), "win.find-in-terminal")
+        terminal_menu.append(_("Rename Tab"), "win.rename-tab")
         terminal_menu.append(_("Save log"), "win.save-log-tab")
         self.popover_terminal = Gtk.PopoverMenu.new_from_model(terminal_menu)
         self.popover_terminal.connect("closed", self.on_popover_terminal_closed)
@@ -574,6 +692,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         tab_menu_model.append(_("Reconnect"), "app.tab-reconnect")
         tab_menu_model.append(_("Duplicate"), "app.tab-duplicate")
         tab_menu_model.append(_("Detach"), "app.tab-detach")
+        tab_menu_model.append(_("Rename Tab"), "app.tab-rename")
         tab_menu_model.append(_("Connect SFTP"), "app.open-sftp")
         tab_menu_model.append(_("Connect SSH"), "app.open-ssh-from-tab")
         self.tab_copy_host_menu = Gio.Menu()
@@ -598,6 +717,23 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         if page is None:
             return
         tabview.close_page(page)
+
+    def _switch_tab(self, direction):
+        """Alt+< / Alt+> — selects the previous (-1) or next (+1) tab
+        within the active pane, wrapping around at either end. Adw.TabView
+        has its own native Alt+1..9/Alt+0 (switch to tab by position) and
+        Ctrl+Page Up/Down (previous/next) shortcuts already; this is an
+        additional pair some users specifically asked for, not a
+        replacement for those."""
+        tabview = self._get_active_tabview()
+        if tabview is None:
+            return
+        n = tabview.get_n_pages()
+        if n < 2:
+            return
+        current = tabview.get_selected_page()
+        index = next((i for i in range(n) if tabview.get_nth_page(i) is current), 0)
+        tabview.set_selected_page(tabview.get_nth_page((index + direction) % n))
 
     def _on_right_press_guard(self, gesture, n_press, x, y):
         """Generic right-click press guard for terminal and tab gestures.
@@ -641,17 +777,23 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                 return chr(kv).lower()
         return None
 
-    def _shortcut_matches(self, settings_key, is_ctrl, is_shift, letter):
+    def _shortcut_matches(self, settings_key, is_ctrl, is_shift, letter, is_alt=False):
         """Whether the just-pressed combination (already broken down into
-        is_ctrl/is_shift/the physical key's resolved Latin letter — see
-        on_window_key_pressed/on_terminal_key_pressed) matches the
+        is_ctrl/is_shift/is_alt/the physical key's resolved Latin letter —
+        see on_window_key_pressed/on_terminal_key_pressed) matches the
         configurable shortcut stored under settings_key (a Gtk accelerator
         name, e.g. "<Control>w" — see Settings -> General -> Keyboard
         Shortcuts). Re-reads and re-parses the setting on every call
         rather than caching: keypresses are infrequent enough for a plain
         string parse to be a non-issue, and this way a change made in
         Settings (or pulled in by Sync) takes effect on the very next
-        keypress with no extra wiring needed to invalidate a cache."""
+        keypress with no extra wiring needed to invalidate a cache.
+
+        is_alt defaults to False rather than being read off `modifier`
+        unconditionally at every call site — none of the shortcuts that
+        predate Alt-based ones (close_tab, copy, paste, ...) ever bind Alt,
+        so their callers simply don't pass it, same net effect with less
+        churn at each of those call sites."""
         accel = self.settings_manager.get(settings_key)
         if not accel:
             return False
@@ -660,12 +802,56 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
             return False
         want_ctrl = bool(mods & Gdk.ModifierType.CONTROL_MASK)
         want_shift = bool(mods & Gdk.ModifierType.SHIFT_MASK)
+        want_alt = bool(mods & Gdk.ModifierType.ALT_MASK)
         want_letter = None
         if Gdk.KEY_a <= keyval <= Gdk.KEY_z:
             want_letter = chr(keyval)
         elif Gdk.KEY_A <= keyval <= Gdk.KEY_Z:
             want_letter = chr(keyval).lower()
-        return bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift and letter == want_letter
+        return (bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift
+                and bool(is_alt) == want_alt and letter == want_letter)
+
+    def _keyval_shortcut_matches(self, settings_key, is_ctrl, is_alt, is_shift, keyval, check_shift=True):
+        """Raw-keyval counterpart to _shortcut_matches, for shortcuts whose
+        key isn't a plain Latin letter or digit — arrows, the backtick
+        (`grave`) key, `<`/`>` — where physical-key/layout resolution isn't
+        needed since these keyvals don't vary across layouts the way
+        letters do. Shared here (not window.py) since DetachedTabWindow
+        needs it too (tab_prev/tab_next).
+
+        check_shift=False for symbol keys like `<`/`>` whose own keyval
+        already IS the shifted one — GDK delivers the post-shift keyval
+        (e.g. "less"), but whether producing it needs Shift physically
+        held varies by keyboard layout (US: Shift+comma; some European
+        layouts: an unshifted dedicated key). Comparing is_shift against a
+        fixed want_shift derived from a hardcoded accelerator string
+        would work on one kind of layout and silently fail on the other —
+        a real, reported bug (Alt+</Alt+> never fired on this system's
+        layout). Arrows/grave don't have this problem (Shift+Up is a
+        distinct, real combo from plain Up, both sharing one keyval), so
+        they keep the default of actually checking it."""
+        accel = self.settings_manager.get(settings_key)
+        if not accel:
+            return False
+        success, want_keyval, mods = Gtk.accelerator_parse(accel)
+        if not success:
+            return False
+        want_ctrl = bool(mods & Gdk.ModifierType.CONTROL_MASK)
+        want_alt = bool(mods & Gdk.ModifierType.ALT_MASK)
+        shift_ok = (bool(is_shift) == bool(mods & Gdk.ModifierType.SHIFT_MASK)) if check_shift else True
+        return bool(is_ctrl) == want_ctrl and shift_ok and bool(is_alt) == want_alt and keyval == want_keyval
+
+    def _close_all_tabs_in_tabview(self, tabview):
+        """Closes (killing any live session, same as the tab's own "x")
+        every open tab in one pane — shared by the "close all tabs in this
+        pane" shortcut and the split shortcuts' "close others" variant
+        (see window.py's _apply_split_mode). The page list is materialized
+        up front since close_page shifts every later index as each one is
+        removed."""
+        if tabview is None:
+            return
+        for page in [tabview.get_nth_page(i) for i in range(tabview.get_n_pages())]:
+            tabview.close_page(page)
 
     def on_terminal_key_pressed(self, controller, keyval, keycode, modifier):
         """Handles key presses directly on the Vte.Terminal widget."""
@@ -1243,13 +1429,14 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
             new_name = f"local: {self._dir_short_label(cwd)}"
             tab_page = tab_info.get("tab_page")
             if tab_page is not None:
-                tab_page.set_title(new_name)
-            # Keep config["name"] in sync too — it's what $name in the
-            # watermark template (and any Quicky/command template) actually
-            # reads, and it was otherwise frozen at whatever directory the
-            # tab started in, never reflecting a `cd` afterwards.
-            tab_info["config"]["name"] = new_name
-            self._update_watermark_for_tab(page)
+                tab_info["base_title"] = new_name
+                # Also keeps config["name"] (what $name in the watermark/
+                # Quicky templates reads) and the watermark itself in sync
+                # — see _render_tab_title/_effective_display_name. A tag or
+                # full rename (tab_data["tag"]/["custom_title"]) still wins
+                # over this plain cwd-derived name there, exactly like it
+                # already does in the tab strip itself.
+                self._render_tab_title(self._find_tabview_for_page(tab_page), tab_page)
         return True
 
     def _stop_local_cwd_tracking(self, page):
@@ -1704,8 +1891,9 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                 self.tab_data[page] = {
                     "type": "terminal", "config": resolved_config, "log_path": None,
                     "watermark_label": watermark_label, "tab_page": page,
-                    "disconnected": False,
+                    "disconnected": False, "base_title": config['name'], "tag": None,
                 }
+                self._renumber_tabview(tabview)
                 terminal.connect("child-exited", self.on_ssh_process_exited, page)
                 # Per-host "save_log" (set on the host's own edit page) wins
                 # when present; terminal.auto_save_log covers everything
@@ -1756,28 +1944,24 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         own adw-tab.ui template — the title is an AdwFadingLabel bound
         straight to AdwTabPage.title with no use-markup), so real
         strikethrough isn't available through the title property itself.
-        Unicode combining strikethrough (U+0336) inserted after every
-        character gets a visually struck-through title using nothing but
-        that plain string — the original clean title is stashed in
-        tab_data so it can be restored exactly, not just re-derived, once
-        reconnected. The indicator icon stays too as a second, distinct
-        cue (a glyph, not a replacement for the strikethrough)."""
+        _render_tab_title applies Unicode combining strikethrough (U+0336)
+        over the composed (numbered + tagged) title instead — just flip
+        the flag here and re-render, no separate clean-title stash needed
+        (tab_data["base_title"]/["tag"] already ARE that clean source).
+        The indicator icon stays too as a second, distinct cue (a glyph,
+        not a replacement for the strikethrough)."""
         if page is None:
             return
         tab_info = self.tab_data.get(page)
+        if tab_info is not None:
+            tab_info["disconnected"] = disconnected
         if disconnected:
-            clean_title = page.get_title() or ""
-            if tab_info is not None:
-                tab_info["_clean_title"] = clean_title
-            page.set_title("".join(ch + "̶" for ch in clean_title))
             page.set_indicator_icon(Gio.ThemedIcon.new("network-offline-symbolic"))
             page.set_indicator_tooltip(_("Disconnected"))
         else:
-            clean_title = tab_info.pop("_clean_title", None) if tab_info is not None else None
-            if clean_title is not None:
-                page.set_title(clean_title)
             page.set_indicator_icon(None)
             page.set_indicator_tooltip("")
+        self._render_tab_title(self._find_tabview_for_page(page), page)
 
     def on_ssh_process_exited(self, terminal, status, page):
         """Handles the 'child-exited' signal from Vte.Terminal.

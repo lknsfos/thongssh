@@ -1,5 +1,16 @@
 # Release Notes
 
+### 🆕 What's New in 0.10.1
+
+Keyboard-driven pane/tab management, an app-wide theme switch, and a proper tab rename:
+
+* **New: App theme** — Settings → General → Appearance → Theme (System/Light/Dark) switches ThongSSH's own light/dark look immediately, independent of your desktop's theme.
+* **New: Rename Tab** (right-click a tab or the terminal itself, or Alt+R) — "Add Tag" appends a short tag after the tab's own name (e.g. "myserver [prod-db]"), useful when several tabs would otherwise look identical; "Full Rename" replaces the name outright; "Reset to Default" clears either one. Watermarks and `$name` in Quicky/command templates pick up the tag or rename too, not just the tab title.
+* **New: tabs are numbered** ("1: myserver", "2: local: ~", ...) so it's obvious which tab each of Adw's native Alt+1–9 switch-to-tab shortcuts jumps to.
+* **New: a full set of keyboard shortcuts for pane/tab management** (all rebindable in Settings → Shortcuts): toggle the side panel, open Batch Command, split into 1/2/4 panes (plain, and "close others" variants), move focus between panes, close every tab in a pane, detach/attach a tab, and switch to the previous/next tab.
+* **Fixed: Batch Command's command box trapped keyboard focus** — Tab inserted a literal tab character instead of moving to the next control, so a mouse-free user had no way to reach the terminal checkboxes or the Send button.
+* **Fixed: Batch Command didn't close on Escape.**
+
 ### 🆕 What's New in 0.10.0
 
 The tab strip has been rebuilt from the ground up, headlined by a feature people have been asking for:

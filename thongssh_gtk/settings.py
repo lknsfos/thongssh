@@ -32,6 +32,7 @@ DEFAULT_SETTINGS = {
     "terminal.inherit_cwd_for_new_local_tab": True, # Whether the "+" new-local-terminal button starts in the current tab's working directory instead of always $HOME
     "terminal.auto_save_log": False, # Whether every new terminal connection (host or local) starts with session logging already on, instead of needing the per-host switch or the terminal's own "Save log" menu item by hand
     "terminal.log_skip_interactive_screens": True, # Whether full-screen TUI redraws (vim, mc, tmux, htop, less, ...) are detected and left out of the session log instead of dumping the whole screen on every keystroke — see _tick_session_log's heuristic in window.py
+    "interface.theme": "system", # "system", "light", or "dark" — the app's own libadwaita theme (Adw.StyleManager), not to be confused with terminal.color_scheme (the terminal's own text/background palette)
     "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
     "interface.language": "system", # "system" (follow the OS/locale, the normal gettext default) or a code from i18n.LANGUAGES — takes effect on next launch, see i18n.py
     "interface.tree_row_striping": False,
@@ -49,6 +50,38 @@ DEFAULT_SETTINGS = {
     "shortcuts.find_in_terminal": "<Control><Shift>f",
     "shortcuts.copy": "<Control><Shift>c",
     "shortcuts.paste": "<Control><Shift>v",
+    "shortcuts.toggle_side_panel": "<Control>grave", # Alt+` was the original choice, but that's GNOME's own window-switcher shortcut on some setups — Ctrl+` doesn't collide
+    "shortcuts.batch_command": "<Alt>b",
+    "shortcuts.detach_tab": "<Alt>d",
+    "shortcuts.attach_tab": "<Alt>a", # only acts inside a detached tab window — see DetachedTabWindow.on_window_key_pressed
+    "shortcuts.rename_tab": "<Alt>r",
+    "shortcuts.tab_prev": "<Alt>less", # additional to Adw.TabView's own native Ctrl+Page Up/Down and Alt+1..9/Alt+0
+    "shortcuts.tab_next": "<Alt>greater",
+    # Split-layout shortcuts. The plain ones (Alt+Shift+1..4) match the
+    # split buttons exactly — merging tabs from panes being removed into
+    # the pane that survives, same as clicking the button by hand. The
+    # Alt+Super+1..4 variants close those tabs instead of relocating them
+    # (split_close_4 has nothing to close — going to 4 panes only ever
+    # adds empty ones — but is still its own bindable shortcut for a
+    # consistent group). See window.py's _apply_split_mode. Plain Alt+1..4
+    # and Ctrl+Alt+1..4 were the original choices; both were reported to
+    # collide (Alt+1..4 with an existing tab-switch-by-position binding,
+    # Ctrl+Alt+1..4 with the quicky_paste_N shortcuts just below, since
+    # is_alt wasn't being checked for those yet either — now fixed, see
+    # _quicky_shortcut_matches).
+    "shortcuts.split_1": "<Alt><Shift>1", # single pane
+    "shortcuts.split_2": "<Alt><Shift>2", # vertical (2 panes, left/right)
+    "shortcuts.split_3": "<Alt><Shift>3", # horizontal (2 panes, top/bottom)
+    "shortcuts.split_4": "<Alt><Shift>4", # grid (4 panes)
+    "shortcuts.split_close_1": "<Alt><Super>1",
+    "shortcuts.split_close_2": "<Alt><Super>2",
+    "shortcuts.split_close_3": "<Alt><Super>3",
+    "shortcuts.split_close_4": "<Alt><Super>4",
+    "shortcuts.focus_pane_up": "<Alt>Up",
+    "shortcuts.focus_pane_down": "<Alt>Down",
+    "shortcuts.focus_pane_left": "<Alt>Left",
+    "shortcuts.focus_pane_right": "<Alt>Right",
+    "shortcuts.close_div": "<Control><Alt>q", # closes every tab in the active pane; in a detached tab window, closes the window itself
     # Quick-access bindings for the first 10 Quickies, by position (see the
     # Quickies panel) — "paste" inserts the snippet without running it
     # (same as the panel's own Send ▶ button), "run" inserts and executes

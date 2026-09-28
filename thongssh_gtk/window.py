@@ -1121,6 +1121,15 @@ class ThongSSHWindow(TerminalPaneWindow):
         tabview.connect("setup-menu", self.on_tabview_setup_menu)
         tabview.connect("create-window", self.on_tabview_create_window)
         tabview.connect("page-detached", self.on_tabview_page_detached)
+        # Keeps every tab's "N: " position prefix (see _render_tab_title)
+        # in sync with reality — a second, independent connection to
+        # "page-detached" alongside the one right above (GObject allows
+        # multiple handlers per signal; both fire), plus "page-attached"
+        # (new tab, or one transferred in from elsewhere) and "page-
+        # reordered" (native drag-to-reorder within this same TabView).
+        tabview.connect("page-attached", self._renumber_tabview)
+        tabview.connect("page-detached", self._renumber_tabview)
+        tabview.connect("page-reordered", self._renumber_tabview)
         tabview.set_menu_model(self.tab_menu_model)
 
         tab_bar = Adw.TabBar()
@@ -1460,31 +1469,54 @@ class ThongSSHWindow(TerminalPaneWindow):
                 button.remove_css_class("suggested-action")
 
     def on_split_button_clicked(self, target_mode):
-        """Handles the vertical/horizontal/grid split buttons.
+        """Handles the vertical/horizontal/grid split buttons — always the
+        "merge, don't close" behavior (see _apply_split_mode)."""
+        self._apply_split_mode(target_mode, close_tabs=False)
 
-        Pressing the button for the CURRENTLY active mode cancels the split
-        (all tabs move back into pane 0). Otherwise transitions to the
-        target mode, merging tabs where panes are being removed:
+    def _apply_split_mode(self, target_mode, close_tabs=False):
+        """Shared by the split buttons and the Alt+1..4 / Ctrl+Alt+1..4
+        shortcuts (see on_window_key_pressed). target_mode is one of
+        None (single pane), "vertical", "horizontal", "grid" — None is
+        also what the plain split buttons effectively request when
+        clicking the CURRENTLY active mode's button (see below).
+
+        Transitions to the target mode, relocating tabs wherever panes are
+        being removed:
         - grid -> vertical: bottom row moves up into the top row per column.
         - grid -> horizontal: right column moves left into the left column
           per row (then relabeled so the 2-way invariant pane0/pane1 holds).
         - vertical <-> horizontal: no tabs move, panes just re-orient.
         - single/2-way -> grid: nothing to move, new panes start empty.
-        """
-        if self.split_mode == target_mode:
-            p0, p1, p2, p3 = self.pane_tabviews
-            for nb in (p1, p2, p3):
-                self._move_all_tabs(nb, p0)
+
+        close_tabs flips "relocating" into "closing" for every case above
+        that actually removes a pane (grid->vertical/horizontal, anything
+        ->single) — the Ctrl+Alt+1..4 "close others" shortcuts. The
+        grid->horizontal relabel step (moving the already-consolidated
+        row 1 from p2 into p1's physical slot) is NOT one of those cases:
+        it doesn't discard anything regardless of close_tabs, it's just
+        repositioning survivors into the box a 2-way layout expects them
+        in, so it always uses a plain move."""
+        p0, p1, p2, p3 = self.pane_tabviews
+        current = self.split_mode
+
+        def relocate(src, dest):
+            if close_tabs:
+                self._close_all_tabs_in_tabview(src)
+            else:
+                self._move_all_tabs(src, dest)
+
+        if target_mode == current or target_mode is None:
+            for tv in (p1, p2, p3):
+                relocate(tv, p0)
             self.split_mode = None
         else:
-            p0, p1, p2, p3 = self.pane_tabviews
-            if self.split_mode == "grid":
+            if current == "grid":
                 if target_mode == "vertical":
-                    self._move_all_tabs(p2, p0)
-                    self._move_all_tabs(p3, p1)
+                    relocate(p2, p0)
+                    relocate(p3, p1)
                 elif target_mode == "horizontal":
-                    self._move_all_tabs(p1, p0)
-                    self._move_all_tabs(p3, p2)
+                    relocate(p1, p0)
+                    relocate(p3, p2)
                     self._move_all_tabs(p2, p1)
             self.split_mode = target_mode
 
@@ -1492,6 +1524,37 @@ class ThongSSHWindow(TerminalPaneWindow):
         self._update_split_buttons_ui()
         self.update_menu_sensitivity()
         self.apply_watermark_settings_to_all()  # split_mode changed — re-check "shrink in splits"
+
+    def _move_pane_focus(self, direction):
+        """Alt+Up/Down/Left/Right — moves the active-pane highlight (and
+        actual keyboard focus, into that pane's active terminal) in the
+        given screen direction, spatially, based on the current split
+        layout. No-op at an edge (e.g. Left while already in a vertical
+        split's left pane) or when there's nothing to navigate to at all
+        (single-pane mode)."""
+        p0, p1, p2, p3 = self.pane_tabviews
+        current = self._get_active_tabview()
+
+        if self.split_mode == "vertical":
+            neighbor = {(p0, "right"): p1, (p1, "left"): p0}.get((current, direction))
+        elif self.split_mode == "horizontal":
+            neighbor = {(p0, "down"): p1, (p1, "up"): p0}.get((current, direction))
+        elif self.split_mode == "grid":
+            neighbor = {
+                (p0, "right"): p1, (p0, "down"): p2,
+                (p1, "left"): p0, (p1, "down"): p3,
+                (p2, "up"): p0, (p2, "right"): p3,
+                (p3, "up"): p1, (p3, "left"): p2,
+            }.get((current, direction))
+        else:
+            neighbor = None
+
+        if neighbor is None:
+            return
+        self._set_active_pane(neighbor)
+        terminal = self.get_active_terminal()
+        if terminal:
+            terminal.grab_focus()
 
     def on_toggle_sidebar(self, button):
         """Collapses or expands the left sidebar."""
@@ -2579,7 +2642,9 @@ class ThongSSHWindow(TerminalPaneWindow):
         that key to."""
         is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
         is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
-        letter = self._resolve_latin_letter(keyval, keycode) if is_ctrl else None
+        is_alt = modifier & Gdk.ModifierType.ALT_MASK
+        is_super = modifier & Gdk.ModifierType.SUPER_MASK
+        letter = self._resolve_latin_letter(keyval, keycode) if (is_ctrl or is_alt) else None
 
         if self._shortcut_matches("shortcuts.close_tab", is_ctrl, is_shift, letter):
             self.on_menu_close_tab(None, None)
@@ -2594,20 +2659,68 @@ class ThongSSHWindow(TerminalPaneWindow):
         if self._shortcut_matches("shortcuts.focus_search", is_ctrl, is_shift, letter):
             self.on_toggle_search()
             return True
+        if self._keyval_shortcut_matches("shortcuts.toggle_side_panel", is_ctrl, is_alt, is_shift, keyval):
+            self.sidebar_toggle_button.set_active(not self.sidebar_toggle_button.get_active())
+            return True
+        if self._shortcut_matches("shortcuts.batch_command", is_ctrl, is_shift, letter, is_alt=is_alt):
+            self.on_menu_batch_command()
+            return True
+        if self._shortcut_matches("shortcuts.detach_tab", is_ctrl, is_shift, letter, is_alt=is_alt):
+            tabview = self._get_active_tabview()
+            page = tabview.get_selected_page() if tabview is not None else None
+            if page is not None:
+                self.detach_tab_page(page)
+            return True
+        if self._shortcut_matches("shortcuts.rename_tab", is_ctrl, is_shift, letter, is_alt=is_alt):
+            self.rename_active_tab()
+            return True
+        if self._keyval_shortcut_matches("shortcuts.tab_prev", is_ctrl, is_alt, is_shift, keyval, check_shift=False):
+            self._switch_tab(-1)
+            return True
+        if self._keyval_shortcut_matches("shortcuts.tab_next", is_ctrl, is_alt, is_shift, keyval, check_shift=False):
+            self._switch_tab(1)
+            return True
+        if self._shortcut_matches("shortcuts.close_div", is_ctrl, is_shift, letter, is_alt=is_alt):
+            self._close_all_tabs_in_tabview(self._get_active_tabview())
+            return True
+        if self._keyval_shortcut_matches("shortcuts.focus_pane_up", is_ctrl, is_alt, is_shift, keyval):
+            self._move_pane_focus("up")
+            return True
+        if self._keyval_shortcut_matches("shortcuts.focus_pane_down", is_ctrl, is_alt, is_shift, keyval):
+            self._move_pane_focus("down")
+            return True
+        if self._keyval_shortcut_matches("shortcuts.focus_pane_left", is_ctrl, is_alt, is_shift, keyval):
+            self._move_pane_focus("left")
+            return True
+        if self._keyval_shortcut_matches("shortcuts.focus_pane_right", is_ctrl, is_alt, is_shift, keyval):
+            self._move_pane_focus("right")
+            return True
 
         # Quick-access bindings for the first 10 Quickies (Settings ->
         # Shortcuts -> Quickies), by position — Ctrl+1..9,0 to paste,
-        # Ctrl+Shift+1..9,0 to paste-and-run (slot 10 = the "0" key), same
-        # digit-key-regardless-of-layout resolution as the letter
-        # shortcuts above.
-        digit = self._resolve_physical_digit(keyval, keycode) if is_ctrl else None
+        # Ctrl+Shift+1..9,0 to paste-and-run (slot 10 = the "0" key) — and
+        # the split-layout shortcuts (Alt+Shift+1..4 / Alt+Super+1..4) —
+        # same digit-key-regardless-of-layout resolution as the letter
+        # shortcuts above. is_alt/is_super are passed into every match
+        # below (not just the split ones) so e.g. Alt+Super+1 can no
+        # longer be mistaken for plain Ctrl+1 the way it used to be able
+        # to before these were checked at all.
+        digit = self._resolve_physical_digit(keyval, keycode) if (is_ctrl or is_alt or is_super) else None
         if digit:
             for i in range(1, 11):
-                if self._quicky_shortcut_matches(f"shortcuts.quicky_paste_{i}", is_ctrl, is_shift, digit):
+                if self._quicky_shortcut_matches(f"shortcuts.quicky_paste_{i}", is_ctrl, is_shift, digit, is_alt=is_alt, is_super=is_super):
                     self._insert_quicky_into_terminal(i - 1, run=False)
                     return True
-                if self._quicky_shortcut_matches(f"shortcuts.quicky_run_{i}", is_ctrl, is_shift, digit):
+                if self._quicky_shortcut_matches(f"shortcuts.quicky_run_{i}", is_ctrl, is_shift, digit, is_alt=is_alt, is_super=is_super):
                     self._insert_quicky_into_terminal(i - 1, run=True)
+                    return True
+            split_targets = {"1": None, "2": "vertical", "3": "horizontal", "4": "grid"}
+            for i, target_mode in split_targets.items():
+                if self._quicky_shortcut_matches(f"shortcuts.split_{i}", is_ctrl, is_shift, digit, is_alt=is_alt, is_super=is_super):
+                    self._apply_split_mode(target_mode, close_tabs=False)
+                    return True
+                if self._quicky_shortcut_matches(f"shortcuts.split_close_{i}", is_ctrl, is_shift, digit, is_alt=is_alt, is_super=is_super):
+                    self._apply_split_mode(target_mode, close_tabs=True)
                     return True
 
         return False
@@ -3400,9 +3513,18 @@ class ThongSSHWindow(TerminalPaneWindow):
                 return chr(kv)
         return None
 
-    def _quicky_shortcut_matches(self, settings_key, is_ctrl, is_shift, digit):
+    def _quicky_shortcut_matches(self, settings_key, is_ctrl, is_shift, digit, is_alt=False, is_super=False):
         """Digit counterpart to _shortcut_matches, for the quicky_paste_N/
-        quicky_run_N shortcuts — see that method for the general shape."""
+        quicky_run_N shortcuts and the split_N/split_close_N ones.
+
+        is_alt/is_super both default False, but — unlike _shortcut_matches'
+        own is_alt default — every call site now passes the real values
+        explicitly. Leaving them unchecked previously meant e.g. Ctrl+Alt+1
+        (real is_ctrl=True, is_alt=True) still satisfied quicky_paste_1's
+        plain "<Control>1" accel (want_ctrl=True, is_alt never compared),
+        silently pasting a Quicky instead of running the Ctrl+Alt+1 split
+        shortcut it was actually meant for — a real, reported bug, not a
+        hypothetical one."""
         accel = self.settings_manager.get(settings_key)
         if not accel:
             return False
@@ -3411,5 +3533,10 @@ class ThongSSHWindow(TerminalPaneWindow):
             return False
         want_ctrl = bool(mods & Gdk.ModifierType.CONTROL_MASK)
         want_shift = bool(mods & Gdk.ModifierType.SHIFT_MASK)
+        want_alt = bool(mods & Gdk.ModifierType.ALT_MASK)
+        want_super = bool(mods & Gdk.ModifierType.SUPER_MASK)
         want_digit = chr(keyval) if Gdk.KEY_0 <= keyval <= Gdk.KEY_9 else None
-        return bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift and digit == want_digit
+        return (bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift
+                and bool(is_alt) == want_alt and bool(is_super) == want_super
+                and digit == want_digit)
+

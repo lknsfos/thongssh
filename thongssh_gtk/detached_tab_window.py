@@ -88,6 +88,11 @@ class DetachedTabWindow(TerminalPaneWindow):
         self.tabview.connect("setup-menu", self.on_tabview_setup_menu)
         self.tabview.connect("create-window", self.on_tabview_create_window)
         self.tabview.connect("page-detached", self.on_tabview_page_detached)
+        # See ThongSSHWindow._create_pane_tabview's own identical block for
+        # why "page-detached" gets a second, independent connection here.
+        self.tabview.connect("page-attached", self._renumber_tabview)
+        self.tabview.connect("page-detached", self._renumber_tabview)
+        self.tabview.connect("page-reordered", self._renumber_tabview)
         self.tabview.connect("notify::selected-page", self._on_selected_page_changed)
 
         self.tab_bar = Adw.TabBar()
@@ -187,16 +192,41 @@ class DetachedTabWindow(TerminalPaneWindow):
             GLib.idle_add(self.close)
 
     def on_window_key_pressed(self, controller, keyval, keycode, modifier):
-        """Only the two shortcuts that make sense here — no host-search/
-        Quickies shortcuts, nothing in this window to target."""
+        """Only the shortcuts that make sense here — no host-search/
+        Quickies/split shortcuts, nothing in this window to target."""
         is_ctrl = modifier & Gdk.ModifierType.CONTROL_MASK
         is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
-        letter = self._resolve_latin_letter(keyval, keycode) if is_ctrl else None
+        is_alt = modifier & Gdk.ModifierType.ALT_MASK
+        letter = self._resolve_latin_letter(keyval, keycode) if (is_ctrl or is_alt) else None
 
         if self._shortcut_matches("shortcuts.close_tab", is_ctrl, is_shift, letter):
             self.on_menu_close_tab(None, None)
             return True
         if self._shortcut_matches("shortcuts.find_in_terminal", is_ctrl, is_shift, letter):
             self.on_menu_find_in_terminal(None, None)
+            return True
+        # The counterpart to Alt+D (detach) in the main window — brings the
+        # currently selected tab back, same as the header bar's own
+        # "Attach to Main Window" button.
+        if self._shortcut_matches("shortcuts.attach_tab", is_ctrl, is_shift, letter, is_alt=is_alt):
+            self.on_attach_to_main_clicked(None)
+            return True
+        if self._shortcut_matches("shortcuts.rename_tab", is_ctrl, is_shift, letter, is_alt=is_alt):
+            self.rename_active_tab()
+            return True
+        if self._keyval_shortcut_matches("shortcuts.tab_prev", is_ctrl, is_alt, is_shift, keyval, check_shift=False):
+            self._switch_tab(-1)
+            return True
+        if self._keyval_shortcut_matches("shortcuts.tab_next", is_ctrl, is_alt, is_shift, keyval, check_shift=False):
+            self._switch_tab(1)
+            return True
+        # Closes every tab in this window's one pane — which, unlike the
+        # main window's own panes, means there's nothing left to keep this
+        # window open for, so it closes too (mirrors on_tabview_page_
+        # detached's own empty-window cleanup, just reached from a key
+        # press instead of a drag/transfer).
+        if self._shortcut_matches("shortcuts.close_div", is_ctrl, is_shift, letter, is_alt=is_alt):
+            self._close_all_tabs_in_tabview(self.tabview)
+            self.close()
             return True
         return False
