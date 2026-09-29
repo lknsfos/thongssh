@@ -22,6 +22,7 @@ from .cli_providers import is_available as cli_is_available
 from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog, QuickyDialog # Removed SettingsDialog
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
 from .tab_window_base import TerminalPaneWindow, _tabview_has_page
+from .tab_colors import TabColors
 from .detached_tab_window import DetachedTabWindow
 from .launcher_icon import apply_launcher_icon
 from .sftp_widget import SftpWidget
@@ -1134,6 +1135,7 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         tab_bar = Adw.TabBar()
         tab_bar.set_view(tabview)
+        TabColors(tab_bar, tabview, self.tab_data)
         tab_bar.set_autohide(False)
         tab_bar.set_expand_tabs(False)  # compact, left-aligned — old Notebook look
 
@@ -3550,4 +3552,3 @@ class ThongSSHWindow(TerminalPaneWindow):
         return (bool(is_ctrl) == want_ctrl and bool(is_shift) == want_shift
                 and bool(is_alt) == want_alt and bool(is_super) == want_super
                 and digit == want_digit)
-

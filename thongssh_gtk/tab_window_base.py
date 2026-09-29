@@ -29,7 +29,7 @@ from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio
 
 from .config import CONFIG_DIR
 from .paths import resolve_log_dir
-from .dialogs import InputDialog, RenameTabDialog
+from .dialogs import InputDialog, RenameTabDialog, TabColorDialog
 from .send_file import SendFileDialog, guess_remote_cwd
 from .colors import get_scheme_colors
 from .i18n import _
@@ -538,6 +538,36 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         page = tabview.get_selected_page() if tabview is not None else None
         self.rename_tab_page(page)
 
+    def color_tab_page(self, page):
+        """Color belongs to the page, so transfers and reconnects retain it."""
+        tab_info = self.tab_data.get(page)
+        if tab_info is None:
+            return
+        dialog = TabColorDialog(self, tab_info.get("tab_color"))
+
+        def on_response(result):
+            if result is None or self.tab_data.get(page) is not tab_info:
+                return
+            self._apply_tab_color(page, result)
+
+        dialog.run_async(on_response)
+
+    def _apply_tab_color(self, page, color):
+        if color and not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            raise ValueError("Tab color must be #rrggbb")
+        tab_info = self.tab_data[page]
+        tab_info["tab_color"] = color or None
+        child = page.get_child()
+        owner = child.get_root() if child is not None else None
+        if isinstance(owner, TerminalPaneWindow):
+            view = owner._find_tabview_for_page(page)
+            if view is not None:
+                view._tab_colors.queue_refresh()
+
+    def color_active_tab(self):
+        tabview = self._get_active_tabview()
+        self.color_tab_page(tabview.get_selected_page() if tabview is not None else None)
+
     def on_menu_tab_disconnect(self, action, param, page=None):
         """Closes the given tab (or the active one) — app.tab-disconnect /
         the tab menu's "Disconnect" item. For a terminal, this goes
@@ -659,6 +689,10 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         action_rename_tab.connect("activate", lambda a, p: self.rename_active_tab())
         self.add_action(action_rename_tab)
 
+        action_color_tab = Gio.SimpleAction.new("color-tab", None)
+        action_color_tab.connect("activate", lambda a, p: self.color_active_tab())
+        self.add_action(action_color_tab)
+
         # Stateful (checkbox) action — see on_terminal_right_click for how
         # its state/enabled are kept in sync with the right-clicked tab.
         action_save_log_tab = Gio.SimpleAction.new_stateful("save-log-tab", None, GLib.Variant.new_boolean(False))
@@ -671,6 +705,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         terminal_menu.append(_("Send File..."), "win.send-file")
         terminal_menu.append(_("Find... (Ctrl+Shift+F)"), "win.find-in-terminal")
         terminal_menu.append(_("Rename Tab"), "win.rename-tab")
+        terminal_menu.append(_("Tab Color…"), "win.color-tab")
         terminal_menu.append(_("Save log"), "win.save-log-tab")
         self.popover_terminal = Gtk.PopoverMenu.new_from_model(terminal_menu)
         self.popover_terminal.connect("closed", self.on_popover_terminal_closed)
@@ -693,6 +728,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         tab_menu_model.append(_("Duplicate"), "app.tab-duplicate")
         tab_menu_model.append(_("Detach"), "app.tab-detach")
         tab_menu_model.append(_("Rename Tab"), "app.tab-rename")
+        tab_menu_model.append(_("Tab Color…"), "app.tab-color")
         tab_menu_model.append(_("Connect SFTP"), "app.open-sftp")
         tab_menu_model.append(_("Connect SSH"), "app.open-ssh-from-tab")
         self.tab_copy_host_menu = Gio.Menu()

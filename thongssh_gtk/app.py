@@ -41,6 +41,7 @@ _APP_TAB_ACTION_METHODS = {
     "tab-duplicate": "on_menu_tab_duplicate",
     "tab-detach": "detach_tab_page",
     "tab-rename": "rename_tab_page",
+    "tab-color": "color_tab_page",
     "open-sftp": "open_sftp_for_tab_page",
     "open-ssh-from-tab": "on_menu_open_ssh_from_tab",
 }
@@ -133,7 +134,7 @@ class ThongSSHApp(Adw.Application):
         if method is None:
             logging.warning(f"App tab action '{action.get_name()}': window has no method '{method_name}'.")
             return
-        if method_name in ("detach_tab_page", "open_sftp_for_tab_page", "rename_tab_page"):
+        if method_name in ("detach_tab_page", "open_sftp_for_tab_page", "rename_tab_page", "color_tab_page"):
             method(page)
         else:
             method(None, None, page=page)

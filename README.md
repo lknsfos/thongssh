@@ -25,6 +25,7 @@ ThongSSH is for those who love minimalism. We've got a cute host panel so you ne
 
 **Layout**
 * **Multi-div split view** — split the tab area vertically, horizontally, or into a full 2x2 grid, each div running its own independent set of tabs. Switch between vertical/horizontal and your tabs just re-orient, no shuffling. Drag a tab from one div straight into another to rearrange. A subtle accent-colored outline shows which div is currently active.
+* **Tab colors** — right-click a tab (or its terminal) and choose **Tab Color…** to color the full tab background. Text contrast adjusts automatically, and the selected tab has an underline. **Reset to Default** restores the theme background. Colors stay with open tabs across renames, reconnects, reordering, and moves between panes or detached windows; they are not saved after closing the tab.
 
 **Quickies**
 * A panel of saved terminal snippets, right next to the host list. **Send** (▶) inserts one into the active terminal without running it; **Send and Run** (⏩) inserts and executes immediately. Right-click a Quicky for the same two actions plus Edit, Delete, and **Send to Batch Command** (opens Batch Command with the snippet already sitting in the command field, ready to blast to multiple tabs).

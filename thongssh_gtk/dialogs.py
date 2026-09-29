@@ -275,6 +275,62 @@ class RenameTabDialog(ResponseDialog):
         self.present()
 
 
+class TabColorDialog(ResponseDialog):
+    """Returns a hex color, an empty string to reset, or None to cancel."""
+
+    def __init__(self, parent, current_color):
+        super().__init__(transient_for=parent, modal=True)
+        self.set_default_size(360, -1)
+        header = Adw.HeaderBar()
+        header.set_title_widget(Adw.WindowTitle(title=_("Tab Color")))
+        for label, response, end in ((_("Cancel"), Gtk.ResponseType.CANCEL, False),
+                                     (_("Apply"), Gtk.ResponseType.OK, True)):
+            button = Gtk.Button(label=label)
+            button.connect("clicked", lambda b, r=response: self.response(r))
+            if end:
+                button.add_css_class("suggested-action")
+                header.pack_end(button)
+            else:
+                header.pack_start(button)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(header)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16,
+                          margin_top=24, margin_bottom=24, margin_start=24, margin_end=24)
+        content.append(Gtk.Label(label=_("Choose a background color for this tab."), wrap=True))
+        self.color_button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False))
+        rgba = Gdk.RGBA()
+        rgba.parse(current_color or "#3584e4")
+        self.color_button.set_rgba(rgba)
+        content.append(self.color_button)
+        reset = Gtk.Button(label=_("Reset to Default"))
+        reset.connect("clicked", lambda b: self.response(Gtk.ResponseType.REJECT))
+        content.append(reset)
+        box.append(content)
+        self.set_content(box)
+        controller = Gtk.EventControllerKey.new()
+        controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(controller)
+
+    def _on_key_pressed(self, controller, keyval, keycode, modifiers):
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+    def run_async(self, callback):
+        def on_response(dialog, response):
+            result = None
+            if response == Gtk.ResponseType.OK:
+                result = _rgba_to_hex(self.color_button.get_rgba())
+            elif response == Gtk.ResponseType.REJECT:
+                result = ""
+            self.destroy()
+            callback(result)
+        self.connect("response", on_response)
+        self.present()
+
+
 class MessageDialog(ResponseDialog):
     """
     A simple wrapper around Adw.MessageDialog to provide an async run method.
