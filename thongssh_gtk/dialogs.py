@@ -552,6 +552,43 @@ class HostDialog(ResponseDialog):
         )
         group_main.add(self.entry_port)
 
+        # Default tab color for this host — applied automatically whenever
+        # a tab opens for it (see tab_window_base.py's start_session
+        # seeding tab_data[page]["tab_color"] from this same config key).
+        # The tab's own right-click "Tab Color…" is a separate, per-tab
+        # runtime override — it just overwrites that same dict key later,
+        # so it naturally wins over whatever this seeded by default, with
+        # no extra plumbing needed.
+        #
+        # An explicit Gtk.Switch (not inferring "is a color configured"
+        # from the color button's own state) is the actual source of
+        # truth for whether tab_color should be saved at all — a
+        # Gtk.ColorDialogButton always paints SOME solid swatch even when
+        # nothing meaningful has been picked, so relying on it alone left
+        # no visual difference between "no color set" and "a color IS
+        # set" (confirmed: it read as an already-chosen color, e.g. red,
+        # even for a brand new host), and a "reset" button that only
+        # changed internal state without touching the button's own paint
+        # looked like it did nothing at all. The switch fixes both: the
+        # button is only sensitive when it's on, so "off" is visually
+        # unambiguous (a grayed-out swatch, no chance to mistake it for a
+        # real color).
+        row_tab_color = Adw.ActionRow(
+            title=_("Tab Color"),
+            subtitle=_("Applied automatically when a tab opens for this host"),
+        )
+        self.tab_color_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
+        self.tab_color_switch.connect("notify::active", self.on_tab_color_switch_toggled)
+        row_tab_color.add_suffix(self.tab_color_switch)
+        self.tab_color_button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False))
+        self.tab_color_button.set_valign(Gtk.Align.CENTER)
+        self.tab_color_button.set_sensitive(False)
+        default_rgba = Gdk.RGBA()
+        default_rgba.parse("#3584e4")  # a neutral starting point to pick from, not an arbitrary GTK default
+        self.tab_color_button.set_rgba(default_rgba)
+        row_tab_color.add_suffix(self.tab_color_button)
+        group_main.add(row_tab_color)
+
         # --- Tabbed div: Authentication / Options ---
         self.tabs_stack = Adw.ViewStack()
 
@@ -754,10 +791,20 @@ class HostDialog(ResponseDialog):
         self.switch_telnet_binary.set_active(cfg.get("telnet_binary", False))
         self.switch_telnet_echo.set_active(cfg.get("telnet_local_echo", False))
 
+        tab_color = cfg.get("tab_color")
+        if tab_color:
+            rgba = Gdk.RGBA()
+            rgba.parse(tab_color)
+            self.tab_color_button.set_rgba(rgba)
+            self.tab_color_switch.set_active(True)  # fires on_tab_color_switch_toggled -> button becomes sensitive
+
         # Enable password fields based on current data
         self.on_username_entry_changed(self.entry_username)
         # Check if a password exists to enable the clear button
         self.clear_password_button.set_sensitive(self.keyring.load_password(cfg.get("name")) is not None)
+
+    def on_tab_color_switch_toggled(self, switch, _pspec):
+        self.tab_color_button.set_sensitive(switch.get_active())
 
     def on_validate(self, widget, *args): # *args because signals differ
         """Validates required fields."""
@@ -812,6 +859,7 @@ class HostDialog(ResponseDialog):
             "telnet_binary": self.switch_telnet_binary.get_active(),
             "telnet_local_echo": self.switch_telnet_echo.get_active(),
             "save_log": self.switch_save_log.get_active(),
+            "tab_color": _rgba_to_hex(self.tab_color_button.get_rgba()) if self.tab_color_switch.get_active() else None,
         }
 
         parent_id = self.combo_group.get_active_id()

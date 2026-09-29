@@ -1957,6 +1957,12 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                     "type": "terminal", "config": resolved_config, "log_path": None,
                     "watermark_label": watermark_label, "tab_page": page,
                     "disconnected": False, "base_title": config['name'], "tag": None,
+                    # The host's own configured default (Host dialog -> Tab
+                    # Color) — just the SEED value here; the tab's own
+                    # right-click "Tab Color…" (_apply_tab_color) overwrites
+                    # this same key later and naturally wins, no separate
+                    # "is this an override" bookkeeping needed.
+                    "tab_color": config.get("tab_color"),
                 }
                 self._renumber_tabview(tabview)
                 terminal.connect("child-exited", self.on_ssh_process_exited, page)

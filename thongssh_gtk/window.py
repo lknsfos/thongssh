@@ -14,6 +14,7 @@ import json
 import logging
 import datetime
 import re
+import cairo
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio
 
@@ -401,9 +402,11 @@ class ThongSSHWindow(TerminalPaneWindow):
         # Renderers
         renderer_pixbuf = Gtk.CellRendererPixbuf()
         renderer_text = Gtk.CellRendererText()
+        renderer_tab_color = Gtk.CellRendererPixbuf()
         column = Gtk.TreeViewColumn(_("Hosts"))
         column.pack_start(renderer_pixbuf, False)
         column.pack_start(renderer_text, True)
+        column.pack_start(renderer_tab_color, False)
 
         column.add_attribute(renderer_text, "text", COL_NAME)
         column.add_attribute(renderer_pixbuf, "icon-name", COL_ICON)
@@ -414,6 +417,12 @@ class ThongSSHWindow(TerminalPaneWindow):
         # color, not just row data.
         column.set_cell_data_func(renderer_pixbuf, self._tree_row_cell_data_func)
         column.set_cell_data_func(renderer_text, self._tree_row_cell_data_func)
+        # The little rounded-corner color swatch next to a host's name,
+        # previewing the tab color it'll open with (Host dialog -> Tab
+        # Color) — hidden entirely for groups/the local-machine entry, or
+        # a host with no color configured.
+        self._tab_color_swatch_cache = {}
+        column.set_cell_data_func(renderer_tab_color, self._tree_tab_color_cell_data_func)
 
         self.tree_view.append_column(column)
         self.tree_scrolled_window.set_child(self.tree_view)
@@ -1002,6 +1011,44 @@ class ThongSSHWindow(TerminalPaneWindow):
         tint = Gdk.RGBA()
         tint.red, tint.green, tint.blue, tint.alpha = accent.red, accent.green, accent.blue, 0.08
         cell.set_property("cell-background-rgba", tint)
+
+    def _tree_tab_color_cell_data_func(self, column, cell, model, tree_iter, data=None):
+        """Shows a small rounded-corner swatch of a host's configured
+        default tab color (Host dialog -> Tab Color) next to its name —
+        nothing for groups, the local-machine entry, or a host with no
+        color set. Gtk.CellRendererPixbuf has no "draw a solid color"
+        mode of its own, so this hands it a small cairo-drawn pixbuf
+        instead — cached by hex string since the same handful of colors
+        repeat across every row that uses them."""
+        node_type = model.get_value(tree_iter, COL_TYPE)
+        config = model.get_value(tree_iter, COL_DATA) if node_type == "host" else None
+        tab_color = config.get("tab_color") if isinstance(config, dict) else None
+        if not tab_color:
+            cell.set_property("pixbuf", None)
+            return
+        pixbuf = self._tab_color_swatch_cache.get(tab_color)
+        if pixbuf is None:
+            pixbuf = self._make_tab_color_swatch_pixbuf(tab_color)
+            self._tab_color_swatch_cache[tab_color] = pixbuf
+        cell.set_property("pixbuf", pixbuf)
+
+    def _make_tab_color_swatch_pixbuf(self, hex_color, size=12, radius=3):
+        """A tiny solid rounded-rect GdkPixbuf in the given color — see
+        _tree_tab_color_cell_data_func."""
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+        ctx = cairo.Context(surface)
+        rgba = Gdk.RGBA()
+        rgba.parse(hex_color)
+        ctx.set_source_rgba(rgba.red, rgba.green, rgba.blue, rgba.alpha)
+        ctx.new_sub_path()
+        ctx.arc(size - radius, radius, radius, -0.5 * 3.14159265, 0)
+        ctx.arc(size - radius, size - radius, radius, 0, 0.5 * 3.14159265)
+        ctx.arc(radius, size - radius, radius, 0.5 * 3.14159265, 3.14159265)
+        ctx.arc(radius, radius, radius, 3.14159265, 1.5 * 3.14159265)
+        ctx.close_path()
+        ctx.fill()
+        surface.flush()
+        return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
 
     def populate_tree(self):
         self.main_tree_store.clear()
