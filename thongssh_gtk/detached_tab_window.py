@@ -19,6 +19,7 @@ import logging
 from gi.repository import Gtk, Adw, GLib, Gio, Gdk, GObject
 
 from .tab_window_base import TerminalPaneWindow
+from .tab_colors import TabColors
 from .i18n import _
 
 
@@ -97,6 +98,7 @@ class DetachedTabWindow(TerminalPaneWindow):
 
         self.tab_bar = Adw.TabBar()
         self.tab_bar.set_view(self.tabview)
+        TabColors(self.tab_bar, self.tabview, self.tab_data)
         self.tab_bar.set_autohide(False)
         self.tab_bar.set_expand_tabs(False)  # compact, left-aligned — old Notebook look
 
