@@ -154,20 +154,31 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
     def _find_tab_widget_for(self, widget):
         """Walks up from any descendant widget (a Vte.Terminal, its
         watermark label, anything living inside a tab's own content) to
-        the Adw.TabPage that owns it, if any. Stops at the first ancestor
-        whose own parent is an Adw.TabView — that ancestor is exactly the
-        "child" widget originally handed to TabView.append()/that view's
-        get_page() expects (an internal Adw.Bin sits between the two, so
-        the terminal/its wrappers are never a *direct* child of the
-        TabView itself)."""
+        the Adw.TabPage that owns it, if any. Stops one level BELOW the
+        first ancestor whose own parent is an Adw.TabView: that ancestor
+        (an internal Adw.Bin, not a widget this code ever created) sits
+        between the TabView and the real "child" widget originally handed
+        to TabView.append() — get_page() only recognizes that original
+        child, and raises an Adwaita-CRITICAL assertion (silently caught
+        here as "not found", since get_page() doesn't return None for a
+        foreign widget the way its own docs/type signature suggest) for
+        anything else, including that Bin wrapper itself. A previous
+        version of this walk called get_page() one level too deep (on the
+        Bin), which made it always fail — confirmed live: real symptom
+        was "Send File" permanently greyed out, since this same helper
+        backs the "can this tab send files" check."""
         node = widget
+        prev = None
         while node is not None:
             parent = node.get_parent()
             if isinstance(parent, Adw.TabView):
-                page = parent.get_page(node)
+                if prev is None:
+                    return None
+                page = parent.get_page(prev)
                 if page in self.tab_data:
                     return page
                 return None
+            prev = node
             node = parent
         return None
 
