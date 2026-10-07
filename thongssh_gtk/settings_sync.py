@@ -139,6 +139,7 @@ TERMINAL_SETTINGS_KEYS = [
 ]
 GENERAL_SETTINGS_KEYS = [
     "interface.icon", "interface.tree_row_striping", "interface.debug_mode", "interface.host_search_position",
+    "interface.theme", "interface.tabbar_height",
 ]
 # Kept separate from GENERAL_SETTINGS_KEYS (own sync.sync_shortcuts switch,
 # not bundled under sync.sync_general) — a binding chosen for one OS/
@@ -151,6 +152,19 @@ GENERAL_SETTINGS_KEYS = [
 SHORTCUTS_SETTINGS_KEYS = [
     "shortcuts.close_tab", "shortcuts.focus_search", "shortcuts.find_in_terminal",
     "shortcuts.copy", "shortcuts.paste",
+    "shortcuts.toggle_side_panel", "shortcuts.batch_command",
+    "shortcuts.detach_tab", "shortcuts.attach_tab", "shortcuts.rename_tab",
+    "shortcuts.tab_prev", "shortcuts.tab_next",
+    "shortcuts.split_1", "shortcuts.split_2", "shortcuts.split_3", "shortcuts.split_4",
+    "shortcuts.split_close_1", "shortcuts.split_close_2", "shortcuts.split_close_3", "shortcuts.split_close_4",
+    # shortcuts.focus_pane_up/down/left/right deliberately excluded —
+    # unlike every other shortcut here, these have a real per-OS DEFAULT
+    # difference (DEFAULT_SETTINGS' darwin block: h/j/k/l, since no Option+
+    # Arrow combination ever reaches GTK on macOS at all), not just a
+    # user's own personal rebind. Syncing them would fight that: whichever
+    # machine synced second would have its platform-appropriate default
+    # overwritten by the other's, defeating the whole point of having one.
+    "shortcuts.close_div",
 ] + [f"shortcuts.quicky_paste_{i}" for i in range(1, 11)] \
   + [f"shortcuts.quicky_run_{i}" for i in range(1, 11)]
 

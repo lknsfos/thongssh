@@ -1,5 +1,15 @@
 # Release Notes
 
+### 🐛 What's New in 0.10.2
+
+Tab colors, and three real bugs fixed — one that could silently drop your host-tree layout, one that quietly broke Sync for several newer settings, and one that left Send File permanently greyed out:
+
+* **New: tab colors** — right-click a tab (or its terminal) and choose "Tab Color…" to color that tab's full background, with automatic black/white text contrast and an underline on the active tab. "Reset to Default" clears it. Colors follow a tab through renames, reconnects, reordering, and moves between panes or detached windows; they're session-only and not restored after closing the tab.
+* **New: a default tab color per host** — Host editor → "Tab Color" sets a color that's applied automatically every time a tab opens for that host, with a small preview swatch next to the host's name in the list. Leave it off and nothing changes; the tab's own right-click "Tab Color…" still overrides it for that session, same as before.
+* **Fixed: "Send File" permanently greyed out** in the tab/terminal right-click menu — a bug in the right-click handler meant it could never tell whether a tab was actually an SSH session, so it always stayed disabled. ("Save log" was quietly broken the same way, for the same reason — fixed together.)
+* **Fixed: the host tree's open/closed group state looked random after restarting** — simply expanding or collapsing a group was never actually saved anywhere (not even on quit), so whatever reopened next time was leftover from some unrelated earlier change, not your last click. Expanding or collapsing a group now saves immediately.
+* **Fixed: several newer settings weren't included in Sync** — a host's tab color, the app theme, the tab bar height setting, and most of the pane/tab keyboard shortcuts added recently were all missing from what Sync actually copies between machines. They're now synced like everything else in their category (pane-navigation shortcuts with a different default per OS are deliberately still left out, so Sync can't overwrite one machine's platform-appropriate keybinding with another's).
+
 ### 🆕 What's New in 0.10.1
 
 Keyboard-driven pane/tab management, an app-wide theme switch, and a proper tab rename:

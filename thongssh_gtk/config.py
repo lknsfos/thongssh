@@ -59,6 +59,7 @@ HOST_CONFIG_TEMPLATE = {
     "telnet_binary": False,
     "telnet_local_echo": False,
     "save_log": False,
+    "tab_color": None,
 }
 
 

@@ -432,6 +432,19 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         # --- 3. Tree functionality ---
         self.tree_view.connect("row-activated", self.on_tree_row_activated)
+        # Persists a group's expand/collapse state the moment it's toggled
+        # — previously nothing saved it at all outside of some OTHER action
+        # (add/edit/remove/move a host) happening to trigger a save
+        # afterwards. Closing the app doesn't call rebuild_config_and_save
+        # either (_on_close_request only persists window geometry), so a
+        # plain expand/collapse click, on its own, was never written to
+        # hosts.json — whatever got restored next launch was really just
+        # whatever an unrelated earlier save happened to have captured,
+        # not the user's actual last action. That's the real cause of the
+        # "random" state on reopen, not (just) the TreeView-internals bug
+        # fixed in populate_tree's own restore order.
+        self.tree_view.connect("row-expanded", self.on_tree_row_expanded_or_collapsed)
+        self.tree_view.connect("row-collapsed", self.on_tree_row_expanded_or_collapsed)
 
         # LEFT button gesture — stored on self so the right-click handler can
         # reset it to avoid a GTK4 gesture deadlock when both buttons are held.
@@ -1063,6 +1076,13 @@ class ThongSSHWindow(TerminalPaneWindow):
         local_config = {"name": "local", "protocol": "local"}
         self.main_tree_store.append(None, [local_config["name"], "local", "computer-symbolic", local_config])
 
+        # Groups whose saved state is collapsed — collected in post-order
+        # (a group is only added here AFTER all its own children have been
+        # built), so collapsing them in this same list order later always
+        # processes the deepest groups first. See the comment below on why
+        # that order matters.
+        groups_to_collapse = []
+
         def iter_nodes(node_data, parent_iter):
             if not isinstance(node_data, dict): return
             node_type = node_data.get("type")
@@ -1074,9 +1094,8 @@ class ThongSSHWindow(TerminalPaneWindow):
                 if "children" in node_data:
                     for child in node_data["children"]:
                         iter_nodes(child, current_iter)
-                # ✨ Restore expansion state
-                if node_data.get("expanded", True):
-                    self.tree_view.expand_row(self.main_tree_store.get_path(current_iter), False)
+                if not node_data.get("expanded", True):
+                    groups_to_collapse.append(current_iter)
 
             elif node_type == "host":
                 config = node_data.get("config", {})
@@ -1087,6 +1106,46 @@ class ThongSSHWindow(TerminalPaneWindow):
             root_children = self.config_data.get("children", [])
             for node in root_children:
                 iter_nodes(node, None)
+
+        # ✨ Restore expansion state — in two passes, not inline above.
+        # Confirmed live: Gtk.TreeView simply can't register a row's own
+        # expanded/collapsed state while any of its ancestors is currently
+        # collapsed (expand_row()/row_expanded() silently no-op for an
+        # invisible row), so building top-down and expanding each group
+        # right after its children — the previous approach — meant a
+        # nested group's own saved state only "stuck" by accident,
+        # depending on whether its ancestors happened to already be
+        # expanded at that exact point in the walk. That's exactly what
+        # made restoration look random.
+        #
+        # The fix: expand EVERY group first, unconditionally, so every
+        # level is genuinely visible and every nested group gets a fair
+        # chance to exist in the tree normally. Only then collapse exactly
+        # the ones that should be — deepest first (groups_to_collapse's
+        # own post-order), since collapsing a parent before its own
+        # children are finished would hide them before their turn.
+        #
+        # _restoring_tree_state guards on_tree_row_expanded_or_collapsed
+        # below from treating these programmatic calls as a real user
+        # toggle — without it, every single one of these would trigger its
+        # own rebuild_config_and_save(), uselessly (and, worse, each save
+        # would run against a tree that's still only partway restored).
+        self._restoring_tree_state = True
+        try:
+            self.tree_view.expand_all()
+            for group_iter in groups_to_collapse:
+                self.tree_view.collapse_row(self.main_tree_store.get_path(group_iter))
+        finally:
+            self._restoring_tree_state = False
+
+    def on_tree_row_expanded_or_collapsed(self, tree_view, tree_iter, path):
+        """Persists the host tree the moment a group is actually toggled by
+        the user — see its own connect() call for why this needs to exist
+        at all. Ignored during populate_tree's own programmatic restore
+        (see _restoring_tree_state there)."""
+        if getattr(self, "_restoring_tree_state", False):
+            return
+        self.rebuild_config_and_save()
 
     def on_tree_row_activated(self, tree_view, path, column):
         model = tree_view.get_model()
