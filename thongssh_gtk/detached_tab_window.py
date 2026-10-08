@@ -69,18 +69,16 @@ class DetachedTabWindow(TerminalPaneWindow):
         outer_box.append(header_bar)
         self._title_binding = None
 
-        # self.terminal_overlay: same role as the main window's own —
-        # anchors the in-terminal find bar (see
-        # TerminalPaneWindow._build_find_window), a Gtk.Overlay wraps the
-        # tab-bar+tabview column rather than sitting inside the structural
-        # box tree itself.
+        # self.terminal_overlay: same role as the main window's own panes —
+        # wraps just the tabview (not the tab bar above it) so the
+        # in-terminal find bar (see TerminalPaneWindow._build_find_bar)
+        # anchors to exactly the same spot it does in a split pane there.
+        pane_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        outer_box.append(pane_box)
+
         self.terminal_overlay = Gtk.Overlay()
         self.terminal_overlay.set_hexpand(True)
         self.terminal_overlay.set_vexpand(True)
-        outer_box.append(self.terminal_overlay)
-
-        pane_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.terminal_overlay.set_child(pane_box)
 
         self.tabview = Adw.TabView()
         self.tabview.set_vexpand(True)
@@ -109,7 +107,9 @@ class DetachedTabWindow(TerminalPaneWindow):
         self.tab_bar.set_start_action_widget(new_local_btn)
 
         pane_box.append(self.tab_bar)
-        pane_box.append(self.tabview)
+        self.terminal_overlay.set_child(self.tabview)
+        pane_box.append(self.terminal_overlay)
+        self._build_find_bar(self.terminal_overlay, self.tabview)
 
         # win.close-tab/win.copy-clipboard/win.paste-clipboard/win.send-file/
         # win.find-in-terminal/win.save-log-tab + the terminal right-click
@@ -149,7 +149,7 @@ class DetachedTabWindow(TerminalPaneWindow):
             )
         else:
             self.window_title.set_title("ThongSSH")
-        self._sync_find_target_terminal()
+        self._sync_find_target_terminal(tabview)
 
     def _on_new_local_terminal_clicked(self, button):
         """Mirrors ThongSSHWindow's own "+" button — opens a new local

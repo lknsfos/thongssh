@@ -1258,7 +1258,16 @@ class ThongSSHWindow(TerminalPaneWindow):
         # ✨ Small margin to prevent accidentally grabbing a paned handle
         box.set_margin_start(6)
         box.append(tab_bar)
-        box.append(tabview)
+
+        # Wraps just this pane's own tabview (not the whole split layout)
+        # so its own in-terminal find bar (see TerminalPaneWindow.
+        # _build_find_bar) is anchored to THIS pane only, independently of
+        # however many other panes are open — "Highlight and Find" is a
+        # per-pane tool, not a window-wide one.
+        pane_overlay = Gtk.Overlay()
+        pane_overlay.set_child(tabview)
+        box.append(pane_overlay)
+        self._build_find_bar(pane_overlay, tabview)
 
         # Track "last interacted-with pane" as the active one — attached to
         # the whole pane box (tab bar + tabview) so clicking either counts,
@@ -1289,6 +1298,7 @@ class ThongSSHWindow(TerminalPaneWindow):
     def _on_pane_page_changed(self, tabview, pspec):
         self.update_menu_sensitivity()
         self.apply_watermark_settings_to_all()
+        self._sync_find_target_terminal(tabview)
 
     def _on_new_local_terminal_clicked(self, button, tabview):
         """Opens a new local-terminal tab in this pane. If
@@ -1324,7 +1334,7 @@ class ThongSSHWindow(TerminalPaneWindow):
             self._pane_box_by_tabview[self.active_pane].remove_css_class("thongssh-active-pane")
         self.active_pane = tabview
         self._pane_box_by_tabview[tabview].add_css_class("thongssh-active-pane")
-        self._sync_find_target_terminal()
+        self._sync_find_target_terminal(tabview)
         # Guarded: this fires once during __init__ before the watermark
         # toggle button exists yet, and open_sessions is always empty at
         # that point anyway.
@@ -2935,7 +2945,11 @@ class ThongSSHWindow(TerminalPaneWindow):
         self.lookup_action("edit-rename").set_enabled(item_selected)
         self.lookup_action("delete").set_enabled(item_selected)
 
-        self._sync_find_target_terminal()
+        # Called from several unrelated places (tree selection, tab close,
+        # ...) with no specific pane in hand, so just resync all of them —
+        # each is a cheap no-op unless that pane's own find bar is visible.
+        for tv in self.pane_tabviews:
+            self._sync_find_target_terminal(tv)
 
 
     # --- (GTK4 Menu) ---

@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: ThongSSH 0.9.2\n"
-"Report-Msgid-Bugs-To: https://github.com/lknsfos/thongssh/issues\n"
-"POT-Creation-Date: 2026-09-29 12:44+0300\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-08 18:03+0300\n"
 "PO-Revision-Date: 2026-08-19 21:07+0300\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -30,8 +30,8 @@ msgstr "Видалити цей чат"
 msgid "Attach terminal context (current selection, or last 20 lines of output)"
 msgstr "Додати контекст термінала (поточне виділення або останні 20 рядків виводу)"
 
-#: thongssh_gtk/ai_panel.py:200 thongssh_gtk/dialogs.py:3045
-#: thongssh_gtk/send_file.py:109 thongssh_gtk/window.py:2193
+#: thongssh_gtk/ai_panel.py:200 thongssh_gtk/dialogs.py:3183
+#: thongssh_gtk/send_file.py:109 thongssh_gtk/window.py:2262
 msgid "Send"
 msgstr "Надіслати"
 
@@ -73,7 +73,7 @@ msgid "Thinking…"
 msgstr "Обмірковування…"
 
 #: thongssh_gtk/ai_providers.py:78 thongssh_gtk/colors.py:68
-#: thongssh_gtk/dialogs.py:2684 thongssh_gtk/window.py:1846
+#: thongssh_gtk/dialogs.py:2821 thongssh_gtk/window.py:1915
 msgid "Custom"
 msgstr "Власний"
 
@@ -82,8 +82,8 @@ msgstr "Власний"
 msgid "Request header contains a non-ASCII character (double-check the API key was pasted correctly): {error}"
 msgstr "Заголовок запиту містить символ поза ASCII (перевірте, чи ключ API вставлено правильно): {error}"
 
-#: thongssh_gtk/cli_providers.py:81 thongssh_gtk/dialogs.py:2713
-#: thongssh_gtk/window.py:1855
+#: thongssh_gtk/cli_providers.py:81 thongssh_gtk/dialogs.py:2850
+#: thongssh_gtk/window.py:1924
 msgid "Custom CLI"
 msgstr "Власний CLI"
 
@@ -123,7 +123,7 @@ msgstr "Типовий"
 msgid "Attach to Main Window"
 msgstr "Приєднати до головного вікна"
 
-#: thongssh_gtk/detached_tab_window.py:106 thongssh_gtk/window.py:1193
+#: thongssh_gtk/detached_tab_window.py:104 thongssh_gtk/window.py:1252
 msgid "New local terminal"
 msgstr "Новий локальний термінал"
 
@@ -197,25 +197,25 @@ msgstr "Корінь (/)"
 
 #: thongssh_gtk/dialogs.py:134 thongssh_gtk/dialogs.py:206
 #: thongssh_gtk/dialogs.py:363 thongssh_gtk/dialogs.py:391
-#: thongssh_gtk/dialogs.py:3288 thongssh_gtk/tab_window_base.py:1890
-#: thongssh_gtk/tab_window_base.py:2007
+#: thongssh_gtk/dialogs.py:3426 thongssh_gtk/tab_window_base.py:2228
+#: thongssh_gtk/tab_window_base.py:2364
 msgid "OK"
 msgstr "Гаразд"
 
 #: thongssh_gtk/dialogs.py:139 thongssh_gtk/dialogs.py:209
 #: thongssh_gtk/dialogs.py:286 thongssh_gtk/dialogs.py:395
-#: thongssh_gtk/dialogs.py:516 thongssh_gtk/dialogs.py:725
-#: thongssh_gtk/dialogs.py:881 thongssh_gtk/dialogs.py:940
-#: thongssh_gtk/dialogs.py:2798 thongssh_gtk/dialogs.py:2818
+#: thongssh_gtk/dialogs.py:516 thongssh_gtk/dialogs.py:844
+#: thongssh_gtk/dialogs.py:1003 thongssh_gtk/dialogs.py:1062
+#: thongssh_gtk/dialogs.py:2935 thongssh_gtk/dialogs.py:2955
 #: thongssh_gtk/host_keys.py:120 thongssh_gtk/send_file.py:157
-#: thongssh_gtk/sftp_widget.py:1275 thongssh_gtk/window.py:1669
-#: thongssh_gtk/window.py:1775 thongssh_gtk/window.py:1805
-#: thongssh_gtk/window.py:3445
+#: thongssh_gtk/sftp_widget.py:1275 thongssh_gtk/window.py:1738
+#: thongssh_gtk/window.py:1844 thongssh_gtk/window.py:1874
+#: thongssh_gtk/window.py:3518
 msgid "Cancel"
 msgstr "Скасувати"
 
-#: thongssh_gtk/dialogs.py:205 thongssh_gtk/dialogs.py:1895
-#: thongssh_gtk/tab_window_base.py:707 thongssh_gtk/tab_window_base.py:730
+#: thongssh_gtk/dialogs.py:205 thongssh_gtk/dialogs.py:2031
+#: thongssh_gtk/tab_window_base.py:719 thongssh_gtk/tab_window_base.py:740
 msgid "Rename Tab"
 msgstr "Перейменувати вкладку"
 
@@ -231,11 +231,11 @@ msgstr "Повне перейменування"
 msgid "Reset to Default"
 msgstr "Скинути за замовчуванням"
 
-#: thongssh_gtk/dialogs.py:285 thongssh_gtk/dialogs.py:566
+#: thongssh_gtk/dialogs.py:285 thongssh_gtk/dialogs.py:577
 msgid "Tab Color"
 msgstr "Колір вкладки"
 
-#: thongssh_gtk/dialogs.py:287 thongssh_gtk/dialogs.py:2412
+#: thongssh_gtk/dialogs.py:287 thongssh_gtk/dialogs.py:2548
 msgid "Apply"
 msgstr "Застосувати"
 
@@ -280,7 +280,7 @@ msgstr "Вісімкове значення:"
 msgid "Edit Host: {host_name}"
 msgstr "Редагування хоста: {host_name}"
 
-#: thongssh_gtk/dialogs.py:506 thongssh_gtk/dialogs.py:935
+#: thongssh_gtk/dialogs.py:506 thongssh_gtk/dialogs.py:1057
 msgid "Save"
 msgstr "Зберегти"
 
@@ -288,7 +288,7 @@ msgstr "Зберегти"
 msgid "Add New Host"
 msgstr "Додати новий хост"
 
-#: thongssh_gtk/dialogs.py:509 thongssh_gtk/dialogs.py:935
+#: thongssh_gtk/dialogs.py:509 thongssh_gtk/dialogs.py:1057
 msgid "Add"
 msgstr "Додати"
 
@@ -300,16 +300,16 @@ msgstr "Основні налаштування"
 msgid "Protocol"
 msgstr "Протокол"
 
-#: thongssh_gtk/dialogs.py:531 thongssh_gtk/dialogs.py:953
-#: thongssh_gtk/dialogs.py:1620 thongssh_gtk/dialogs.py:1726
-#: thongssh_gtk/dialogs.py:2016 thongssh_gtk/dialogs.py:2139
-#: thongssh_gtk/dialogs.py:2285 thongssh_gtk/sftp_widget.py:256
+#: thongssh_gtk/dialogs.py:531 thongssh_gtk/dialogs.py:1075
+#: thongssh_gtk/dialogs.py:1742 thongssh_gtk/dialogs.py:1848
+#: thongssh_gtk/dialogs.py:2152 thongssh_gtk/dialogs.py:2275
+#: thongssh_gtk/dialogs.py:2421 thongssh_gtk/sftp_widget.py:256
 #: thongssh_gtk/sftp_widget.py:359
 msgid "Name"
 msgstr "Назва"
 
-#: thongssh_gtk/dialogs.py:534 thongssh_gtk/tab_window_base.py:313
-#: thongssh_gtk/window.py:3492
+#: thongssh_gtk/dialogs.py:534 thongssh_gtk/tab_window_base.py:325
+#: thongssh_gtk/window.py:3565
 msgid "Hostname/IP"
 msgstr "Хост/IP"
 
@@ -321,442 +321,467 @@ msgstr "Ім'я хоста або IP-адреса"
 msgid "Port"
 msgstr "Порт"
 
-#: thongssh_gtk/dialogs.py:567
+#: thongssh_gtk/dialogs.py:578
 msgid "Applied automatically when a tab opens for this host"
 msgstr "Застосовується автоматично під час відкриття вкладки для цього хоста"
 
-#: thongssh_gtk/dialogs.py:575
-msgid "Use Default"
-msgstr "Використати за замовчуванням"
-
-#: thongssh_gtk/dialogs.py:587 thongssh_gtk/dialogs.py:611
+#: thongssh_gtk/dialogs.py:597 thongssh_gtk/dialogs.py:621
 msgid "Authentication"
 msgstr "Автентифікація"
 
-#: thongssh_gtk/dialogs.py:588
+#: thongssh_gtk/dialogs.py:598
 msgid "Saved securely in system keyring"
 msgstr "Безпечно збережено у зв'язці ключів системи"
 
-#: thongssh_gtk/dialogs.py:592
+#: thongssh_gtk/dialogs.py:602
 msgid "Username"
 msgstr "Ім'я користувача"
 
-#: thongssh_gtk/dialogs.py:595
+#: thongssh_gtk/dialogs.py:605
 msgid "Password"
 msgstr "Пароль"
 
-#: thongssh_gtk/dialogs.py:599
+#: thongssh_gtk/dialogs.py:609
 msgid "Clear saved password"
 msgstr "Очистити збережений пароль"
 
-#: thongssh_gtk/dialogs.py:604
+#: thongssh_gtk/dialogs.py:614
 msgid "Path to key (IdentityFile)"
 msgstr "Шлях до ключа (IdentityFile)"
 
-#: thongssh_gtk/dialogs.py:615 thongssh_gtk/dialogs.py:1206
+#: thongssh_gtk/dialogs.py:625 thongssh_gtk/dialogs.py:1328
 msgid "Logging"
 msgstr "Журналювання"
 
-#: thongssh_gtk/dialogs.py:619
+#: thongssh_gtk/dialogs.py:629
 msgid "Save session log"
 msgstr "Зберігати журнал сеансу"
 
-#: thongssh_gtk/dialogs.py:620
+#: thongssh_gtk/dialogs.py:630
 msgid "Records every session to a file in the configured log directory (see Settings → Terminal → Logging)"
 msgstr "Записує кожен сеанс у файл у вказаному каталозі журналів (див. Налаштування → Термінал → Журналювання)"
 
-#: thongssh_gtk/dialogs.py:624
+#: thongssh_gtk/dialogs.py:634
 msgid "SSH Options"
 msgstr "Параметри SSH"
 
-#: thongssh_gtk/dialogs.py:627
+#: thongssh_gtk/dialogs.py:637
 msgid "Compatibility with old systems"
 msgstr "Сумісність зі старими системами"
 
-#: thongssh_gtk/dialogs.py:628
+#: thongssh_gtk/dialogs.py:638
 msgid "Enables old ciphers (for CentOS 5/6, etc.)"
 msgstr "Вмикає старі шифри (для CentOS 5/6 тощо)"
 
-#: thongssh_gtk/dialogs.py:631
+#: thongssh_gtk/dialogs.py:641
 msgid "X11 Forwarding"
 msgstr "Переспрямування X11"
 
-#: thongssh_gtk/dialogs.py:632
+#: thongssh_gtk/dialogs.py:642
 msgid "Enables the -X flag (ForwardX11)"
 msgstr "Вмикає прапорець -X (ForwardX11)"
 
-#: thongssh_gtk/dialogs.py:635
+#: thongssh_gtk/dialogs.py:645
 msgid "ssh-agent Forwarding"
 msgstr "Переспрямування ssh-agent"
 
-#: thongssh_gtk/dialogs.py:636
+#: thongssh_gtk/dialogs.py:646
 msgid "Enables the -A flag (ForwardAgent)"
 msgstr "Вмикає прапорець -A (ForwardAgent)"
 
-#: thongssh_gtk/dialogs.py:639
+#: thongssh_gtk/dialogs.py:649
 msgid "Extra SSH Options"
 msgstr "Додаткові параметри SSH"
 
-#: thongssh_gtk/dialogs.py:640
+#: thongssh_gtk/dialogs.py:650
 msgid "Example: -o ServerAliveInterval=60"
 msgstr "Наприклад: -o ServerAliveInterval=60"
 
-#: thongssh_gtk/dialogs.py:647
+#: thongssh_gtk/dialogs.py:657
 msgid "Telnet Options"
 msgstr "Параметри Telnet"
 
-#: thongssh_gtk/dialogs.py:650
+#: thongssh_gtk/dialogs.py:660
 msgid "Binary Mode"
 msgstr "Двійковий режим"
 
-#: thongssh_gtk/dialogs.py:651
+#: thongssh_gtk/dialogs.py:661
 msgid "Enable binary mode transmission"
 msgstr "Увімкнути передавання у двійковому режимі"
 
-#: thongssh_gtk/dialogs.py:654
+#: thongssh_gtk/dialogs.py:664
 msgid "Local Echo"
 msgstr "Локальне відлуння"
 
-#: thongssh_gtk/dialogs.py:655
+#: thongssh_gtk/dialogs.py:665
 msgid "Echo typed characters locally"
 msgstr "Відображати введені символи локально"
 
-#: thongssh_gtk/dialogs.py:658
+#: thongssh_gtk/dialogs.py:668
 msgid "Options"
 msgstr "Параметри"
 
-#: thongssh_gtk/dialogs.py:720
-msgid "Select SSH Key"
-msgstr "Вибрати ключ SSH"
-
-#: thongssh_gtk/dialogs.py:724 thongssh_gtk/dialogs.py:2797
-#: thongssh_gtk/dialogs.py:2817 thongssh_gtk/send_file.py:156
-msgid "Select"
-msgstr "Вибрати"
-
-#: thongssh_gtk/dialogs.py:728
-msgid "All files"
-msgstr "Усі файли"
-
-#: thongssh_gtk/dialogs.py:873
-msgid "Create New Group"
-msgstr "Створити нову групу"
-
-#: thongssh_gtk/dialogs.py:875
-msgid "Create"
-msgstr "Створити"
-
-#: thongssh_gtk/dialogs.py:892
-msgid "Group Name:"
-msgstr "Назва групи:"
-
-#: thongssh_gtk/dialogs.py:898
-msgid "Parent Group:"
-msgstr "Батьківська група:"
-
-#: thongssh_gtk/dialogs.py:932
-msgid "Edit Quicky"
-msgstr "Редагування шустрика"
-
-#: thongssh_gtk/dialogs.py:932 thongssh_gtk/window.py:2098
-msgid "Add Quicky"
-msgstr "Додати шустрика"
-
-#: thongssh_gtk/dialogs.py:984 thongssh_gtk/dialogs.py:1259
-msgid "Available variables: $name, $host, $user"
-msgstr "Доступні змінні: $name, $host, $user"
-
-#: thongssh_gtk/dialogs.py:1028 thongssh_gtk/dialogs.py:2388
-msgid "Terminal"
-msgstr "Термінал"
-
-#: thongssh_gtk/dialogs.py:1032 thongssh_gtk/dialogs.py:1766
-msgid "Appearance"
-msgstr "Зовнішній вигляд"
-
-#: thongssh_gtk/dialogs.py:1035 thongssh_gtk/dialogs.py:1287
-msgid "Font"
-msgstr "Шрифт"
-
-#: thongssh_gtk/dialogs.py:1046
-msgid "Color Scheme"
-msgstr "Кольорова схема"
-
-#: thongssh_gtk/dialogs.py:1064 thongssh_gtk/dialogs.py:1071
-msgid "Custom Colors"
-msgstr "Власні кольори"
-
-#: thongssh_gtk/dialogs.py:1065
-msgid "Manually set every color, starting from the template above"
-msgstr "Задайте кожен колір вручну, почавши зі шаблону вище"
-
-#: thongssh_gtk/dialogs.py:1096
-msgid "Background"
-msgstr "Тло"
-
-#: thongssh_gtk/dialogs.py:1097
-msgid "Foreground"
-msgstr "Текст"
-
-#: thongssh_gtk/dialogs.py:1103
-msgid "Palette"
-msgstr "Палітра"
-
-#: thongssh_gtk/dialogs.py:1104
-msgid "The 16 colors terminal apps use for colored text"
-msgstr "16 кольорів, які термінальні застосунки використовують для кольорового тексту"
-
-#: thongssh_gtk/dialogs.py:1145
-msgid "Behavior"
-msgstr "Поведінка"
-
-#: thongssh_gtk/dialogs.py:1149
-msgid "Scrollback History"
-msgstr "Історія прокручування"
-
-#: thongssh_gtk/dialogs.py:1150
-msgid "Number of lines to keep in history"
-msgstr "Кількість рядків, які зберігати в історії"
-
-#: thongssh_gtk/dialogs.py:1156
-msgid "Close tab on disconnect"
-msgstr "Закривати вкладку після від'єднання"
-
-#: thongssh_gtk/dialogs.py:1157
-msgid "Automatically close the terminal tab when the session ends"
-msgstr "Автоматично закривати вкладку термінала після завершення сеансу"
-
-#: thongssh_gtk/dialogs.py:1169
-msgid "Ask for username when reconnecting"
-msgstr "Запитувати ім'я користувача під час повторного з'єднання"
-
-#: thongssh_gtk/dialogs.py:1170
-msgid "Prompt again instead of reusing the previous username when reconnecting to a disconnected tab"
-msgstr "Запитувати знову замість повторного використання попереднього імені користувача під час повторного з'єднання з роз'єднаною вкладкою"
-
-#: thongssh_gtk/dialogs.py:1181
-msgid "New local terminal opens in current directory"
-msgstr "Новий локальний термінал відкривається в поточному каталозі"
-
-#: thongssh_gtk/dialogs.py:1182
-msgid "The tab strip's \"+\" button starts its shell in the active tab's current directory instead of always $HOME"
-msgstr "Кнопка «+» на панелі вкладок запускає оболонку в поточному каталозі активної вкладки, а не завжди в $HOME"
-
-#: thongssh_gtk/dialogs.py:1190
-msgid "Executable Paths"
-msgstr "Шляхи до виконуваних файлів"
-
-#: thongssh_gtk/dialogs.py:1193
-msgid "SSH Client Path"
-msgstr "Шлях до клієнта SSH"
-
-#: thongssh_gtk/dialogs.py:1197
-msgid "sshpass Client Path"
-msgstr "Шлях до клієнта sshpass"
-
-#: thongssh_gtk/dialogs.py:1201
-msgid "Telnet Client Path"
-msgstr "Шлях до клієнта Telnet"
-
-#: thongssh_gtk/dialogs.py:1207
-msgid "Per-host \"Save session log\" (on that host's own edit page) still wins when set explicitly — the switch below just controls what every new connection starts with. Leave the directory empty to use the .config_path pointer's terminal_logs_path, or the config directory if that's empty too."
-msgstr "Параметр «Зберігати журнал сеансу» для окремого хоста (на сторінці редагування цього хоста) усе одно має пріоритет, якщо заданий явно — перемикач нижче лише визначає, з чого за замовчуванням починається кожне нове підключення. Залиште теку порожньою, щоб використати terminal_logs_path із вказівника .config_path, або каталог конфігурації, якщо він теж порожній."
-
-#: thongssh_gtk/dialogs.py:1219
-msgid "Automatically save session logs"
-msgstr "Автоматично зберігати журнали сеансів"
-
-#: thongssh_gtk/dialogs.py:1220
-msgid "Start every new terminal connection with logging already turned on"
-msgstr "Починати кожне нове підключення термінала з уже увімкненим журналюванням"
-
-#: thongssh_gtk/dialogs.py:1226
-msgid "Skip full-screen interactive apps in logs"
-msgstr "Не записувати в журнал повноекранні інтерактивні застосунки"
-
-#: thongssh_gtk/dialogs.py:1227
-msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
-msgstr "Виключає з журналу редактори, файлові менеджери та інші повноекранні застосунки термінала (vim, mc, tmux, htop, less…) — інакше кожне натискання клавіші перемальовує весь екран, і кожне перемальовування потрапляє до журналу"
-
-#: thongssh_gtk/dialogs.py:1234
-msgid "Log Directory"
-msgstr "Каталог журналів"
-
-#: thongssh_gtk/dialogs.py:1238 thongssh_gtk/dialogs.py:1498
-msgid "Choose a folder"
-msgstr "Виберіть теку"
-
-#: thongssh_gtk/dialogs.py:1246
-msgid "Watermark"
-msgstr "Водяний знак"
-
-#: thongssh_gtk/dialogs.py:1250 thongssh_gtk/dialogs.py:1661
-msgid "Enabled on start"
-msgstr "Увімкнено під час запуску"
-
-#: thongssh_gtk/dialogs.py:1251
-msgid "Whether the watermark is on when the app launches — same switch as the header-bar button"
-msgstr "Чи ввімкнено водяний знак під час запуску застосунку — той самий перемикач, що й кнопка на панелі заголовка"
-
-#: thongssh_gtk/dialogs.py:1256 thongssh_gtk/dialogs.py:1731
-msgid "Text"
-msgstr "Текст"
-
-#: thongssh_gtk/dialogs.py:1270 thongssh_gtk/dialogs.py:1668
-msgid "Position"
-msgstr "Розташування"
-
-#: thongssh_gtk/dialogs.py:1275
-msgid "Font Size"
-msgstr "Розмір шрифту"
-
-#: thongssh_gtk/dialogs.py:1298 thongssh_gtk/dialogs.py:1400
-msgid "Color"
-msgstr "Колір"
-
-#: thongssh_gtk/dialogs.py:1308 thongssh_gtk/dialogs.py:1410
-msgid "Opacity (%)"
-msgstr "Непрозорість (%)"
-
-#: thongssh_gtk/dialogs.py:1314
-msgid "Active terminal only"
-msgstr "Тільки активний термінал"
-
-#: thongssh_gtk/dialogs.py:1314
-msgid "All panes"
-msgstr "Усі панелі"
-
-#: thongssh_gtk/dialogs.py:1315
-msgid "Show on"
-msgstr "Показувати на"
-
-#: thongssh_gtk/dialogs.py:1327
-msgid "Off"
-msgstr "Вимкнено"
-
-#: thongssh_gtk/dialogs.py:1330
-msgid "Shrink in split view"
-msgstr "Зменшувати в розділеному режимі"
-
-#: thongssh_gtk/dialogs.py:1331
-msgid "Scale the size down to this percent while any split layout is active"
-msgstr "Масштабувати розмір до цього відсотка, поки активний будь-який розділений режим"
-
-#: thongssh_gtk/dialogs.py:1353
-msgid "Adaptive Watermarks"
-msgstr "Адаптивні водяні знаки"
-
-#: thongssh_gtk/dialogs.py:1354
-msgid "Override the color/opacity above when the watermark text matches a pattern. The topmost matching rule wins — put more specific patterns above more general ones."
-msgstr "Перевизначає колір/непрозорість вище, коли текст водяного знака відповідає шаблону. Перемагає найвище правило, що збіглося, — розміщуйте специфічніші шаблони над загальнішими."
-
-#: thongssh_gtk/dialogs.py:1394
-msgid "Pattern (regex)"
-msgstr "Шаблон (regex)"
-
-#: thongssh_gtk/dialogs.py:1416
-msgid "Move up (higher priority)"
-msgstr "Перемістити вгору (вищий пріоритет)"
-
-#: thongssh_gtk/dialogs.py:1422
-msgid "Move down (lower priority)"
-msgstr "Перемістити вниз (нижчий пріоритет)"
-
-#: thongssh_gtk/dialogs.py:1428 thongssh_gtk/dialogs.py:2165
-#: thongssh_gtk/dialogs.py:2304
-msgid "Remove"
-msgstr "Вилучити"
-
-#: thongssh_gtk/dialogs.py:1450
-msgid "Add Rule"
-msgstr "Додати правило"
-
-#: thongssh_gtk/dialogs.py:1478 thongssh_gtk/dialogs.py:1482
-#: thongssh_gtk/dialogs.py:2391
-msgid "Sync"
-msgstr "Синхронізація"
-
-#: thongssh_gtk/dialogs.py:1483
-msgid "Keeps hosts/Quickies/AI chats/user commands/general/terminal settings in step across machines via a plain shared folder — Dropbox, iCloud, a network share, or just another local directory. The app never talks to any cloud API directly, it only reads/writes files inside whatever folder you point it at below."
-msgstr "Тримає хости/шустрики/чати з ШІ/команди користувача/загальні та термінальні налаштування синхронізованими між пристроями через звичайну спільну теку — Dropbox, iCloud, мережевий ресурс або просто інший локальний каталог. Застосунок ніколи не звертається напряму до жодного хмарного API, він лише читає й записує файли в теці, яку ви вкажете нижче."
-
-#: thongssh_gtk/dialogs.py:1490
-msgid "Enable Sync"
-msgstr "Увімкнути синхронізацію"
-
-#: thongssh_gtk/dialogs.py:1494
-msgid "Sync Folder"
-msgstr "Тека синхронізації"
-
-#: thongssh_gtk/dialogs.py:1504
-msgid "Sync Interval (seconds)"
-msgstr "Інтервал синхронізації (секунди)"
-
-#: thongssh_gtk/dialogs.py:1505
-msgid "Minimum 60 seconds"
-msgstr "Мінімум 60 секунд"
-
-#: thongssh_gtk/dialogs.py:1512
-msgid "What to Sync"
-msgstr "Що синхронізувати"
-
-#: thongssh_gtk/dialogs.py:1515 thongssh_gtk/window.py:406
-msgid "Hosts"
-msgstr "Хости"
-
-#: thongssh_gtk/dialogs.py:1519 thongssh_gtk/dialogs.py:1654
-#: thongssh_gtk/dialogs.py:1963 thongssh_gtk/dialogs.py:2390
-msgid "Quickies"
-msgstr "Шустрики"
-
-#: thongssh_gtk/dialogs.py:1523
-msgid "AI Chats"
-msgstr "Чати з ШІ"
-
-#: thongssh_gtk/dialogs.py:1527 thongssh_gtk/dialogs.py:1587
-#: thongssh_gtk/dialogs.py:2389
-msgid "User Commands"
-msgstr "Команди користувача"
-
-#: thongssh_gtk/dialogs.py:1531 thongssh_gtk/dialogs.py:1763
-#: thongssh_gtk/dialogs.py:2386
-msgid "General"
-msgstr "Загальне"
-
-#: thongssh_gtk/dialogs.py:1538 thongssh_gtk/dialogs.py:1876
-msgid "Keyboard Shortcuts"
-msgstr "Клавіатурні скорочення"
-
-#: thongssh_gtk/dialogs.py:1542
-msgid "Terminal Settings"
-msgstr "Налаштування термінала"
-
-#: thongssh_gtk/dialogs.py:1542
-msgid "Colors, watermarks"
-msgstr "Кольори, водяні знаки"
-
-#: thongssh_gtk/dialogs.py:1555
-msgid "Sync Archive ID"
-msgstr "ID архіву синхронізації"
-
-#: thongssh_gtk/dialogs.py:1563
-msgid "Force Sync Now"
-msgstr "Примусово синхронізувати зараз"
-
-#: thongssh_gtk/dialogs.py:1578
-msgid "Sync Now"
-msgstr "Синхронізувати зараз"
-
-#: thongssh_gtk/dialogs.py:1590
-msgid "Custom Commands"
-msgstr "Власні команди"
-
-#: thongssh_gtk/dialogs.py:1625 thongssh_gtk/dialogs.py:2254
-#: thongssh_gtk/dialogs.py:2290
+#: thongssh_gtk/dialogs.py:685
+msgid "Post-connection Commands"
+msgstr "Команди після підключення"
+
+#: thongssh_gtk/dialogs.py:687
+msgid "Sent once, in order, right after connecting — before any real login prompt is guaranteed to be ready, so a password or host-key confirmation prompt will receive this text too if one appears first. Works best with key-based login. Available variables: $name, $host, $user"
+msgstr "Надсилаються один раз, по черзі, одразу після підключення — до того, як гарантовано з'явиться справжнє запрошення входу, тому запит пароля чи підтвердження ключа хоста теж отримає цей текст, якщо з'явиться першим. Найкраще працює зі входом за ключем. Доступні змінні: $name, $host, $user"
+
+#: thongssh_gtk/dialogs.py:699 thongssh_gtk/dialogs.py:742
+#: thongssh_gtk/dialogs.py:1747 thongssh_gtk/dialogs.py:2390
+#: thongssh_gtk/dialogs.py:2426
 msgid "Command"
 msgstr "Команда"
 
-#: thongssh_gtk/dialogs.py:1642
+#: thongssh_gtk/dialogs.py:719
+msgid "Add Command"
+msgstr "Додати команду"
+
+#: thongssh_gtk/dialogs.py:727
+msgid "Regexp Commands"
+msgstr "Команди за регулярним виразом"
+
+#: thongssh_gtk/dialogs.py:729
+msgid "Sent whenever new terminal output matches the pattern — every time it reappears, not just the first. Available variables in Command: $name, $host, $user"
+msgstr "Надсилається щоразу, коли нове виведення термінала відповідає шаблону — під час кожної повторної появи, а не лише першої. Доступні змінні в команді: $name, $host, $user"
+
+#: thongssh_gtk/dialogs.py:740
+msgid "Pattern"
+msgstr "Шаблон"
+
+#: thongssh_gtk/dialogs.py:770 thongssh_gtk/dialogs.py:1572
+msgid "Add Rule"
+msgstr "Додати правило"
+
+#: thongssh_gtk/dialogs.py:777
+msgid "Commands"
+msgstr "Команди"
+
+#: thongssh_gtk/dialogs.py:839
+msgid "Select SSH Key"
+msgstr "Вибрати ключ SSH"
+
+#: thongssh_gtk/dialogs.py:843 thongssh_gtk/dialogs.py:2934
+#: thongssh_gtk/dialogs.py:2954 thongssh_gtk/send_file.py:156
+msgid "Select"
+msgstr "Вибрати"
+
+#: thongssh_gtk/dialogs.py:847
+msgid "All files"
+msgstr "Усі файли"
+
+#: thongssh_gtk/dialogs.py:995
+msgid "Create New Group"
+msgstr "Створити нову групу"
+
+#: thongssh_gtk/dialogs.py:997
+msgid "Create"
+msgstr "Створити"
+
+#: thongssh_gtk/dialogs.py:1014
+msgid "Group Name:"
+msgstr "Назва групи:"
+
+#: thongssh_gtk/dialogs.py:1020
+msgid "Parent Group:"
+msgstr "Батьківська група:"
+
+#: thongssh_gtk/dialogs.py:1054
+msgid "Edit Quicky"
+msgstr "Редагування шустрика"
+
+#: thongssh_gtk/dialogs.py:1054 thongssh_gtk/window.py:2167
+msgid "Add Quicky"
+msgstr "Додати шустрика"
+
+#: thongssh_gtk/dialogs.py:1106 thongssh_gtk/dialogs.py:1381
+msgid "Available variables: $name, $host, $user"
+msgstr "Доступні змінні: $name, $host, $user"
+
+#: thongssh_gtk/dialogs.py:1150 thongssh_gtk/dialogs.py:2524
+msgid "Terminal"
+msgstr "Термінал"
+
+#: thongssh_gtk/dialogs.py:1154 thongssh_gtk/dialogs.py:1888
+msgid "Appearance"
+msgstr "Зовнішній вигляд"
+
+#: thongssh_gtk/dialogs.py:1157 thongssh_gtk/dialogs.py:1409
+msgid "Font"
+msgstr "Шрифт"
+
+#: thongssh_gtk/dialogs.py:1168
+msgid "Color Scheme"
+msgstr "Кольорова схема"
+
+#: thongssh_gtk/dialogs.py:1186 thongssh_gtk/dialogs.py:1193
+msgid "Custom Colors"
+msgstr "Власні кольори"
+
+#: thongssh_gtk/dialogs.py:1187
+msgid "Manually set every color, starting from the template above"
+msgstr "Задайте кожен колір вручну, почавши зі шаблону вище"
+
+#: thongssh_gtk/dialogs.py:1218
+msgid "Background"
+msgstr "Тло"
+
+#: thongssh_gtk/dialogs.py:1219
+msgid "Foreground"
+msgstr "Текст"
+
+#: thongssh_gtk/dialogs.py:1225
+msgid "Palette"
+msgstr "Палітра"
+
+#: thongssh_gtk/dialogs.py:1226
+msgid "The 16 colors terminal apps use for colored text"
+msgstr "16 кольорів, які термінальні застосунки використовують для кольорового тексту"
+
+#: thongssh_gtk/dialogs.py:1267
+msgid "Behavior"
+msgstr "Поведінка"
+
+#: thongssh_gtk/dialogs.py:1271
+msgid "Scrollback History"
+msgstr "Історія прокручування"
+
+#: thongssh_gtk/dialogs.py:1272
+msgid "Number of lines to keep in history"
+msgstr "Кількість рядків, які зберігати в історії"
+
+#: thongssh_gtk/dialogs.py:1278
+msgid "Close tab on disconnect"
+msgstr "Закривати вкладку після від'єднання"
+
+#: thongssh_gtk/dialogs.py:1279
+msgid "Automatically close the terminal tab when the session ends"
+msgstr "Автоматично закривати вкладку термінала після завершення сеансу"
+
+#: thongssh_gtk/dialogs.py:1291
+msgid "Ask for username when reconnecting"
+msgstr "Запитувати ім'я користувача під час повторного з'єднання"
+
+#: thongssh_gtk/dialogs.py:1292
+msgid "Prompt again instead of reusing the previous username when reconnecting to a disconnected tab"
+msgstr "Запитувати знову замість повторного використання попереднього імені користувача під час повторного з'єднання з роз'єднаною вкладкою"
+
+#: thongssh_gtk/dialogs.py:1303
+msgid "New local terminal opens in current directory"
+msgstr "Новий локальний термінал відкривається в поточному каталозі"
+
+#: thongssh_gtk/dialogs.py:1304
+msgid "The tab strip's \"+\" button starts its shell in the active tab's current directory instead of always $HOME"
+msgstr "Кнопка «+» на панелі вкладок запускає оболонку в поточному каталозі активної вкладки, а не завжди в $HOME"
+
+#: thongssh_gtk/dialogs.py:1312
+msgid "Executable Paths"
+msgstr "Шляхи до виконуваних файлів"
+
+#: thongssh_gtk/dialogs.py:1315
+msgid "SSH Client Path"
+msgstr "Шлях до клієнта SSH"
+
+#: thongssh_gtk/dialogs.py:1319
+msgid "sshpass Client Path"
+msgstr "Шлях до клієнта sshpass"
+
+#: thongssh_gtk/dialogs.py:1323
+msgid "Telnet Client Path"
+msgstr "Шлях до клієнта Telnet"
+
+#: thongssh_gtk/dialogs.py:1329
+msgid "Per-host \"Save session log\" (on that host's own edit page) still wins when set explicitly — the switch below just controls what every new connection starts with. Leave the directory empty to use the .config_path pointer's terminal_logs_path, or the config directory if that's empty too."
+msgstr "Параметр «Зберігати журнал сеансу» для окремого хоста (на сторінці редагування цього хоста) усе одно має пріоритет, якщо заданий явно — перемикач нижче лише визначає, з чого за замовчуванням починається кожне нове підключення. Залиште теку порожньою, щоб використати terminal_logs_path із вказівника .config_path, або каталог конфігурації, якщо він теж порожній."
+
+#: thongssh_gtk/dialogs.py:1341
+msgid "Automatically save session logs"
+msgstr "Автоматично зберігати журнали сеансів"
+
+#: thongssh_gtk/dialogs.py:1342
+msgid "Start every new terminal connection with logging already turned on"
+msgstr "Починати кожне нове підключення термінала з уже увімкненим журналюванням"
+
+#: thongssh_gtk/dialogs.py:1348
+msgid "Skip full-screen interactive apps in logs"
+msgstr "Не записувати в журнал повноекранні інтерактивні застосунки"
+
+#: thongssh_gtk/dialogs.py:1349
+msgid "Leaves editors, file managers, and other full-screen terminal apps (vim, mc, tmux, htop, less…) out of the log — otherwise every single keystroke redraws the whole screen, and every redraw gets logged"
+msgstr "Виключає з журналу редактори, файлові менеджери та інші повноекранні застосунки термінала (vim, mc, tmux, htop, less…) — інакше кожне натискання клавіші перемальовує весь екран, і кожне перемальовування потрапляє до журналу"
+
+#: thongssh_gtk/dialogs.py:1356
+msgid "Log Directory"
+msgstr "Каталог журналів"
+
+#: thongssh_gtk/dialogs.py:1360 thongssh_gtk/dialogs.py:1620
+msgid "Choose a folder"
+msgstr "Виберіть теку"
+
+#: thongssh_gtk/dialogs.py:1368
+msgid "Watermark"
+msgstr "Водяний знак"
+
+#: thongssh_gtk/dialogs.py:1372 thongssh_gtk/dialogs.py:1783
+msgid "Enabled on start"
+msgstr "Увімкнено під час запуску"
+
+#: thongssh_gtk/dialogs.py:1373
+msgid "Whether the watermark is on when the app launches — same switch as the header-bar button"
+msgstr "Чи ввімкнено водяний знак під час запуску застосунку — той самий перемикач, що й кнопка на панелі заголовка"
+
+#: thongssh_gtk/dialogs.py:1378 thongssh_gtk/dialogs.py:1853
+msgid "Text"
+msgstr "Текст"
+
+#: thongssh_gtk/dialogs.py:1392 thongssh_gtk/dialogs.py:1790
+msgid "Position"
+msgstr "Розташування"
+
+#: thongssh_gtk/dialogs.py:1397
+msgid "Font Size"
+msgstr "Розмір шрифту"
+
+#: thongssh_gtk/dialogs.py:1420 thongssh_gtk/dialogs.py:1522
+msgid "Color"
+msgstr "Колір"
+
+#: thongssh_gtk/dialogs.py:1430 thongssh_gtk/dialogs.py:1532
+msgid "Opacity (%)"
+msgstr "Непрозорість (%)"
+
+#: thongssh_gtk/dialogs.py:1436
+msgid "Active terminal only"
+msgstr "Тільки активний термінал"
+
+#: thongssh_gtk/dialogs.py:1436
+msgid "All panes"
+msgstr "Усі панелі"
+
+#: thongssh_gtk/dialogs.py:1437
+msgid "Show on"
+msgstr "Показувати на"
+
+#: thongssh_gtk/dialogs.py:1449
+msgid "Off"
+msgstr "Вимкнено"
+
+#: thongssh_gtk/dialogs.py:1452
+msgid "Shrink in split view"
+msgstr "Зменшувати в розділеному режимі"
+
+#: thongssh_gtk/dialogs.py:1453
+msgid "Scale the size down to this percent while any split layout is active"
+msgstr "Масштабувати розмір до цього відсотка, поки активний будь-який розділений режим"
+
+#: thongssh_gtk/dialogs.py:1475
+msgid "Adaptive Watermarks"
+msgstr "Адаптивні водяні знаки"
+
+#: thongssh_gtk/dialogs.py:1476
+msgid "Override the color/opacity above when the watermark text matches a pattern. The topmost matching rule wins — put more specific patterns above more general ones."
+msgstr "Перевизначає колір/непрозорість вище, коли текст водяного знака відповідає шаблону. Перемагає найвище правило, що збіглося, — розміщуйте специфічніші шаблони над загальнішими."
+
+#: thongssh_gtk/dialogs.py:1516
+msgid "Pattern (regex)"
+msgstr "Шаблон (regex)"
+
+#: thongssh_gtk/dialogs.py:1538
+msgid "Move up (higher priority)"
+msgstr "Перемістити вгору (вищий пріоритет)"
+
+#: thongssh_gtk/dialogs.py:1544
+msgid "Move down (lower priority)"
+msgstr "Перемістити вниз (нижчий пріоритет)"
+
+#: thongssh_gtk/dialogs.py:1550 thongssh_gtk/dialogs.py:2301
+#: thongssh_gtk/dialogs.py:2440
+msgid "Remove"
+msgstr "Вилучити"
+
+#: thongssh_gtk/dialogs.py:1600 thongssh_gtk/dialogs.py:1604
+#: thongssh_gtk/dialogs.py:2527
+msgid "Sync"
+msgstr "Синхронізація"
+
+#: thongssh_gtk/dialogs.py:1605
+msgid "Keeps hosts/Quickies/AI chats/user commands/general/terminal settings in step across machines via a plain shared folder — Dropbox, iCloud, a network share, or just another local directory. The app never talks to any cloud API directly, it only reads/writes files inside whatever folder you point it at below."
+msgstr "Тримає хости/шустрики/чати з ШІ/команди користувача/загальні та термінальні налаштування синхронізованими між пристроями через звичайну спільну теку — Dropbox, iCloud, мережевий ресурс або просто інший локальний каталог. Застосунок ніколи не звертається напряму до жодного хмарного API, він лише читає й записує файли в теці, яку ви вкажете нижче."
+
+#: thongssh_gtk/dialogs.py:1612
+msgid "Enable Sync"
+msgstr "Увімкнути синхронізацію"
+
+#: thongssh_gtk/dialogs.py:1616
+msgid "Sync Folder"
+msgstr "Тека синхронізації"
+
+#: thongssh_gtk/dialogs.py:1626
+msgid "Sync Interval (seconds)"
+msgstr "Інтервал синхронізації (секунди)"
+
+#: thongssh_gtk/dialogs.py:1627
+msgid "Minimum 60 seconds"
+msgstr "Мінімум 60 секунд"
+
+#: thongssh_gtk/dialogs.py:1634
+msgid "What to Sync"
+msgstr "Що синхронізувати"
+
+#: thongssh_gtk/dialogs.py:1637 thongssh_gtk/window.py:406
+msgid "Hosts"
+msgstr "Хости"
+
+#: thongssh_gtk/dialogs.py:1641 thongssh_gtk/dialogs.py:1776
+#: thongssh_gtk/dialogs.py:2099 thongssh_gtk/dialogs.py:2526
+msgid "Quickies"
+msgstr "Шустрики"
+
+#: thongssh_gtk/dialogs.py:1645
+msgid "AI Chats"
+msgstr "Чати з ШІ"
+
+#: thongssh_gtk/dialogs.py:1649 thongssh_gtk/dialogs.py:1709
+#: thongssh_gtk/dialogs.py:2525
+msgid "User Commands"
+msgstr "Команди користувача"
+
+#: thongssh_gtk/dialogs.py:1653 thongssh_gtk/dialogs.py:1885
+#: thongssh_gtk/dialogs.py:2522
+msgid "General"
+msgstr "Загальне"
+
+#: thongssh_gtk/dialogs.py:1660 thongssh_gtk/dialogs.py:2012
+msgid "Keyboard Shortcuts"
+msgstr "Клавіатурні скорочення"
+
+#: thongssh_gtk/dialogs.py:1664
+msgid "Terminal Settings"
+msgstr "Налаштування термінала"
+
+#: thongssh_gtk/dialogs.py:1664
+msgid "Colors, watermarks"
+msgstr "Кольори, водяні знаки"
+
+#: thongssh_gtk/dialogs.py:1677
+msgid "Sync Archive ID"
+msgstr "ID архіву синхронізації"
+
+#: thongssh_gtk/dialogs.py:1685
+msgid "Force Sync Now"
+msgstr "Примусово синхронізувати зараз"
+
+#: thongssh_gtk/dialogs.py:1700
+msgid "Sync Now"
+msgstr "Синхронізувати зараз"
+
+#: thongssh_gtk/dialogs.py:1712
+msgid "Custom Commands"
+msgstr "Власні команди"
+
+#: thongssh_gtk/dialogs.py:1764
 msgid ""
 "Commands for the host's context menu.\n"
 "Available variables: $name, $host, $user"
@@ -764,53 +789,53 @@ msgstr ""
 "Команди для контекстного меню хоста.\n"
 "Доступні змінні: $name, $host, $user"
 
-#: thongssh_gtk/dialogs.py:1657
+#: thongssh_gtk/dialogs.py:1779
 msgid "Panel"
 msgstr "Панель"
 
-#: thongssh_gtk/dialogs.py:1662
+#: thongssh_gtk/dialogs.py:1784
 msgid "Whether the Quickies panel is shown when the app launches — same switch as the header-bar button"
 msgstr "Чи показано панель шустриків під час запуску застосунку — той самий перемикач, що й кнопка на панелі заголовка"
 
-#: thongssh_gtk/dialogs.py:1667
+#: thongssh_gtk/dialogs.py:1789
 msgid "Above hosts"
 msgstr "Над хостами"
 
-#: thongssh_gtk/dialogs.py:1667
+#: thongssh_gtk/dialogs.py:1789
 msgid "Below hosts"
 msgstr "Під хостами"
 
-#: thongssh_gtk/dialogs.py:1675 thongssh_gtk/dialogs.py:1835
-#: thongssh_gtk/window.py:1349
+#: thongssh_gtk/dialogs.py:1797 thongssh_gtk/dialogs.py:1957
+#: thongssh_gtk/window.py:1418
 msgid "Top"
 msgstr "Вгорі"
 
-#: thongssh_gtk/dialogs.py:1675 thongssh_gtk/dialogs.py:1835
-#: thongssh_gtk/window.py:1349
+#: thongssh_gtk/dialogs.py:1797 thongssh_gtk/dialogs.py:1957
+#: thongssh_gtk/window.py:1418
 msgid "Bottom"
 msgstr "Внизу"
 
-#: thongssh_gtk/dialogs.py:1676 thongssh_gtk/dialogs.py:1836
+#: thongssh_gtk/dialogs.py:1798 thongssh_gtk/dialogs.py:1958
 msgid "Search bar position"
 msgstr "Розташування панелі пошуку"
 
-#: thongssh_gtk/dialogs.py:1684
+#: thongssh_gtk/dialogs.py:1806
 msgid "Show command preview"
 msgstr "Показувати команду"
 
-#: thongssh_gtk/dialogs.py:1685
+#: thongssh_gtk/dialogs.py:1807
 msgid "Shows each Quicky's command text as a second line under its name in the panel"
 msgstr "Показує команду кожного шустрика другим рядком під його назвою на панелі"
 
-#: thongssh_gtk/dialogs.py:1690
+#: thongssh_gtk/dialogs.py:1812
 msgid "Snippets"
 msgstr "Фрагменти"
 
-#: thongssh_gtk/dialogs.py:1719
+#: thongssh_gtk/dialogs.py:1841
 msgid "#"
 msgstr "#"
 
-#: thongssh_gtk/dialogs.py:1749
+#: thongssh_gtk/dialogs.py:1871
 msgid ""
 "Drag rows to reorder — the first 10 get a keyboard shortcut (Settings → Shortcuts → Quickies).\n"
 "Inserted into the active terminal, not executed.\n"
@@ -820,489 +845,501 @@ msgstr ""
 "Вставляється в активний термінал, але не виконується.\n"
 "Доступні змінні: $name, $host, $user"
 
-#: thongssh_gtk/dialogs.py:1770
+#: thongssh_gtk/dialogs.py:1892
 msgid "System"
 msgstr "Системна"
 
-#: thongssh_gtk/dialogs.py:1771
+#: thongssh_gtk/dialogs.py:1893
 msgid "Light"
 msgstr "Світла"
 
-#: thongssh_gtk/dialogs.py:1772
+#: thongssh_gtk/dialogs.py:1894
 msgid "Dark"
 msgstr "Темна"
 
-#: thongssh_gtk/dialogs.py:1775
+#: thongssh_gtk/dialogs.py:1897
 msgid "Theme"
 msgstr "Тема"
 
-#: thongssh_gtk/dialogs.py:1784
+#: thongssh_gtk/dialogs.py:1906
 msgid "Logo"
 msgstr "Логотип"
 
-#: thongssh_gtk/dialogs.py:1789
+#: thongssh_gtk/dialogs.py:1911
 msgid "Safe"
 msgstr "Безпечний"
 
-#: thongssh_gtk/dialogs.py:1790
+#: thongssh_gtk/dialogs.py:1912
 msgid "Original"
 msgstr "Оригінальний"
 
-#: thongssh_gtk/dialogs.py:1793
+#: thongssh_gtk/dialogs.py:1915
 msgid "App Icon"
 msgstr "Піктограма застосунку"
 
-#: thongssh_gtk/dialogs.py:1803 thongssh_gtk/dialogs.py:1816
+#: thongssh_gtk/dialogs.py:1925 thongssh_gtk/dialogs.py:1938
 msgid "Language"
 msgstr "Мова"
 
-#: thongssh_gtk/dialogs.py:1804
+#: thongssh_gtk/dialogs.py:1926
 msgid "Takes effect the next time ThongSSH starts."
 msgstr "Набуде чинності після наступного запуску ThongSSH."
 
-#: thongssh_gtk/dialogs.py:1814
+#: thongssh_gtk/dialogs.py:1936
 msgid "System Default"
 msgstr "Типова системна"
 
-#: thongssh_gtk/dialogs.py:1825
+#: thongssh_gtk/dialogs.py:1947
 msgid "Host Tree"
 msgstr "Дерево хостів"
 
-#: thongssh_gtk/dialogs.py:1829
+#: thongssh_gtk/dialogs.py:1951
 msgid "Alternating row highlight"
 msgstr "Підсвічування рядків через один"
 
-#: thongssh_gtk/dialogs.py:1830
+#: thongssh_gtk/dialogs.py:1952
 msgid "Tint every other row with a faint accent-color wash"
 msgstr "Забарвлювати кожен другий рядок ледь помітним акцентним кольором"
 
-#: thongssh_gtk/dialogs.py:1843
+#: thongssh_gtk/dialogs.py:1965
 msgid "Tabs"
 msgstr "Вкладки"
 
-#: thongssh_gtk/dialogs.py:1847
+#: thongssh_gtk/dialogs.py:1969
 msgid "Tab bar height"
 msgstr "Висота панелі вкладок"
 
-#: thongssh_gtk/dialogs.py:1848
+#: thongssh_gtk/dialogs.py:1970
 msgid "Compact by default — raise it if tabs feel too small to click"
 msgstr "За замовчуванням компактна — збільште, якщо по вкладках незручно влучати курсором"
 
-#: thongssh_gtk/dialogs.py:1855
+#: thongssh_gtk/dialogs.py:1977
+msgid "Find and Highlight"
+msgstr "Підсвічування і пошук"
+
+#: thongssh_gtk/dialogs.py:1981 thongssh_gtk/tab_window_base.py:1160
+msgid "Find bar opacity"
+msgstr "Непрозорість панелі пошуку"
+
+#: thongssh_gtk/dialogs.py:1982
+msgid "Default background opacity of the in-terminal find bar itself — its own slider starts here and can still be adjusted per-pane"
+msgstr "Типова непрозорість тла самої панелі пошуку в терміналі — її власний повзунок починається звідси, але його можна налаштувати окремо для кожної панелі"
+
+#: thongssh_gtk/dialogs.py:1991
 msgid "Debugging"
 msgstr "Налагодження"
 
-#: thongssh_gtk/dialogs.py:1859
+#: thongssh_gtk/dialogs.py:1995
 msgid "Enable debug logging"
 msgstr "Увімкнути журналювання налагодження"
 
-#: thongssh_gtk/dialogs.py:1860
+#: thongssh_gtk/dialogs.py:1996
 msgid "Print verbose debug messages to the console. Leave off unless troubleshooting an issue."
 msgstr "Виводити докладні налагоджувальні повідомлення в консоль. Не вмикайте, якщо не усуваєте проблему."
 
-#: thongssh_gtk/dialogs.py:1872 thongssh_gtk/dialogs.py:2387
+#: thongssh_gtk/dialogs.py:2008 thongssh_gtk/dialogs.py:2523
 msgid "Shortcuts"
 msgstr "Скорочення"
 
-#: thongssh_gtk/dialogs.py:1878
+#: thongssh_gtk/dialogs.py:2014
 msgid "Click a shortcut, then press the new key combination — Escape cancels, leaving it unchanged."
 msgstr "Натисніть на скорочення, а тоді нову комбінацію клавіш — Escape скасовує дію, залишаючи все без змін."
 
-#: thongssh_gtk/dialogs.py:1886 thongssh_gtk/window.py:2827
+#: thongssh_gtk/dialogs.py:2022 thongssh_gtk/window.py:2896
 msgid "Close Tab"
 msgstr "Закрити вкладку"
 
-#: thongssh_gtk/dialogs.py:1887
+#: thongssh_gtk/dialogs.py:2023
 msgid "Focus Host Search"
 msgstr "Перейти до пошуку хостів"
 
-#: thongssh_gtk/dialogs.py:1888
+#: thongssh_gtk/dialogs.py:2024
 msgid "Find in Terminal"
 msgstr "Знайти в терміналі"
 
-#: thongssh_gtk/dialogs.py:1889 thongssh_gtk/markdown_view.py:171
-#: thongssh_gtk/markdown_view.py:259 thongssh_gtk/tab_window_base.py:703
+#: thongssh_gtk/dialogs.py:2025 thongssh_gtk/markdown_view.py:171
+#: thongssh_gtk/markdown_view.py:259 thongssh_gtk/tab_window_base.py:715
 msgid "Copy"
 msgstr "Копіювати"
 
-#: thongssh_gtk/dialogs.py:1890 thongssh_gtk/dialogs.py:1979
-#: thongssh_gtk/tab_window_base.py:704
+#: thongssh_gtk/dialogs.py:2026 thongssh_gtk/dialogs.py:2115
+#: thongssh_gtk/tab_window_base.py:716
 msgid "Paste"
 msgstr "Вставити"
 
-#: thongssh_gtk/dialogs.py:1891
+#: thongssh_gtk/dialogs.py:2027
 msgid "Toggle Side Panel"
 msgstr "Показати/сховати бічну панель"
 
-#: thongssh_gtk/dialogs.py:1892
+#: thongssh_gtk/dialogs.py:2028
 msgid "Open Batch Command"
 msgstr "Відкрити групову команду"
 
-#: thongssh_gtk/dialogs.py:1893
+#: thongssh_gtk/dialogs.py:2029
 msgid "Detach Tab"
 msgstr "Відкріпити вкладку"
 
-#: thongssh_gtk/dialogs.py:1894
+#: thongssh_gtk/dialogs.py:2030
 msgid "Attach Tab (in a Detached Window)"
 msgstr "Приєднати вкладку (у відкріпленому вікні)"
 
-#: thongssh_gtk/dialogs.py:1896
+#: thongssh_gtk/dialogs.py:2032
 msgid "Previous Tab"
 msgstr "Попередня вкладка"
 
-#: thongssh_gtk/dialogs.py:1897
+#: thongssh_gtk/dialogs.py:2033
 msgid "Next Tab"
 msgstr "Наступна вкладка"
 
-#: thongssh_gtk/dialogs.py:1912
+#: thongssh_gtk/dialogs.py:2048
 msgid "Split Panes"
 msgstr "Розділення панелей"
 
-#: thongssh_gtk/dialogs.py:1914
+#: thongssh_gtk/dialogs.py:2050
 msgid "The plain shortcuts merge tabs from panes being removed into the pane that stays; the \"Close Others\" ones close those tabs instead."
 msgstr "Звичайні комбінації переносять вкладки з панелей, що прибираються, до тієї, яка залишається; комбінації «Закрити інші» натомість закривають ці вкладки."
 
-#: thongssh_gtk/dialogs.py:1921
+#: thongssh_gtk/dialogs.py:2057
 msgid "Single Pane"
 msgstr "Одна панель"
 
-#: thongssh_gtk/dialogs.py:1922
+#: thongssh_gtk/dialogs.py:2058
 msgid "Split Left/Right"
 msgstr "Розділити ліворуч/праворуч"
 
-#: thongssh_gtk/dialogs.py:1923
+#: thongssh_gtk/dialogs.py:2059
 msgid "Split Top/Bottom"
 msgstr "Розділити вгорі/внизу"
 
-#: thongssh_gtk/dialogs.py:1924
+#: thongssh_gtk/dialogs.py:2060
 msgid "Split Grid (4 Panes)"
 msgstr "Розділити сіткою (4 панелі)"
 
-#: thongssh_gtk/dialogs.py:1925
+#: thongssh_gtk/dialogs.py:2061
 msgid "Close Others: Single Pane"
 msgstr "Закрити інші: одна панель"
 
-#: thongssh_gtk/dialogs.py:1926
+#: thongssh_gtk/dialogs.py:2062
 msgid "Close Others: Left/Right"
 msgstr "Закрити інші: ліворуч/праворуч"
 
-#: thongssh_gtk/dialogs.py:1927
+#: thongssh_gtk/dialogs.py:2063
 msgid "Close Others: Top/Bottom"
 msgstr "Закрити інші: вгорі/внизу"
 
-#: thongssh_gtk/dialogs.py:1928
+#: thongssh_gtk/dialogs.py:2064
 msgid "Close Others: Grid (4 Panes)"
 msgstr "Закрити інші: сітка (4 панелі)"
 
-#: thongssh_gtk/dialogs.py:1938
+#: thongssh_gtk/dialogs.py:2074
 msgid "Pane Navigation"
 msgstr "Навігація між панелями"
 
-#: thongssh_gtk/dialogs.py:1942
+#: thongssh_gtk/dialogs.py:2078
 msgid "Move Focus Up"
 msgstr "Перейти до панелі вгорі"
 
-#: thongssh_gtk/dialogs.py:1943
+#: thongssh_gtk/dialogs.py:2079
 msgid "Move Focus Down"
 msgstr "Перейти до панелі внизу"
 
-#: thongssh_gtk/dialogs.py:1944
+#: thongssh_gtk/dialogs.py:2080
 msgid "Move Focus Left"
 msgstr "Перейти до панелі ліворуч"
 
-#: thongssh_gtk/dialogs.py:1945
+#: thongssh_gtk/dialogs.py:2081
 msgid "Move Focus Right"
 msgstr "Перейти до панелі праворуч"
 
-#: thongssh_gtk/dialogs.py:1946
+#: thongssh_gtk/dialogs.py:2082
 msgid "Close All Tabs in Pane"
 msgstr "Закрити всі вкладки в панелі"
 
-#: thongssh_gtk/dialogs.py:1965
+#: thongssh_gtk/dialogs.py:2101
 msgid "Quick-access bindings for the first 10 Quickies, by their position in the panel (slot 10 uses the \"0\" key) — Paste inserts without running (same as Send ▶), Run inserts and executes (same as Send and Run ⏩)."
 msgstr "Скорочення швидкого доступу для перших 10 шустриків за їхньою позицією в панелі (10-та позиція використовує клавішу «0») — «Вставити» вставляє без виконання (те саме, що й Надіслати ▶), «Виконати» вставляє й виконує (те саме, що й Надіслати і виконати ⏩)."
 
-#: thongssh_gtk/dialogs.py:1981 thongssh_gtk/window.py:3008
+#: thongssh_gtk/dialogs.py:2117 thongssh_gtk/window.py:3081
 msgid "Run"
 msgstr "Виконати"
 
-#: thongssh_gtk/dialogs.py:2006 thongssh_gtk/dialogs.py:2392
+#: thongssh_gtk/dialogs.py:2142 thongssh_gtk/dialogs.py:2528
 msgid "SFTP"
 msgstr "SFTP"
 
-#: thongssh_gtk/dialogs.py:2009
+#: thongssh_gtk/dialogs.py:2145
 msgid "Local Panel"
 msgstr "Локальна панель"
 
-#: thongssh_gtk/dialogs.py:2012
+#: thongssh_gtk/dialogs.py:2148
 msgid "Default Local Path"
 msgstr "Типовий локальний шлях"
 
-#: thongssh_gtk/dialogs.py:2016 thongssh_gtk/sftp_widget.py:257
+#: thongssh_gtk/dialogs.py:2152 thongssh_gtk/sftp_widget.py:257
 #: thongssh_gtk/sftp_widget.py:359
 msgid "Size"
 msgstr "Розмір"
 
-#: thongssh_gtk/dialogs.py:2016
+#: thongssh_gtk/dialogs.py:2152
 msgid "Date"
 msgstr "Дата"
 
-#: thongssh_gtk/dialogs.py:2017 thongssh_gtk/dialogs.py:2031
+#: thongssh_gtk/dialogs.py:2153 thongssh_gtk/dialogs.py:2167
 msgid "Default Sort Column"
 msgstr "Типовий стовпець сортування"
 
-#: thongssh_gtk/dialogs.py:2022
+#: thongssh_gtk/dialogs.py:2158
 msgid "Ascending"
 msgstr "За зростанням"
 
-#: thongssh_gtk/dialogs.py:2022
+#: thongssh_gtk/dialogs.py:2158
 msgid "Descending"
 msgstr "За спаданням"
 
-#: thongssh_gtk/dialogs.py:2023 thongssh_gtk/dialogs.py:2036
+#: thongssh_gtk/dialogs.py:2159 thongssh_gtk/dialogs.py:2172
 msgid "Default Sort Direction"
 msgstr "Типовий напрямок сортування"
 
-#: thongssh_gtk/dialogs.py:2028
+#: thongssh_gtk/dialogs.py:2164
 msgid "Remote Panel"
 msgstr "Віддалена панель"
 
-#: thongssh_gtk/dialogs.py:2070
+#: thongssh_gtk/dialogs.py:2206
 msgid "Disable AI"
 msgstr "Вимкнути ШІ"
 
-#: thongssh_gtk/dialogs.py:2071
+#: thongssh_gtk/dialogs.py:2207
 msgid "Turns the feature off entirely: no header-bar buttons, no local CLI tool detection, no keyring lookups, no requests of any kind."
 msgstr "Повністю вимикає цю функцію: жодних кнопок на панелі заголовка, жодного виявлення локальних інструментів CLI, жодних звернень до зв'язки ключів, жодних запитів будь-якого виду."
 
-#: thongssh_gtk/dialogs.py:2078
+#: thongssh_gtk/dialogs.py:2214
 msgid "System Prompt"
 msgstr "Системний запит"
 
-#: thongssh_gtk/dialogs.py:2079
+#: thongssh_gtk/dialogs.py:2215
 msgid "Shared by every provider on the API and CLI Client tabs below — sent as the system/initial prompt for every conversation."
 msgstr "Спільний для всіх постачальників на вкладках API та CLI-клієнт нижче — надсилається як системний/початковий запит для кожної розмови."
 
-#: thongssh_gtk/dialogs.py:2083
+#: thongssh_gtk/dialogs.py:2219
 msgid "Initial prompt"
 msgstr "Початковий запит"
 
-#: thongssh_gtk/dialogs.py:2088
+#: thongssh_gtk/dialogs.py:2224
 msgid "Reset to default"
 msgstr "Скинути до типового"
 
-#: thongssh_gtk/dialogs.py:2098
+#: thongssh_gtk/dialogs.py:2234
 msgid "Connection"
 msgstr "З'єднання"
 
-#: thongssh_gtk/dialogs.py:2099
+#: thongssh_gtk/dialogs.py:2235
 msgid "Shared by every provider — raise it if requests to a slower/local model keep timing out."
 msgstr "Спільне для всіх постачальників — збільшіть значення, якщо запити до повільнішої/локальної моделі постійно перевищують час очікування."
 
-#: thongssh_gtk/dialogs.py:2104
+#: thongssh_gtk/dialogs.py:2240
 msgid "Request timeout (seconds)"
 msgstr "Час очікування запиту (секунди)"
 
-#: thongssh_gtk/dialogs.py:2116 thongssh_gtk/dialogs.py:2335
+#: thongssh_gtk/dialogs.py:2252 thongssh_gtk/dialogs.py:2471
 msgid "API"
 msgstr "API"
 
-#: thongssh_gtk/dialogs.py:2127
+#: thongssh_gtk/dialogs.py:2263
 msgid "Custom Providers"
 msgstr "Власні постачальники"
 
-#: thongssh_gtk/dialogs.py:2128
+#: thongssh_gtk/dialogs.py:2264
 msgid "Any OpenAI-compatible chat completions endpoint (self-hosted, OpenRouter, etc.)."
 msgstr "Будь-яка сумісна з OpenAI кінцева точка chat completions (власний хостинг, OpenRouter тощо)."
 
-#: thongssh_gtk/dialogs.py:2137 thongssh_gtk/dialogs.py:2141
+#: thongssh_gtk/dialogs.py:2273 thongssh_gtk/dialogs.py:2277
 msgid "New Provider"
 msgstr "Новий постачальник"
 
-#: thongssh_gtk/dialogs.py:2144
+#: thongssh_gtk/dialogs.py:2280
 msgid "Base URL"
 msgstr "Базова URL-адреса"
 
-#: thongssh_gtk/dialogs.py:2148
+#: thongssh_gtk/dialogs.py:2284
 msgid "API Key (optional)"
 msgstr "Ключ API (необов'язково)"
 
-#: thongssh_gtk/dialogs.py:2155 thongssh_gtk/dialogs.py:2212
-#: thongssh_gtk/dialogs.py:2259 thongssh_gtk/dialogs.py:2295
+#: thongssh_gtk/dialogs.py:2291 thongssh_gtk/dialogs.py:2348
+#: thongssh_gtk/dialogs.py:2395 thongssh_gtk/dialogs.py:2431
 msgid "Model"
 msgstr "Модель"
 
-#: thongssh_gtk/dialogs.py:2188
+#: thongssh_gtk/dialogs.py:2324
 msgid "Add Custom Provider"
 msgstr "Додати власного постачальника"
 
-#: thongssh_gtk/dialogs.py:2196
+#: thongssh_gtk/dialogs.py:2332
 msgid "Providers"
 msgstr "Постачальники"
 
-#: thongssh_gtk/dialogs.py:2197
+#: thongssh_gtk/dialogs.py:2333
 msgid "A header-bar button appears for each provider with a key saved here."
 msgstr "Для кожного постачальника зі збереженим тут ключем з'являється кнопка на панелі заголовка."
 
-#: thongssh_gtk/dialogs.py:2206
+#: thongssh_gtk/dialogs.py:2342
 msgid "API Key"
 msgstr "Ключ API"
 
-#: thongssh_gtk/dialogs.py:2225 thongssh_gtk/dialogs.py:2336
+#: thongssh_gtk/dialogs.py:2361 thongssh_gtk/dialogs.py:2472
 msgid "CLI Client"
 msgstr "CLI-клієнт"
 
-#: thongssh_gtk/dialogs.py:2229
+#: thongssh_gtk/dialogs.py:2365
 msgid "Standard Tools"
 msgstr "Стандартні інструменти"
 
-#: thongssh_gtk/dialogs.py:2231
+#: thongssh_gtk/dialogs.py:2367
 #, python-brace-format
 msgid "Runs the command fresh for every message and reads its stdout as the reply — install the tool yourself first (npm, etc.). \"{message}\" and \"{system_prompt}\" are each substituted with their own argument (never through a shell, so both are always safe regardless of content) — use \"{system_prompt}\" if the tool has its own flag for one (e.g. Claude's --append-system-prompt), otherwise it's prepended into the message automatically."
 msgstr "Запускає команду заново для кожного повідомлення й читає її stdout як відповідь — спершу встановіть інструмент самостійно (npm тощо). «{message}» та «{system_prompt}» кожен підставляється як окремий аргумент (ніколи через оболонку, тож обидва завжди безпечні незалежно від вмісту) — використовуйте «{system_prompt}», якщо в інструмента є власний прапорець для цього (наприклад, --append-system-prompt у Claude), інакше його автоматично додають на початок повідомлення."
 
-#: thongssh_gtk/dialogs.py:2248
+#: thongssh_gtk/dialogs.py:2384
 msgid "AI is disabled"
 msgstr "ШІ вимкнено"
 
-#: thongssh_gtk/dialogs.py:2250
+#: thongssh_gtk/dialogs.py:2386
 msgid "Found on PATH"
 msgstr "Знайдено в PATH"
 
-#: thongssh_gtk/dialogs.py:2252
+#: thongssh_gtk/dialogs.py:2388
 msgid "Not found on PATH"
 msgstr "Не знайдено в PATH"
 
-#: thongssh_gtk/dialogs.py:2260 thongssh_gtk/dialogs.py:2296
+#: thongssh_gtk/dialogs.py:2396 thongssh_gtk/dialogs.py:2432
 msgid "Leave empty to use the tool's own default — no --model flag is sent at all."
 msgstr "Залиште порожнім, щоб використати типове значення інструмента — прапорець --model взагалі не надсилається."
 
-#: thongssh_gtk/dialogs.py:2273
+#: thongssh_gtk/dialogs.py:2409
 msgid "Custom Tools"
 msgstr "Власні інструменти"
 
-#: thongssh_gtk/dialogs.py:2274
+#: thongssh_gtk/dialogs.py:2410
 msgid "Any other locally-installed CLI (gemini-cli, aider, ...)."
 msgstr "Будь-який інший локально встановлений CLI (gemini-cli, aider тощо)."
 
-#: thongssh_gtk/dialogs.py:2283 thongssh_gtk/dialogs.py:2287
+#: thongssh_gtk/dialogs.py:2419 thongssh_gtk/dialogs.py:2423
 msgid "New Tool"
 msgstr "Новий інструмент"
 
-#: thongssh_gtk/dialogs.py:2325
+#: thongssh_gtk/dialogs.py:2461
 msgid "Add Custom Tool"
 msgstr "Додати власний інструмент"
 
-#: thongssh_gtk/dialogs.py:2396 thongssh_gtk/window.py:120
+#: thongssh_gtk/dialogs.py:2532 thongssh_gtk/window.py:120
 msgid "AI"
 msgstr "ШІ"
 
-#: thongssh_gtk/dialogs.py:2407 thongssh_gtk/dialogs.py:2408
-#: thongssh_gtk/dialogs.py:2411 thongssh_gtk/window.py:2846
+#: thongssh_gtk/dialogs.py:2543 thongssh_gtk/dialogs.py:2544
+#: thongssh_gtk/dialogs.py:2547 thongssh_gtk/window.py:2915
 msgid "Settings"
 msgstr "Налаштування"
 
-#: thongssh_gtk/dialogs.py:2416
+#: thongssh_gtk/dialogs.py:2552
 msgid "Reset"
 msgstr "Скинути"
 
-#: thongssh_gtk/dialogs.py:2434
+#: thongssh_gtk/dialogs.py:2570
 msgid "Choose from a list"
 msgstr "Вибрати зі списку"
 
-#: thongssh_gtk/dialogs.py:2463
+#: thongssh_gtk/dialogs.py:2599
 msgid "No models found."
 msgstr "Моделей не знайдено."
 
-#: thongssh_gtk/dialogs.py:2505
+#: thongssh_gtk/dialogs.py:2641
 msgid "Loading…"
 msgstr "Завантаження…"
 
-#: thongssh_gtk/dialogs.py:2514
+#: thongssh_gtk/dialogs.py:2650
 #, python-brace-format
 msgid "Could not fetch models: {error}"
 msgstr "Не вдалося отримати моделі: {error}"
 
-#: thongssh_gtk/dialogs.py:2530
+#: thongssh_gtk/dialogs.py:2666
 msgid "Clear shortcut"
 msgstr "Очистити скорочення"
 
-#: thongssh_gtk/dialogs.py:2793
+#: thongssh_gtk/dialogs.py:2930
 msgid "Select Log Directory"
 msgstr "Вибрати каталог журналів"
 
-#: thongssh_gtk/dialogs.py:2813
+#: thongssh_gtk/dialogs.py:2950
 msgid "Select Sync Folder"
 msgstr "Вибрати теку синхронізації"
 
-#: thongssh_gtk/dialogs.py:2831
+#: thongssh_gtk/dialogs.py:2968
 msgid "Not synced yet"
 msgstr "Ще не синхронізовано"
 
-#: thongssh_gtk/dialogs.py:2837
+#: thongssh_gtk/dialogs.py:2974
 #, python-brace-format
 msgid "Last attempt failed: {error}"
 msgstr "Остання спроба зазнала невдачі: {error}"
 
-#: thongssh_gtk/dialogs.py:2840
+#: thongssh_gtk/dialogs.py:2977
 #, python-brace-format
 msgid "Last synced: {time}"
 msgstr "Останнє синхронізовано: {time}"
 
-#: thongssh_gtk/dialogs.py:2842
+#: thongssh_gtk/dialogs.py:2979
 msgid "Never synced"
 msgstr "Ще не синхронізовано"
 
-#: thongssh_gtk/dialogs.py:2867 thongssh_gtk/window.py:1701
+#: thongssh_gtk/dialogs.py:3004 thongssh_gtk/window.py:1770
 msgid "Syncing…"
 msgstr "Синхронізація…"
 
-#: thongssh_gtk/dialogs.py:2885
+#: thongssh_gtk/dialogs.py:3022
 msgid "New Command"
 msgstr "Нова команда"
 
-#: thongssh_gtk/dialogs.py:2907
+#: thongssh_gtk/dialogs.py:3044
 msgid "New Quicky"
 msgstr "Новий шустрик"
 
-#: thongssh_gtk/dialogs.py:3040 thongssh_gtk/window.py:163
-#: thongssh_gtk/window.py:2833
+#: thongssh_gtk/dialogs.py:3178 thongssh_gtk/window.py:163
+#: thongssh_gtk/window.py:2902
 msgid "Batch Command"
 msgstr "Групова команда"
 
-#: thongssh_gtk/dialogs.py:3091
+#: thongssh_gtk/dialogs.py:3229
 msgid "Enter to send, Shift+Enter for a new line"
 msgstr "Enter — надіслати, Shift+Enter — новий рядок"
 
-#: thongssh_gtk/dialogs.py:3096
+#: thongssh_gtk/dialogs.py:3234
 msgid "Close window after send"
 msgstr "Закривати вікно після надсилання"
 
-#: thongssh_gtk/dialogs.py:3104
+#: thongssh_gtk/dialogs.py:3242
 msgid "Select / Deselect All"
 msgstr "Вибрати / зняти вибір з усіх"
 
-#: thongssh_gtk/dialogs.py:3113
+#: thongssh_gtk/dialogs.py:3251
 msgid "Divs"
 msgstr "Панелі"
 
-#: thongssh_gtk/dialogs.py:3119
+#: thongssh_gtk/dialogs.py:3257
 msgid "All divs"
 msgstr "Усі панелі"
 
-#: thongssh_gtk/dialogs.py:3132
+#: thongssh_gtk/dialogs.py:3270
 msgid "Split the view to filter by pane"
 msgstr "Розділіть перегляд, щоб фільтрувати за панеллю"
 
-#: thongssh_gtk/dialogs.py:3177
+#: thongssh_gtk/dialogs.py:3315
 msgid "Unnamed"
 msgstr "Без назви"
 
-#: thongssh_gtk/dialogs.py:3185
+#: thongssh_gtk/dialogs.py:3323
 msgid "No open terminal sessions."
 msgstr "Немає відкритих сеансів термінала."
 
-#: thongssh_gtk/dialogs.py:3285
+#: thongssh_gtk/dialogs.py:3423
 msgid "Some terminals didn't receive the command"
 msgstr "Деякі термінали не отримали команду"
 
@@ -1383,7 +1420,7 @@ msgid "Connecting..."
 msgstr "З'єднання..."
 
 #: thongssh_gtk/send_file.py:211 thongssh_gtk/sftp_widget.py:530
-#: thongssh_gtk/tab_window_base.py:1700
+#: thongssh_gtk/tab_window_base.py:2038
 msgid "Username Required"
 msgstr "Потрібне ім'я користувача"
 
@@ -1460,37 +1497,37 @@ msgstr "Введіть пароль для {host}"
 msgid "Sent to {path}"
 msgstr "Надіслано до {path}"
 
-#: thongssh_gtk/settings_sync.py:225
+#: thongssh_gtk/settings_sync.py:239
 msgid "Sync file is unreadable/corrupted JSON."
 msgstr "Файл синхронізації нечитабельний або містить пошкоджений JSON."
 
-#: thongssh_gtk/settings_sync.py:229
+#: thongssh_gtk/settings_sync.py:243
 msgid "Sync file failed its integrity check (hash mismatch) — skipping this pass."
 msgstr "Файл синхронізації не пройшов перевірку цілісності (невідповідність хешу) — цей прохід пропущено."
 
-#: thongssh_gtk/settings_sync.py:519
+#: thongssh_gtk/settings_sync.py:533
 msgid "No sync folder configured."
 msgstr "Теку синхронізації не налаштовано."
 
-#: thongssh_gtk/settings_sync.py:537
+#: thongssh_gtk/settings_sync.py:551
 #, python-brace-format
 msgid "Sync folder is missing ({folder}) even though this machine has synced before — it's most likely not mounted right now (e.g. a cloud-drive folder), not something deleted on purpose. Skipping this pass instead of treating that as \"everything was deleted\"."
 msgstr "Тека синхронізації відсутня ({folder}), хоча цей пристрій уже синхронізувався раніше — найімовірніше, вона зараз не змонтована (наприклад, тека хмарного диска), а не видалена навмисно. Цей прохід пропущено, замість того щоб трактувати це як «усе видалено»."
 
-#: thongssh_gtk/settings_sync.py:548
+#: thongssh_gtk/settings_sync.py:562
 #, python-brace-format
 msgid "Can't access sync folder: {error}"
 msgstr "Немає доступу до теки синхронізації: {error}"
 
-#: thongssh_gtk/settings_sync.py:569
+#: thongssh_gtk/settings_sync.py:583
 msgid "The sync folder has no sync file yet, but this machine has synced before — it's most likely not mounted/accessible right now. Skipping this pass instead of treating that as \"everything was deleted\"."
 msgstr "У теці синхронізації ще немає файлу синхронізації, але цей пристрій уже синхронізувався раніше — найімовірніше, вона зараз не змонтована або недоступна. Цей прохід пропущено, замість того щоб трактувати це як «усе видалено»."
 
-#: thongssh_gtk/settings_sync.py:586
+#: thongssh_gtk/settings_sync.py:600
 msgid "This folder belongs to a different sync archive than the one this machine last used."
 msgstr "Ця тека належить до іншого архіву синхронізації, а не до того, який цей комп'ютер використовував востаннє."
 
-#: thongssh_gtk/settings_sync.py:616
+#: thongssh_gtk/settings_sync.py:630
 msgid "No existing sync archive found at this folder yet."
 msgstr "У цій теці ще не знайдено наявного архіву синхронізації."
 
@@ -1562,7 +1599,7 @@ msgstr "SFTP вимкнено. Установіть «paramiko»."
 msgid "Error: host is not set in the config."
 msgstr "Помилка: хост не вказано в конфігурації."
 
-#: thongssh_gtk/sftp_widget.py:531 thongssh_gtk/tab_window_base.py:1701
+#: thongssh_gtk/sftp_widget.py:531 thongssh_gtk/tab_window_base.py:2039
 #, python-brace-format
 msgid "Enter username for {host_str}"
 msgstr "Введіть ім'я користувача для {host_str}"
@@ -1751,7 +1788,7 @@ msgstr "Виявлено зміни у {basename}. Вивантаження на
 msgid "Transfer"
 msgstr "Передавання"
 
-#: thongssh_gtk/sftp_widget.py:1120 thongssh_gtk/window.py:3003
+#: thongssh_gtk/sftp_widget.py:1120 thongssh_gtk/window.py:3076
 msgid "Rename..."
 msgstr "Перейменувати..."
 
@@ -1760,9 +1797,9 @@ msgid "Change Permissions..."
 msgstr "Змінити права доступу..."
 
 #: thongssh_gtk/sftp_widget.py:1122 thongssh_gtk/sftp_widget.py:1275
-#: thongssh_gtk/window.py:2841 thongssh_gtk/window.py:2997
-#: thongssh_gtk/window.py:3004 thongssh_gtk/window.py:3013
-#: thongssh_gtk/window.py:3446
+#: thongssh_gtk/window.py:2910 thongssh_gtk/window.py:3070
+#: thongssh_gtk/window.py:3077 thongssh_gtk/window.py:3086
+#: thongssh_gtk/window.py:3519
 msgid "Delete"
 msgstr "Видалити"
 
@@ -1774,7 +1811,7 @@ msgstr "Нова тека..."
 msgid "Rename"
 msgstr "Перейменувати"
 
-#: thongssh_gtk/sftp_widget.py:1181 thongssh_gtk/window.py:3394
+#: thongssh_gtk/sftp_widget.py:1181 thongssh_gtk/window.py:3467
 #, python-brace-format
 msgid "New name for '{old_name}':"
 msgstr "Нова назва для «{old_name}»:"
@@ -1816,7 +1853,7 @@ msgstr "Не вдалося створити каталог «{name}»: {e}"
 msgid "Delete '{name}'?"
 msgstr "Видалити «{name}»?"
 
-#: thongssh_gtk/sftp_widget.py:1265 thongssh_gtk/window.py:3433
+#: thongssh_gtk/sftp_widget.py:1265 thongssh_gtk/window.py:3506
 msgid "This action cannot be undone."
 msgstr "Цю дію неможливо скасувати."
 
@@ -1876,96 +1913,108 @@ msgstr "Права доступу для {path} змінено на {mode}"
 msgid "Failed to change permissions for {path}: {e}"
 msgstr "Не вдалося змінити права доступу для {path}: {e}"
 
-#: thongssh_gtk/tab_window_base.py:312 thongssh_gtk/window.py:3491
+#: thongssh_gtk/tab_window_base.py:324 thongssh_gtk/window.py:3564
 msgid "Server name"
 msgstr "Назва сервера"
 
-#: thongssh_gtk/tab_window_base.py:314 thongssh_gtk/window.py:3493
+#: thongssh_gtk/tab_window_base.py:326 thongssh_gtk/window.py:3566
 msgid "user@hostname"
 msgstr "user@hostname"
 
-#: thongssh_gtk/tab_window_base.py:705
+#: thongssh_gtk/tab_window_base.py:717
 msgid "Send File..."
 msgstr "Надіслати файл..."
 
-#: thongssh_gtk/tab_window_base.py:706
-msgid "Find... (Ctrl+Shift+F)"
-msgstr "Знайти... (Ctrl+Shift+F)"
+#: thongssh_gtk/tab_window_base.py:718
+msgid "Highlight and Find"
+msgstr "Підсвічування і пошук"
 
-#: thongssh_gtk/tab_window_base.py:708 thongssh_gtk/tab_window_base.py:731
+#: thongssh_gtk/tab_window_base.py:720 thongssh_gtk/tab_window_base.py:741
 msgid "Tab Color…"
 msgstr "Колір вкладки…"
 
-#: thongssh_gtk/tab_window_base.py:709
+#: thongssh_gtk/tab_window_base.py:721
 msgid "Save log"
 msgstr "Зберегти журнал"
 
-#: thongssh_gtk/tab_window_base.py:726
+#: thongssh_gtk/tab_window_base.py:736
 msgid "Disconnect"
 msgstr "Роз'єднатися"
 
-#: thongssh_gtk/tab_window_base.py:727
+#: thongssh_gtk/tab_window_base.py:737
 msgid "Reconnect"
 msgstr "Повторно з'єднатися"
 
-#: thongssh_gtk/tab_window_base.py:728
+#: thongssh_gtk/tab_window_base.py:738
 msgid "Duplicate"
 msgstr "Дублювати"
 
-#: thongssh_gtk/tab_window_base.py:729
+#: thongssh_gtk/tab_window_base.py:739
 msgid "Detach"
 msgstr "Відкріпити"
 
-#: thongssh_gtk/tab_window_base.py:732 thongssh_gtk/window.py:2995
+#: thongssh_gtk/tab_window_base.py:742 thongssh_gtk/window.py:3068
 msgid "Connect SFTP"
 msgstr "З'єднатися через SFTP"
 
-#: thongssh_gtk/tab_window_base.py:733
+#: thongssh_gtk/tab_window_base.py:743
 msgid "Connect SSH"
 msgstr "З'єднатися через SSH"
 
-#: thongssh_gtk/tab_window_base.py:736 thongssh_gtk/window.py:2996
+#: thongssh_gtk/tab_window_base.py:746 thongssh_gtk/window.py:3069
 msgid "Copy to Clipboard"
 msgstr "Скопіювати в буфер обміну"
 
-#: thongssh_gtk/tab_window_base.py:1086
+#: thongssh_gtk/tab_window_base.py:1106
 msgid "Previous match"
 msgstr "Попередній збіг"
 
-#: thongssh_gtk/tab_window_base.py:1088
+#: thongssh_gtk/tab_window_base.py:1108
 msgid "Next match"
 msgstr "Наступний збіг"
 
-#: thongssh_gtk/tab_window_base.py:1091
+#: thongssh_gtk/tab_window_base.py:1111
 msgid "Close"
 msgstr "Закрити"
 
-#: thongssh_gtk/tab_window_base.py:1099
+#: thongssh_gtk/tab_window_base.py:1119
 msgid "Case sensitive"
 msgstr "З урахуванням регістру"
 
-#: thongssh_gtk/tab_window_base.py:1100
+#: thongssh_gtk/tab_window_base.py:1120
 msgid "Regular expression"
 msgstr "Регулярний вираз"
 
-#: thongssh_gtk/tab_window_base.py:1102
+#: thongssh_gtk/tab_window_base.py:1121
+msgid "Highlight all"
+msgstr "Підсвітити все"
+
+#: thongssh_gtk/tab_window_base.py:1123
 msgid "Wrap around"
 msgstr "Циклічний пошук"
 
-#: thongssh_gtk/tab_window_base.py:1200
+#: thongssh_gtk/tab_window_base.py:1152
+msgid "Opacity"
+msgstr "Непрозорість"
+
+#: thongssh_gtk/tab_window_base.py:1296 thongssh_gtk/tab_window_base.py:1336
 msgid "Invalid pattern"
 msgstr "Некоректний шаблон"
 
-#: thongssh_gtk/tab_window_base.py:1215 thongssh_gtk/tab_window_base.py:1222
-#: thongssh_gtk/tab_window_base.py:1229
+#: thongssh_gtk/tab_window_base.py:1298
 msgid "Not found"
 msgstr "Не знайдено"
 
-#: thongssh_gtk/tab_window_base.py:1887
+#: thongssh_gtk/tab_window_base.py:1301
+#, python-brace-format
+msgid "{current} of {total}"
+msgstr "{current} з {total}"
+
+#: thongssh_gtk/tab_window_base.py:2225
 msgid "VTE Spawn Error"
 msgstr "Помилка запуску VTE"
 
-#: thongssh_gtk/tab_window_base.py:1888
+#: thongssh_gtk/tab_window_base.py:2226
 #, python-brace-format
 msgid ""
 "Failed to start the terminal. Check the command and permissions.\n"
@@ -1976,11 +2025,11 @@ msgstr ""
 "\n"
 "Команда: {cmd_str}"
 
-#: thongssh_gtk/tab_window_base.py:2004
+#: thongssh_gtk/tab_window_base.py:2361
 msgid "SSH Launch Error"
 msgstr "Помилка запуску SSH"
 
-#: thongssh_gtk/tab_window_base.py:2005
+#: thongssh_gtk/tab_window_base.py:2362
 #, python-brace-format
 msgid ""
 "Failed to start the process. Make sure /usr/bin/ssh exists.\n"
@@ -1991,11 +2040,11 @@ msgstr ""
 "\n"
 "Помилка: {error}"
 
-#: thongssh_gtk/tab_window_base.py:2031
+#: thongssh_gtk/tab_window_base.py:2388
 msgid "Disconnected"
 msgstr "Роз'єднано"
 
-#: thongssh_gtk/tab_window_base.py:2067
+#: thongssh_gtk/tab_window_base.py:2425
 #, python-brace-format
 msgid ""
 "\n"
@@ -2054,60 +2103,60 @@ msgstr "Розділити перегляд на 4"
 msgid "Search"
 msgstr "Пошук"
 
-#: thongssh_gtk/window.py:476
+#: thongssh_gtk/window.py:489
 msgid "Add Host"
 msgstr "Додати хост"
 
-#: thongssh_gtk/window.py:481
+#: thongssh_gtk/window.py:494
 msgid "Create Group"
 msgstr "Створити групу"
 
-#: thongssh_gtk/window.py:486
+#: thongssh_gtk/window.py:499
 msgid "Remove Selected"
 msgstr "Вилучити вибране"
 
-#: thongssh_gtk/window.py:1347
+#: thongssh_gtk/window.py:1416
 msgid "Left"
 msgstr "Ліворуч"
 
-#: thongssh_gtk/window.py:1347
+#: thongssh_gtk/window.py:1416
 msgid "Right"
 msgstr "Праворуч"
 
-#: thongssh_gtk/window.py:1352
+#: thongssh_gtk/window.py:1421
 msgid "Top-Left"
 msgstr "Вгорі ліворуч"
 
-#: thongssh_gtk/window.py:1352
+#: thongssh_gtk/window.py:1421
 msgid "Top-Right"
 msgstr "Вгорі праворуч"
 
-#: thongssh_gtk/window.py:1353
+#: thongssh_gtk/window.py:1422
 msgid "Bottom-Left"
 msgstr "Внизу ліворуч"
 
-#: thongssh_gtk/window.py:1353
+#: thongssh_gtk/window.py:1422
 msgid "Bottom-Right"
 msgstr "Внизу праворуч"
 
-#: thongssh_gtk/window.py:1367
+#: thongssh_gtk/window.py:1436
 msgid "Main Window"
 msgstr "Головне вікно"
 
-#: thongssh_gtk/window.py:1369
+#: thongssh_gtk/window.py:1438
 msgid "Detached"
 msgstr "Відкріплено"
 
-#: thongssh_gtk/window.py:1370
+#: thongssh_gtk/window.py:1439
 #, python-brace-format
 msgid "Detached: {title}"
 msgstr "Відкріплено: {title}"
 
-#: thongssh_gtk/window.py:1661
+#: thongssh_gtk/window.py:1730
 msgid "Reset Sync State?"
 msgstr "Скинути стан синхронізації?"
 
-#: thongssh_gtk/window.py:1663
+#: thongssh_gtk/window.py:1732
 msgid ""
 "The next sync will treat THIS machine's local hosts/settings/quickies as authoritative and push them into the current sync folder, instead of merging based on history.\n"
 "\n"
@@ -2117,48 +2166,48 @@ msgstr ""
 "\n"
 "Робіть це лише після того, як спрямуєте синхронізацію на нову або порожню теку, яку хочете заповнити, — а не через те, що звичайна синхронізація не вдалася."
 
-#: thongssh_gtk/window.py:1670
+#: thongssh_gtk/window.py:1739
 msgid "Reset and Sync Now"
 msgstr "Скинути й синхронізувати зараз"
 
-#: thongssh_gtk/window.py:1719
+#: thongssh_gtk/window.py:1788
 #, python-brace-format
 msgid "Sync now (last: {time})"
 msgstr "Синхронізувати зараз (востаннє: {time})"
 
-#: thongssh_gtk/window.py:1721
+#: thongssh_gtk/window.py:1790
 msgid "Sync paused — archive identity needs confirmation"
 msgstr "Синхронізацію призупинено — потрібно підтвердити архів"
 
-#: thongssh_gtk/window.py:1725
+#: thongssh_gtk/window.py:1794
 #, python-brace-format
 msgid "Sync failed: {error}"
 msgstr "Помилка синхронізації: {error}"
 
-#: thongssh_gtk/window.py:1764
+#: thongssh_gtk/window.py:1833
 msgid "Create a New Sync Archive?"
 msgstr "Створити новий архів синхронізації?"
 
-#: thongssh_gtk/window.py:1766
+#: thongssh_gtk/window.py:1835
 msgid ""
 "No existing sync archive was found at this folder — neither this machine nor the folder itself has one yet.\n"
 "\n"
 "If this is genuinely a new or empty folder, continuing is safe: it seeds the archive from this machine's current hosts/settings. But if this folder is supposed to already have an archive (e.g. a cloud-synced folder that just hasn't finished downloading yet), continuing now would create a SEPARATE, competing archive instead of joining the real one — wait and try again instead."
 msgstr ""
 
-#: thongssh_gtk/window.py:1776
+#: thongssh_gtk/window.py:1845
 msgid "Create and Sync Now"
 msgstr "Створити і синхронізувати"
 
-#: thongssh_gtk/window.py:1789
+#: thongssh_gtk/window.py:1858
 msgid "unknown"
 msgstr "невідомо"
 
-#: thongssh_gtk/window.py:1792
+#: thongssh_gtk/window.py:1861
 msgid "Connect to a Different Sync Archive?"
 msgstr "Підключитися до іншого архіву синхронізації?"
 
-#: thongssh_gtk/window.py:1794
+#: thongssh_gtk/window.py:1863
 #, python-brace-format
 msgid ""
 "The sync folder now contains a different archive than the one this machine last used (id {sync_id}, last synced {when}, {hosts} hosts, {quickies} Quickies).\n"
@@ -2166,95 +2215,107 @@ msgid ""
 "This can happen on purpose (a new shared folder, a teammate's archive) or by mistake (the wrong folder was chosen). Continuing merges this machine's local hosts/settings into it — nothing is deleted on either side, but from then on this machine treats that archive as the one it syncs with."
 msgstr ""
 
-#: thongssh_gtk/window.py:1806
+#: thongssh_gtk/window.py:1875
 msgid "Connect and Sync Now"
 msgstr "Підключитися і синхронізувати"
 
-#: thongssh_gtk/window.py:2089
+#: thongssh_gtk/window.py:2158
 msgid "Quickies search"
 msgstr "Пошук шустриків"
 
-#: thongssh_gtk/window.py:2182
+#: thongssh_gtk/window.py:2251
 msgid "Edit"
 msgstr "Редагувати"
 
-#: thongssh_gtk/window.py:2189
+#: thongssh_gtk/window.py:2258
 msgid "Send and Run"
 msgstr "Надіслати і виконати"
 
-#: thongssh_gtk/window.py:2828
+#: thongssh_gtk/window.py:2897
 msgid "Quit"
 msgstr "Вийти"
 
-#: thongssh_gtk/window.py:2838
+#: thongssh_gtk/window.py:2907
 msgid "Add Host..."
 msgstr "Додати хост..."
 
-#: thongssh_gtk/window.py:2839
+#: thongssh_gtk/window.py:2908
 msgid "Create Group..."
 msgstr "Створити групу..."
 
-#: thongssh_gtk/window.py:2840
+#: thongssh_gtk/window.py:2909
 msgid "Edit/Rename"
 msgstr "Редагувати/перейменувати"
 
-#: thongssh_gtk/window.py:2851
+#: thongssh_gtk/window.py:2920
 msgid "About"
 msgstr "Про застосунок"
 
-#: thongssh_gtk/window.py:2992
+#: thongssh_gtk/window.py:3065
 msgid "Connect"
 msgstr "З'єднатися"
 
-#: thongssh_gtk/window.py:2993 thongssh_gtk/window.py:3009
+#: thongssh_gtk/window.py:3066 thongssh_gtk/window.py:3082
 msgid "Edit..."
 msgstr "Редагувати..."
 
-#: thongssh_gtk/window.py:2994
+#: thongssh_gtk/window.py:3067
 msgid "Clone"
 msgstr "Клонувати"
 
-#: thongssh_gtk/window.py:3007
+#: thongssh_gtk/window.py:3080
 msgid "Insert into Terminal"
 msgstr "Вставити в термінал"
 
-#: thongssh_gtk/window.py:3010
+#: thongssh_gtk/window.py:3083
 msgid "Send to Batch Command"
 msgstr "Надіслати до групової команди"
 
-#: thongssh_gtk/window.py:3011
+#: thongssh_gtk/window.py:3084
 msgid "Move Up"
 msgstr "Перемістити вгору"
 
-#: thongssh_gtk/window.py:3012
+#: thongssh_gtk/window.py:3085
 msgid "Move Down"
 msgstr "Перемістити вниз"
 
-#: thongssh_gtk/window.py:3220
+#: thongssh_gtk/window.py:3293
 msgid "SSH client with a tree-like host structure"
 msgstr "Клієнт SSH з деревоподібною структурою хостів"
 
-#: thongssh_gtk/window.py:3394
+#: thongssh_gtk/window.py:3467
 msgid "Rename Group"
 msgstr "Перейменувати групу"
 
-#: thongssh_gtk/window.py:3432
+#: thongssh_gtk/window.py:3505
 #, python-brace-format
 msgid "Delete {node_type} '{name}'?"
 msgstr "Видалити {node_type} «{name}»?"
 
-#: thongssh_gtk/window.py:3437
+#: thongssh_gtk/window.py:3510
 #, python-brace-format
 msgid "Delete group '{name}' and ALL its contents?"
 msgstr "Видалити групу «{name}» і ВЕСЬ її вміст?"
 
-#: thongssh_gtk/window.py:3438
+#: thongssh_gtk/window.py:3511
 msgid ""
 "All hosts and subgroups inside will be recursively deleted.\n"
 "This action cannot be undone."
 msgstr ""
 "Усі хости й підгрупи всередині буде рекурсивно видалено.\n"
 "Цю дію неможливо скасувати."
+
+#~ msgid "Highlight opacity"
+#~ msgstr "Непрозорість підсвічування"
+
+#~ msgid "Default fill strength of \"Highlight all\" matches in the terminal — each find bar's own slider starts here and can still be adjusted per-pane"
+#~ msgstr "Типова непрозорість заливки для збігів «Підсвітити все» в терміналі — повзунок кожної панелі пошуку починається звідси, але його можна налаштувати окремо для кожної панелі"
+
+#~ msgid "Use Default"
+#~ msgstr "Використати за замовчуванням"
+
+#~ msgid "Find... (Ctrl+Shift+F)"
+#~ msgstr "Знайти... (Ctrl+Shift+F)"
 
 #~ msgid "Add Tag to Tab Name"
 #~ msgstr "Додати мітку до назви вкладки"

@@ -139,7 +139,7 @@ TERMINAL_SETTINGS_KEYS = [
 ]
 GENERAL_SETTINGS_KEYS = [
     "interface.icon", "interface.tree_row_striping", "interface.debug_mode", "interface.host_search_position",
-    "interface.theme", "interface.tabbar_height",
+    "interface.theme", "interface.tabbar_height", "interface.find_bar_opacity",
 ]
 # Kept separate from GENERAL_SETTINGS_KEYS (own sync.sync_shortcuts switch,
 # not bundled under sync.sync_general) — a binding chosen for one OS/

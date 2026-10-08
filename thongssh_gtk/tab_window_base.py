@@ -281,6 +281,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         user's real login shell)."""
         self._stop_session_logging(page)
         self._stop_local_cwd_tracking(page)
+        self._stop_command_watch(page)
         session = self.open_sessions.pop(page, None)
         self.tab_data.pop(page, None)
         tabview.close_page_finish(page, True)
@@ -714,7 +715,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         terminal_menu.append(_("Copy"), "win.copy-clipboard")
         terminal_menu.append(_("Paste"), "win.paste-clipboard")
         terminal_menu.append(_("Send File..."), "win.send-file")
-        terminal_menu.append(_("Find... (Ctrl+Shift+F)"), "win.find-in-terminal")
+        terminal_menu.append(_("Highlight and Find"), "win.find-in-terminal")
         terminal_menu.append(_("Rename Tab"), "win.rename-tab")
         terminal_menu.append(_("Tab Color…"), "win.color-tab")
         terminal_menu.append(_("Save log"), "win.save-log-tab")
@@ -723,8 +724,6 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         self.popover_terminal.set_parent(self)
 
         self.tab_menu_model = self._build_tab_menu_model()
-
-        self._build_find_window()
 
     def _build_tab_menu_model(self):
         """Builds the native Adw.TabView tab-strip context menu model —
@@ -1051,128 +1050,255 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
 
     # --- In-terminal Find ---
 
-    def _build_find_window(self):
-        """Builds the (single, reused) in-terminal find bar as an overlay
-        pinned to the top-right of the terminal area, just under the header
+    def _build_find_bar(self, overlay, tabview):
+        """Builds one pane's own in-terminal find bar as an overlay pinned
+        to the top-right of that pane's terminal area, just under its tab
         bar — not a separate window. GTK4 gives clients no way to place a
         top-level window at a specific spot (Wayland treats placement as
         purely the compositor's call), so a real window could never
         reliably land "top-right, under the header bar" the way this
         needs to; a Gtk.Overlay child, by contrast, is just anchored via
-        halign/valign and paints above whatever's beneath it. It's
-        overlaid on self.terminal_overlay — every subclass's own Gtk.Overlay
-        wrapping its tab area (see ThongSSHWindow's split-pane layout and
-        DetachedTabWindow's single-pane one) — so its position is
-        unaffected by whatever's underneath. Non-modal by construction
-        (it's just a widget in the same window, not a dialog) — no focus
-        is ever stolen from the terminal, and it stays open across tab/
-        pane switches (see _sync_find_target_terminal) until closed by
-        hand or reopened. Vte.Terminal owns the actual search state
-        (compiled regex, wrap-around) so nothing here is per-tab;
-        _find_target_terminal just tracks which terminal it's currently
-        acting on."""
-        self.find_bar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.find_bar.add_css_class("card")
-        self.find_bar.set_margin_top(8)
-        self.find_bar.set_margin_end(8)
-        self.find_bar.set_halign(Gtk.Align.END)
-        self.find_bar.set_valign(Gtk.Align.START)
-        self.find_bar.set_visible(False)
-        self._find_target_terminal = None
+        halign/valign and paints above whatever's beneath it.
+
+        One instance per pane (per Adw.TabView), stored in
+        self._find_bars[tabview] — each of ThongSSHWindow's up-to-4 split
+        panes gets its own independent bar/search state/target terminal,
+        and DetachedTabWindow's one pane gets exactly one, the same as
+        before this was made per-pane. Non-modal by construction (it's
+        just a widget in the same window, not a dialog) — no focus is ever
+        stolen from the terminal, and it stays open across tab switches
+        within its OWN pane (see _sync_find_target_terminal) until closed
+        by hand or reopened. Vte.Terminal owns the actual search state
+        (compiled regex, wrap-around) so nothing here is per-tab; each
+        bar's "target_terminal" entry just tracks which terminal within
+        its pane it's currently acting on.
+
+        Returns the bar's state dict (also kept in self._find_bars)."""
+        if not hasattr(self, "_find_bars"):
+            self._find_bars = {}
+
+        bar = {"target_terminal": None, "current_index": 0, "match_count": 0}
+
+        widget = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        widget.add_css_class("card")
+        widget.set_margin_top(8)
+        widget.set_margin_end(8)
+        widget.set_halign(Gtk.Align.END)
+        widget.set_valign(Gtk.Align.START)
+        widget.set_visible(False)
+        bar["widget"] = widget
+        bar["css_provider"] = Gtk.CssProvider()
+        widget.get_style_context().add_provider(bar["css_provider"], Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.set_margin_top(8)
         box.set_margin_bottom(8)
         box.set_margin_start(10)
         box.set_margin_end(10)
-        self.find_bar.append(box)
+        widget.append(box)
 
         entry_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.find_entry = Gtk.SearchEntry()
-        self.find_entry.set_hexpand(True)
-        self.find_entry.set_width_chars(24)
-        entry_row.append(self.find_entry)
+        entry = Gtk.SearchEntry()
+        entry.set_hexpand(True)
+        entry.set_width_chars(24)
+        entry_row.append(entry)
+        bar["entry"] = entry
 
-        self.find_prev_button = Gtk.Button(icon_name="go-up-symbolic")
-        self.find_prev_button.set_tooltip_text(_("Previous match"))
-        self.find_next_button = Gtk.Button(icon_name="go-down-symbolic")
-        self.find_next_button.set_tooltip_text(_("Next match"))
+        prev_button = Gtk.Button(icon_name="go-up-symbolic")
+        prev_button.set_tooltip_text(_("Previous match"))
+        next_button = Gtk.Button(icon_name="go-down-symbolic")
+        next_button.set_tooltip_text(_("Next match"))
         close_button = Gtk.Button(icon_name="window-close-symbolic")
         close_button.add_css_class("flat")
         close_button.set_tooltip_text(_("Close"))
-        close_button.connect("clicked", lambda b: self.find_bar.set_visible(False))
-        entry_row.append(self.find_prev_button)
-        entry_row.append(self.find_next_button)
+        close_button.connect("clicked", lambda b: widget.set_visible(False))
+        entry_row.append(prev_button)
+        entry_row.append(next_button)
         entry_row.append(close_button)
         box.append(entry_row)
 
         options_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.find_case_toggle = Gtk.CheckButton(label=_("Case sensitive"))
-        self.find_regex_toggle = Gtk.CheckButton(label=_("Regular expression"))
-        self.find_wrap_toggle = Gtk.ToggleButton(icon_name="view-refresh-symbolic")
-        self.find_wrap_toggle.set_tooltip_text(_("Wrap around"))
-        self.find_wrap_toggle.set_active(True)
-        options_row.append(self.find_case_toggle)
-        options_row.append(self.find_regex_toggle)
-        options_row.append(self.find_wrap_toggle)
+        case_toggle = Gtk.CheckButton(label=_("Case sensitive"))
+        regex_toggle = Gtk.CheckButton(label=_("Regular expression"))
+        highlight_toggle = Gtk.CheckButton(label=_("Highlight all"))
+        wrap_toggle = Gtk.ToggleButton(icon_name="view-refresh-symbolic")
+        wrap_toggle.set_tooltip_text(_("Wrap around"))
+        wrap_toggle.set_active(True)
+        options_row.append(case_toggle)
+        options_row.append(regex_toggle)
+        options_row.append(highlight_toggle)
+        options_row.append(wrap_toggle)
+        bar["case_toggle"] = case_toggle
+        bar["regex_toggle"] = regex_toggle
+        bar["highlight_toggle"] = highlight_toggle
+        bar["wrap_toggle"] = wrap_toggle
 
-        self.find_status_label = Gtk.Label(label="")
-        self.find_status_label.add_css_class("dim-label")
-        self.find_status_label.set_hexpand(True)
-        self.find_status_label.set_halign(Gtk.Align.END)
-        options_row.append(self.find_status_label)
+        status_label = Gtk.Label(label="")
+        status_label.add_css_class("dim-label")
+        status_label.set_hexpand(True)
+        status_label.set_halign(Gtk.Align.END)
+        options_row.append(status_label)
         box.append(options_row)
+        bar["status_label"] = status_label
 
-        self.find_entry.connect("search-changed", self._on_find_text_changed)
-        self.find_entry.connect("activate", lambda e: self._find_next())
-        self.find_prev_button.connect("clicked", lambda b: self._find_previous())
-        self.find_next_button.connect("clicked", lambda b: self._find_next())
-        self.find_case_toggle.connect("toggled", lambda b: self._on_find_text_changed(self.find_entry))
-        self.find_regex_toggle.connect("toggled", lambda b: self._on_find_text_changed(self.find_entry))
-        self.find_wrap_toggle.connect("toggled", lambda b: self._apply_find_wrap_option())
+        # Opacity slider for the find bar's OWN card background — not the
+        # "Highlight all" terminal tint (that stays a fixed, fairly subtle
+        # alpha, see _draw_search_highlights). Starts from Settings ->
+        # Interface's configured default (interface.find_bar_opacity, a
+        # 20-100 percentage) each time the bar is built; adjusting it here
+        # is a per-pane, session-only override of that default, not
+        # written back to Settings — mirrors how wrap/case/regex are also
+        # plain per-bar toggles with no persistence of their own.
+        #
+        # Deliberately NOT Gtk.Widget.set_opacity: that fades the whole
+        # widget (including its own text/buttons) as one compositing layer
+        # against whatever is behind it, and confirmed live/by the user
+        # that even at 1.0 the card still read as see-through over a
+        # terminal — VTE's own drawing doesn't participate in normal GTK
+        # backdrop compositing the way another widget would, so the
+        # "opaque" end of that approach was never actually opaque. Painting
+        # a real, solid background color with its own alpha via a
+        # per-instance Gtk.CssProvider (see _apply_find_bar_opacity) is
+        # genuinely opaque at 100% regardless of what's underneath, since
+        # it's the bar's background paint itself, not a transparency
+        # composited over it.
+        opacity_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        opacity_row.append(Gtk.Label(label=_("Opacity")))
+        default_opacity = self.settings_manager.get("interface.find_bar_opacity") / 100.0
+        opacity_scale = Gtk.Scale(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            adjustment=Gtk.Adjustment(value=default_opacity, lower=0.2, upper=1.0, step_increment=0.05),
+        )
+        opacity_scale.set_hexpand(True)
+        opacity_scale.set_draw_value(False)
+        opacity_scale.set_tooltip_text(_("Find bar opacity"))
+        opacity_row.append(opacity_scale)
+        box.append(opacity_row)
+        bar["opacity_scale"] = opacity_scale
+        # Deferred to "realize": called this early, the widget isn't part
+        # of any window's widget tree yet (overlay.add_overlay happens
+        # below), so its style context can't resolve a real theme color
+        # yet and lookup_color("card_bg_color") silently falls back to
+        # GTK's generic default (stark white, confirmed live — the exact
+        # "white box" the user saw at 100%, in a dark-themed window).
+        # "realize" fires once the widget is actually attached under a
+        # real Gtk.Root, by which point the theme/dark-mode is resolvable.
+        def _reapply_opacity(*_args, bar=bar):
+            self._apply_find_bar_opacity(bar, bar["opacity_scale"].get_value())
+        widget.connect("realize", _reapply_opacity)
+        # Also re-resolve the card color if the user flips light/dark
+        # theme while this bar already exists — the color is baked into a
+        # one-shot rgba() at the time we look it up (see
+        # _apply_find_bar_opacity), so unlike plain CSS it won't track a
+        # live theme change on its own.
+        Adw.StyleManager.get_default().connect("notify::dark", _reapply_opacity)
 
-        self.terminal_overlay.add_overlay(self.find_bar)
+        entry.connect("search-changed", lambda e, b=bar: self._on_find_text_changed(b))
+        entry.connect("activate", lambda e, b=bar: self._find_next(b))
+        prev_button.connect("clicked", lambda b, bar=bar: self._find_previous(bar))
+        next_button.connect("clicked", lambda b, bar=bar: self._find_next(bar))
+        case_toggle.connect("toggled", lambda b, bar=bar: self._on_find_text_changed(bar))
+        regex_toggle.connect("toggled", lambda b, bar=bar: self._on_find_text_changed(bar))
+
+        highlight_toggle.connect("toggled", lambda b: self._queue_highlight_redraw_all())
+        wrap_toggle.connect("toggled", lambda b, bar=bar: self._apply_find_wrap_option(bar))
+        opacity_scale.connect(
+            "value-changed", lambda s, bar=bar: self._apply_find_bar_opacity(bar, s.get_value())
+        )
+
+        overlay.add_overlay(widget)
+        self._find_bars[tabview] = bar
+        return bar
+
+    def _apply_find_bar_opacity(self, bar, alpha):
+        """Repaints a find bar's own background as a solid color at the
+        given alpha (0.2-1.0), via the per-instance Gtk.CssProvider set up
+        in _build_find_bar — see that method's own comment for why this
+        replaces a plain Gtk.Widget.set_opacity call.
+
+        Uses the theme's "window_bg_color", NOT "card_bg_color" — confirmed
+        live that the latter resolves to flat white (1, 1, 1) even in dark
+        mode. Adwaita's real "card" look isn't one flat named color at all:
+        it's window_bg_color with a separate translucent tint/gradient
+        layered on top via background-image (see _build_find_bar's own
+        comment on needing `background-image: none` for exactly this
+        reason), and "card_bg_color" is just the raw tint color, not the
+        resolved on-screen appearance — using it directly here was the
+        actual cause of the find bar rendering as a plain white box
+        regardless of slider position. window_bg_color, by contrast, IS a
+        genuine solid color that already tracks light/dark correctly
+        (confirmed live against several other named colors), so it's a
+        more faithful "base surface" to tint than copying card styling.
+        Falls back to a plain gray only if the named color is somehow
+        undefined at all, e.g. a non-Adwaita theme."""
+        found, rgba = bar["widget"].get_style_context().lookup_color("window_bg_color")
+        if not found:
+            is_dark = Adw.StyleManager.get_default().get_dark()
+            rgba = Gdk.RGBA()
+            rgba.parse("#3a3a3a" if is_dark else "#fafafa")
+        r, g, b = (round(c * 255) for c in (rgba.red, rgba.green, rgba.blue))
+        # background-image: none is required alongside background-color —
+        # the theme's own ".card" rule layers a separate translucent
+        # gradient/image on top for its elevation effect (confirmed live:
+        # without clearing it, a chunk of that leftover translucency still
+        # showed through even at alpha=1.0/0.2 passed here); same reset
+        # tab_colors.py already needs for the same reason on tab chrome.
+        css = f"box {{ background-color: rgba({r}, {g}, {b}, {alpha}); background-image: none; }}"
+        bar["css_provider"].load_from_data(css.encode())
 
     def on_menu_find_in_terminal(self, action, param):
-        """Shows (or re-focuses, if already shown) the find bar targeting
-        the active terminal. Bound to the terminal context menu's
-        "Find..." item and to Ctrl+Shift+F."""
+        """Shows (or re-focuses, if already shown) the active pane's find
+        bar, targeting its active terminal. Bound to the terminal context
+        menu's "Highlight and Find" item and to Ctrl+Shift+F (see Settings
+        -> Shortcuts for the binding — deliberately not spelled out in the
+        menu label itself, so the two don't drift out of sync)."""
         terminal = self.get_active_terminal()
         if terminal is None:
             return
-        self._find_target_terminal = terminal
+        bar = self._find_bars.get(self._get_active_tabview())
+        if bar is None:
+            return
+        bar["target_terminal"] = terminal
         # Re-apply whatever's already in the entry to *this* terminal — the
-        # bar is shared across terminals, so if it's reopened with leftover
-        # text from a previous tab, that terminal has never had a regex set
-        # on it yet.
-        self._on_find_text_changed(self.find_entry)
+        # bar is shared across every tab within this one pane, so if it's
+        # reopened with leftover text from a previous tab, that terminal
+        # has never had a regex set on it yet.
+        self._on_find_text_changed(bar)
 
-        self.find_bar.set_visible(True)
-        self.find_entry.grab_focus()
-        self.find_entry.select_region(0, -1)
+        bar["widget"].set_visible(True)
+        bar["entry"].grab_focus()
+        bar["entry"].select_region(0, -1)
+        self._queue_highlight_redraw_all()
 
-    def _sync_find_target_terminal(self):
-        """Keeps the find bar's target in sync with whichever terminal is
-        currently active. Needed because the find bar no longer hides
-        itself when you switch tabs/panes (see _build_find_window) —
-        without this it would keep silently searching whatever terminal was
-        active when it was opened, no matter where you'd since navigated
-        to. A no-op while the bar is hidden; on_menu_find_in_terminal
-        already re-resolves the active terminal fresh the next time it's
-        shown."""
-        if not hasattr(self, "find_bar") or not self.find_bar.get_visible():
+    def _sync_find_target_terminal(self, tabview=None):
+        """Keeps a pane's find bar target in sync with whichever terminal
+        is currently selected in THAT SAME pane. Needed because a find bar
+        no longer hides itself when you switch tabs within its pane (see
+        _build_find_bar) — without this it would keep silently searching
+        whatever terminal was active when it was opened, no matter which
+        tab you'd since switched to. A no-op while that pane's bar is
+        hidden or doesn't exist yet; on_menu_find_in_terminal already
+        re-resolves the active terminal fresh the next time it's shown.
+        tabview=None resolves to the currently active pane."""
+        if tabview is None:
+            tabview = self._get_active_tabview()
+        bar = getattr(self, "_find_bars", {}).get(tabview)
+        if bar is None or not bar["widget"].get_visible():
             return
-        terminal = self.get_active_terminal()
-        if terminal is None or terminal is self._find_target_terminal:
+        page = tabview.get_selected_page()
+        session = self.open_sessions.get(page)
+        terminal = session[0] if session else None
+        if terminal is None or terminal is bar["target_terminal"]:
             return
-        self._find_target_terminal = terminal
-        self._on_find_text_changed(self.find_entry)
+        bar["target_terminal"] = terminal
+        self._on_find_text_changed(bar)
+        self._queue_highlight_redraw_all()
 
-    def _apply_find_wrap_option(self):
-        if self._find_target_terminal is not None:
-            self._find_target_terminal.search_set_wrap_around(self.find_wrap_toggle.get_active())
+    def _apply_find_wrap_option(self, bar):
+        if bar["target_terminal"] is not None:
+            bar["target_terminal"].search_set_wrap_around(bar["wrap_toggle"].get_active())
 
-    def _compile_find_regex(self, pattern):
+    def _compile_find_regex(self, bar, pattern):
         """Returns a compiled Vte.Regex for pattern, or False if it's an
         invalid regex (only possible when the regex toggle is on — literal
         text can't fail to compile once escaped).
@@ -1183,38 +1309,107 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         documented in the Python bindings. Plain-text (non-regex) search
         escapes the pattern rather than using PCRE2_LITERAL, since that flag
         can't be combined with Vte.REGEX_FLAGS_DEFAULT's other option bits."""
-        is_regex = self.find_regex_toggle.get_active()
+        is_regex = bar["regex_toggle"].get_active()
         text = pattern if is_regex else GLib.regex_escape_string(pattern, -1)
         flags = Vte.REGEX_FLAGS_DEFAULT | _PCRE2_MULTILINE
-        if not self.find_case_toggle.get_active():
+        if not bar["case_toggle"].get_active():
             flags |= _PCRE2_CASELESS
         try:
             return Vte.Regex.new_for_search(text, -1, flags)
         except GLib.GError:
             return False
 
-    def _on_find_text_changed(self, entry):
-        terminal = self._find_target_terminal
+    def _compile_find_regex_python(self, bar, pattern):
+        """Plain Python re.Pattern counterpart to _compile_find_regex,
+        mirroring the exact same case-sensitivity/regex-vs-literal logic —
+        that method stays Vte.Regex/PCRE2-based since that's what
+        search_find_next/previous actually need; this one exists purely so
+        the match COUNT and the "Highlight all" overlay (_draw_search_
+        highlights) can locate every occurrence themselves, something
+        Vte's own search API has no way to report (confirmed: it can only
+        jump to one match at a time, never enumerate or highlight all of
+        them — see the "Highlight all" checkbox's own design). Returns None
+        for an invalid regex, same cases _compile_find_regex would fail on."""
+        is_regex = bar["regex_toggle"].get_active()
+        text = pattern if is_regex else re.escape(pattern)
+        flags = re.MULTILINE  # matches _compile_find_regex forcing PCRE2_MULTILINE
+        if not bar["case_toggle"].get_active():
+            flags |= re.IGNORECASE
+        try:
+            return re.compile(text, flags)
+        except re.error:
+            return None
+
+    def _recompute_find_match_count(self, bar, terminal, pattern):
+        """Total match count across the whole buffer (scrollback included)
+        — what "N of M" reports, and what Next/Previous actually cycle
+        through via Vte's own wrap-around search. Deliberately the FULL
+        buffer, not just the visible screen _draw_search_highlights paints
+        — those are two different, intentionally-scoped things (see that
+        method's own docstring)."""
+        compiled = self._compile_find_regex_python(bar, pattern)
+        if compiled is None:
+            bar["match_count"] = 0
+            return
+        text = self._dump_terminal_text(terminal)
+        bar["match_count"] = sum(1 for _m in compiled.finditer(text))
+
+    def _set_find_status(self, bar, found):
+        """Updates a bar's status label from its current found/count/index
+        state — "3 of 17", "Not found", "Invalid pattern", or blank for an
+        empty search box."""
+        if not bar["entry"].get_text():
+            bar["status_label"].set_text("")
+        elif bar["entry"].has_css_class("error"):
+            bar["status_label"].set_text(_("Invalid pattern"))
+        elif not found or bar["match_count"] == 0:
+            bar["status_label"].set_text(_("Not found"))
+        else:
+            bar["status_label"].set_text(
+                _("{current} of {total}").format(current=bar["current_index"], total=bar["match_count"])
+            )
+
+    def _queue_highlight_redraw_all(self):
+        """Nudges every open terminal's highlight overlay to repaint —
+        cheap to call broadly (each one's own draw func is a fast no-op
+        unless it's actually its own pane's find-bar target with
+        "Highlight all" on), so callers don't need to track down which
+        specific overlay belongs to the active tab themselves."""
+        for page, session in self.open_sessions.items():
+            tab_info = self.tab_data.get(page)
+            area = tab_info.get("highlight_area") if tab_info else None
+            if area is not None:
+                area.queue_draw()
+
+    def _on_find_text_changed(self, bar):
+        terminal = bar["target_terminal"]
         if terminal is None:
             return
 
-        pattern = self.find_entry.get_text()
+        pattern = bar["entry"].get_text()
         if not pattern:
             terminal.search_set_regex(None, 0)
-            self.find_entry.remove_css_class("error")
-            self.find_status_label.set_text("")
+            bar["entry"].remove_css_class("error")
+            bar["match_count"] = 0
+            bar["current_index"] = 0
+            bar["status_label"].set_text("")
+            self._queue_highlight_redraw_all()
             return
 
-        regex = self._compile_find_regex(pattern)
+        regex = self._compile_find_regex(bar, pattern)
         if regex is False:
-            self.find_entry.add_css_class("error")
-            self.find_status_label.set_text(_("Invalid pattern"))
+            bar["entry"].add_css_class("error")
+            bar["match_count"] = 0
+            bar["current_index"] = 0
+            bar["status_label"].set_text(_("Invalid pattern"))
             terminal.search_set_regex(None, 0)
+            self._queue_highlight_redraw_all()
             return
 
-        self.find_entry.remove_css_class("error")
+        bar["entry"].remove_css_class("error")
         terminal.search_set_regex(regex, 0)
-        self._apply_find_wrap_option()
+        self._apply_find_wrap_option(bar)
+        self._recompute_find_match_count(bar, terminal, pattern)
         # search_find_next() resumes *after* the end of whatever's currently
         # selected — so as the pattern grows (still matching the same spot),
         # it skips right past that match instead of re-checking it, and the
@@ -1223,21 +1418,126 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         # it lands back on the same (nearest) match instead of marching on.
         terminal.unselect_all()
         found = terminal.search_find_next()
-        self.find_status_label.set_text("" if found else _("Not found"))
+        bar["current_index"] = 1 if found else 0
+        self._set_find_status(bar, found)
+        self._queue_highlight_redraw_all()
 
-    def _find_next(self):
-        terminal = self._find_target_terminal
-        if terminal is None or not self.find_entry.get_text():
+    def _find_next(self, bar):
+        terminal = bar["target_terminal"]
+        if terminal is None or not bar["entry"].get_text():
             return
         found = terminal.search_find_next()
-        self.find_status_label.set_text("" if found else _("Not found"))
+        if found and bar["match_count"]:
+            bar["current_index"] = (bar["current_index"] % bar["match_count"]) + 1
+        self._set_find_status(bar, found)
 
-    def _find_previous(self):
-        terminal = self._find_target_terminal
-        if terminal is None or not self.find_entry.get_text():
+    def _find_previous(self, bar):
+        terminal = bar["target_terminal"]
+        if terminal is None or not bar["entry"].get_text():
             return
         found = terminal.search_find_previous()
-        self.find_status_label.set_text("" if found else _("Not found"))
+        if found and bar["match_count"]:
+            bar["current_index"] = bar["current_index"] - 1 if bar["current_index"] > 1 else bar["match_count"]
+        self._set_find_status(bar, found)
+
+    def _draw_search_highlights(self, area, cr, width, height, terminal, tabview):
+        """Gtk.DrawingArea draw func for "Highlight all" — paints a
+        semi-transparent tint over every match CURRENTLY ON SCREEN (like
+        `less`'s own `/pattern` search), not the whole scrollback. VTE has
+        no API to highlight more than one match at a time on its own
+        (confirmed against its public header — only sequential find/
+        previous exist), so this is a from-scratch overlay: drawn on a
+        separate click-through Gtk.DrawingArea stacked above the terminal
+        (see its construction next to the watermark label), one per tab,
+        redrawn on "contents-changed"/scroll/search-state changes.
+
+        Deliberately screen-scoped, not full-buffer: computing/painting
+        every match across a potentially huge scrollback on every redraw
+        would be both wasteful and pointless (nobody can see it anyway) —
+        the "N of M" counter (_recompute_find_match_count) is what covers
+        the full buffer, as a plain number rather than a render.
+
+        The fill is translucent, not opaque, specifically so it blends
+        with whatever VTE itself is already painting underneath — most
+        importantly its own native selection highlight on the CURRENT
+        match (from search_find_next/previous), which this draws on top
+        of rather than replacing. That blend is what makes the current
+        match still visually stand out from the other, plain-tinted ones,
+        without this needing to separately track which specific match is
+        "the current one" itself.
+
+        Positions come from Vte.Terminal.get_text_format(Format.TEXT) — the
+        WHOLE-buffer dump, not get_text_range_format(Format.TEXT, first_row,
+        0, ...) with an explicit row range, even though the latter looks
+        like the more direct fit. Confirmed live: get_text_range_format
+        silently mis-addresses rows while VTE's alternate screen buffer is
+        active (i.e. whenever a full-screen program like `less`, `vim`,
+        `top`, etc. is running) — it returns a blank string for every row,
+        even though get_vadjustment()/get_row_count() keep reporting
+        correct values and get_text_format() keeps returning the real
+        on-screen content. Since there's no scrollback at all while the
+        alternate screen is active (confirmed: the vadjustment's upper
+        bound equals its page_size in that state), slicing the visible
+        window out of the whole-buffer dump ourselves
+        (lines[first_row:first_row + num_rows]) sidesteps the broken
+        row-range call entirely and works in both modes. Also NOT using
+        the richer get_text_range()/get_text() pair that return
+        per-character Vte.CharAttributes (which would have made
+        row/column lookup exact even across double-width characters):
+        confirmed live on the installed VTE (3.91) that the moment
+        Python's binding passes the (mandatory, automatic) GArray for
+        those methods' attributes out-param, VTE's own internal assertion
+        (`attributes == nullptr`) fails and they return None instead of
+        text — a real, present-day break in the already-deprecated
+        get_text_range/get_text, not a future risk. Splitting the
+        whole-buffer dump on "\\n" recovers (row, column) well enough for
+        this purpose instead — at the cost of a double-width character
+        counting as one column instead of two, a cosmetic inaccuracy only
+        for CJK/emoji text, not a correctness issue for the feature
+        itself. A match spanning two on-screen rows (wrapped mid-match)
+        also won't be found here, since each row is searched
+        independently — VTE's own search (used for actual navigation)
+        isn't limited this way, only this visual overlay is.
+
+        `tabview` identifies which pane's own find bar/state governs this
+        terminal (see _build_find_bar — one bar per pane, not one global
+        bar), bound as an extra closure argument on this draw func
+        alongside `terminal` itself when the tab was created."""
+        bar = self._find_bars.get(tabview)
+        if (bar is None or not bar["widget"].get_visible()
+                or not bar["highlight_toggle"].get_active()
+                or terminal is not bar["target_terminal"]):
+            return
+        pattern = bar["entry"].get_text()
+        if not pattern:
+            return
+        compiled = self._compile_find_regex_python(bar, pattern)
+        if compiled is None:
+            return
+
+        vadjustment = terminal.get_vadjustment()
+        first_row = int(vadjustment.get_value())
+        num_rows = terminal.get_row_count()
+        try:
+            whole_text = terminal.get_text_format(Vte.Format.TEXT)
+        except GLib.GError:
+            return
+        if not whole_text:
+            return
+        visible_lines = whole_text.split("\n")[first_row:first_row + num_rows]
+
+        char_width = terminal.get_char_width()
+        char_height = terminal.get_char_height()
+        cr.set_source_rgba(1, 1, 0, 0.35)
+
+        for row_offset, line in enumerate(visible_lines):
+            for match in compiled.finditer(line):
+                col0, col1 = match.start(), match.end()
+                if col0 == col1:
+                    continue
+                cr.rectangle(col0 * char_width, row_offset * char_height,
+                             (col1 - col0) * char_width, char_height)
+                cr.fill()
 
     # --- Session logging ("Save session log" on a host, or "Save log" from
     # an open tab's right-click menu) ---
@@ -1382,6 +1682,101 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         if tab_info is None:
             return
         timeout_id = tab_info.pop("_log_timeout_id", None)
+        if timeout_id is not None:
+            GLib.source_remove(timeout_id)
+
+    def _start_command_watch(self, page, config):
+        """Starts polling a terminal tab for its host's Post-connection/
+        Regexp Commands (Host dialog -> Commands) — a no-op if the host has
+        neither configured. Independent of session logging (same
+        GLib.timeout_add(500, ...) + _dump_terminal_text diffing idiom as
+        _start_session_logging/_tick_session_log, but its own timer: must
+        keep working whether or not logging is on for this tab).
+
+        There's no "connection is actually authenticated" signal anywhere
+        in this codebase (_continue_session spawns via spawn_sync, with no
+        async completion callback; the only process-lifecycle signal,
+        child-exited, fires on death, not readiness) — post-connect
+        commands fire on the first tick that sees any output at all, not a
+        fixed delay. Documented as a tradeoff in the Host dialog's own note
+        label, not hidden: this will also feed an interactive password or
+        host-key-confirmation prompt if one appears first."""
+        post_connect = [c for c in (config.get("post_connect_commands") or []) if c.strip()]
+        regexp_rules = config.get("regexp_commands") or []
+
+        compiled_rules = []
+        for rule in regexp_rules:
+            pattern, command = rule.get("pattern", ""), rule.get("command", "")
+            if not pattern.strip() or not command.strip():
+                continue
+            try:
+                compiled_rules.append((re.compile(pattern), command))
+            except re.error as e:
+                logging.warning(f"Regexp Commands: skipping invalid pattern {pattern!r}: {e}")
+
+        if not post_connect and not compiled_rules:
+            return  # nothing configured for this host — don't bother polling at all
+
+        tab_info = self.tab_data.get(page)
+        if tab_info is None:
+            return
+        tab_info["_connect_cmds"] = post_connect
+        tab_info["_connect_cmds_sent"] = not bool(post_connect)
+        tab_info["_compiled_regexp_cmds"] = compiled_rules
+        tab_info["_cmdwatch_last_text"] = ""
+        tab_info["_cmdwatch_timeout_id"] = GLib.timeout_add(500, self._tick_command_watch, page)
+
+    def _tick_command_watch(self, page):
+        """Recurring GLib.timeout_add callback — same shape as
+        _tick_session_log (returning False cancels it, doubling as cleanup
+        once the tab closes or the process dies)."""
+        tab_info = self.tab_data.get(page)
+        if tab_info is None:
+            return False
+        terminal, _pid = self.open_sessions.get(page, (None, None))
+        if terminal is None:
+            return False
+
+        try:
+            current_text = self._dump_terminal_text(terminal)
+        except GLib.GError as e:
+            logging.debug(f"Command watch poll failed, will retry: {e}")
+            return True
+
+        last_text = tab_info.get("_cmdwatch_last_text", "")
+        if current_text == last_text:
+            return True
+        new_part = current_text[len(last_text):] if current_text.startswith(last_text) else current_text
+        tab_info["_cmdwatch_last_text"] = current_text
+
+        if not tab_info.get("_connect_cmds_sent"):
+            if not current_text:
+                return True  # still waiting for the very first output
+            tab_info["_connect_cmds_sent"] = True
+            host_config = tab_info.get("config", {})
+            for cmd in tab_info.get("_connect_cmds", []):
+                rendered = self._render_template_text(cmd, host_config)
+                terminal.feed_child((rendered + "\n").encode("utf-8"))
+            if not tab_info.get("_compiled_regexp_cmds"):
+                tab_info.pop("_cmdwatch_timeout_id", None)
+                return False  # nothing left to watch for
+            return True
+
+        host_config = tab_info.get("config", {})
+        for regex, command in tab_info.get("_compiled_regexp_cmds", []):
+            if regex.search(new_part):
+                rendered = self._render_template_text(command, host_config)
+                terminal.feed_child((rendered + "\n").encode("utf-8"))
+        return True
+
+    def _stop_command_watch(self, page):
+        """Closes out any active Post-connection/Regexp Commands polling
+        for `page` — same shape as _stop_session_logging. Safe to call even
+        if none was active."""
+        tab_info = self.tab_data.get(page)
+        if tab_info is None:
+            return
+        timeout_id = tab_info.pop("_cmdwatch_timeout_id", None)
         if timeout_id is not None:
             GLib.source_remove(timeout_id)
 
@@ -1957,6 +2352,23 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                 # TabView is currently active, becoming the AdwTabPage
                 # that's the real key in open_sessions/tab_data.
                 tabview = self._get_active_tabview()
+
+                # Same click-through overlay trick as the watermark label
+                # above, for the "Highlight all" find feature — see
+                # _draw_search_highlights. One per terminal (not the
+                # per-pane find bar's own overlay) so it's always sized/
+                # positioned to exactly match THIS terminal; `tabview` is
+                # bound alongside `terminal` so the draw func knows which
+                # pane's find bar/state governs it.
+                highlight_area = Gtk.DrawingArea()
+                highlight_area.set_can_target(False)
+                highlight_area.set_draw_func(self._draw_search_highlights, terminal, tabview)
+                term_overlay.add_overlay(highlight_area)
+                terminal.connect("contents-changed", lambda t, a=highlight_area: a.queue_draw())
+                terminal.get_vadjustment().connect(
+                    "value-changed", lambda a, area=highlight_area: area.queue_draw()
+                )
+
                 page = self._create_tab_page(tabview, term_overlay, "utilities-terminal-symbolic", config['name'])
                 terminal.grab_focus()
 
@@ -1966,7 +2378,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                 self.open_sessions[page] = (terminal, pid)
                 self.tab_data[page] = {
                     "type": "terminal", "config": resolved_config, "log_path": None,
-                    "watermark_label": watermark_label, "tab_page": page,
+                    "watermark_label": watermark_label, "highlight_area": highlight_area, "tab_page": page,
                     "disconnected": False, "base_title": config['name'], "tag": None,
                     # The host's own configured default (Host dialog -> Tab
                     # Color) — just the SEED value here; the tab's own
@@ -1976,6 +2388,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                     "tab_color": config.get("tab_color"),
                 }
                 self._renumber_tabview(tabview)
+                self._start_command_watch(page, config)
                 terminal.connect("child-exited", self.on_ssh_process_exited, page)
                 # Per-host "save_log" (set on the host's own edit page) wins
                 # when present; terminal.auto_save_log covers everything
@@ -2005,6 +2418,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                     self._start_session_logging(existing_page)
                 if protocol == "local":
                     self._start_local_cwd_tracking(existing_page)
+                self._start_command_watch(existing_page, config)
                 terminal.grab_focus()
                 self.apply_watermark_settings_to_all()
 
@@ -2071,6 +2485,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                 # directly so it's not silently leaked.
                 self._stop_session_logging(page)
                 self._stop_local_cwd_tracking(page)
+                self._stop_command_watch(page)
                 self.open_sessions.pop(page, None)
                 self.tab_data.pop(page, None)
         else:

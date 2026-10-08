@@ -667,6 +667,115 @@ class HostDialog(ResponseDialog):
 
         self.tabs_stack.add_titled(page_options, "options", _("Options")).set_icon_name("preferences-other-symbolic")
 
+        # --- Commands tab: automate typing once connected — a list sent
+        # once right after connecting, and a list of regex-triggered
+        # commands sent whenever new terminal output matches. Execution
+        # lives in tab_window_base.py's _start_command_watch/_tick_command_
+        # watch. Both editors are dynamic Adw rows (one per item, "Add"
+        # as its own activatable row at the bottom) — the same pattern
+        # already used for "Adaptive Watermarks" on the Terminal settings
+        # page (see add_watermark_rule_row there) — rather than a
+        # Gtk.TreeView: a fixed-size TreeView reserved empty space even
+        # with zero rows and forced the whole dialog wider to fit it,
+        # which is exactly the "huge window with empty space" this
+        # replaced.
+        page_commands = Adw.PreferencesPage()
+
+        group_post_connect = Adw.PreferencesGroup(
+            title=_("Post-connection Commands"),
+            description=_(
+                "Sent once, in order, right after connecting — before any real login "
+                "prompt is guaranteed to be ready, so a password or host-key confirmation "
+                "prompt will receive this text too if one appears first. Works best with "
+                "key-based login. Available variables: $name, $host, $user"
+            ),
+        )
+        page_commands.add(group_post_connect)
+
+        self._post_connect_rows = []  # [Adw.EntryRow, ...]
+        self._post_connect_add_row = None
+
+        def add_post_connect_row(text=""):
+            entry_row = Adw.EntryRow(title=_("Command"))
+            entry_row.set_text(text)
+            remove_button = Gtk.Button(icon_name="user-trash-symbolic", css_classes=["flat"], valign=Gtk.Align.CENTER)
+            entry_row.add_suffix(remove_button)
+
+            def on_remove(_btn, row=entry_row):
+                group_post_connect.remove(row)
+                self._post_connect_rows.remove(row)
+            remove_button.connect("clicked", on_remove)
+
+            self._post_connect_rows.append(entry_row)
+            group_post_connect.add(entry_row)
+            # Keep "Add Command" pinned below every real row.
+            if self._post_connect_add_row is not None:
+                group_post_connect.remove(self._post_connect_add_row)
+                group_post_connect.add(self._post_connect_add_row)
+
+        for cmd in (self.host_config.get("post_connect_commands") or []):
+            add_post_connect_row(cmd)
+
+        add_post_connect_action_row = Adw.ActionRow(title=_("Add Command"))
+        add_post_connect_action_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
+        add_post_connect_action_row.set_activatable(True)
+        add_post_connect_action_row.connect("activated", lambda row: add_post_connect_row())
+        group_post_connect.add(add_post_connect_action_row)
+        self._post_connect_add_row = add_post_connect_action_row
+
+        group_regexp = Adw.PreferencesGroup(
+            title=_("Regexp Commands"),
+            description=_(
+                "Sent whenever new terminal output matches the pattern — every time it "
+                "reappears, not just the first. Available variables in Command: "
+                "$name, $host, $user"
+            ),
+        )
+        page_commands.add(group_regexp)
+
+        self._regexp_rows = []  # [{"row_widget", "pattern_entry", "command_entry"}, ...]
+        self._regexp_add_row = None
+
+        def add_regexp_row(pattern="", command=""):
+            pattern_entry = Gtk.Entry(hexpand=True, placeholder_text=_("Pattern"))
+            pattern_entry.set_text(pattern)
+            command_entry = Gtk.Entry(hexpand=True, placeholder_text=_("Command"))
+            command_entry.set_text(command)
+            remove_button = Gtk.Button(icon_name="user-trash-symbolic", css_classes=["flat"], valign=Gtk.Align.CENTER)
+
+            row_box = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL, spacing=6,
+                margin_top=8, margin_bottom=8, margin_start=12, margin_end=12,
+            )
+            row_box.append(pattern_entry)
+            row_box.append(command_entry)
+            row_box.append(remove_button)
+
+            row_state = {"row_widget": row_box, "pattern_entry": pattern_entry, "command_entry": command_entry}
+
+            def on_remove(_btn, state=row_state):
+                group_regexp.remove(state["row_widget"])
+                self._regexp_rows.remove(state)
+            remove_button.connect("clicked", on_remove)
+
+            self._regexp_rows.append(row_state)
+            group_regexp.add(row_box)
+            if self._regexp_add_row is not None:
+                group_regexp.remove(self._regexp_add_row)
+                group_regexp.add(self._regexp_add_row)
+
+        for rule in (self.host_config.get("regexp_commands") or []):
+            add_regexp_row(rule.get("pattern", ""), rule.get("command", ""))
+
+        add_regexp_action_row = Adw.ActionRow(title=_("Add Rule"))
+        add_regexp_action_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
+        add_regexp_action_row.set_activatable(True)
+        add_regexp_action_row.connect("activated", lambda row: add_regexp_row())
+        group_regexp.add(add_regexp_action_row)
+        self._regexp_add_row = add_regexp_action_row
+
+        self.tabs_stack.add_titled(page_commands, "commands", _("Commands")).set_icon_name("utilities-terminal-symbolic")
+
         view_switcher = Adw.ViewSwitcher()
         view_switcher.set_stack(self.tabs_stack)
         view_switcher.set_policy(Adw.ViewSwitcherPolicy.WIDE)
@@ -860,6 +969,11 @@ class HostDialog(ResponseDialog):
             "telnet_local_echo": self.switch_telnet_echo.get_active(),
             "save_log": self.switch_save_log.get_active(),
             "tab_color": _rgba_to_hex(self.tab_color_button.get_rgba()) if self.tab_color_switch.get_active() else None,
+            "post_connect_commands": [row.get_text() for row in self._post_connect_rows if row.get_text().strip()],
+            "regexp_commands": [
+                {"pattern": s["pattern_entry"].get_text(), "command": s["command_entry"].get_text()}
+                for s in self._regexp_rows if s["pattern_entry"].get_text().strip()
+            ],
         }
 
         parent_id = self.combo_group.get_active_id()
@@ -1860,6 +1974,20 @@ class SettingsDialog(Adw.Window):
         )
         group_tabs.add(self.tabbar_height_row)
 
+        group_find = Adw.PreferencesGroup(title=_("Find and Highlight"))
+        page_interface.add(group_find)
+
+        self.find_bar_opacity_row = Adw.SpinRow(
+            title=_("Find bar opacity"),
+            subtitle=_("Default background opacity of the in-terminal find bar itself — its own slider "
+                       "starts here and can still be adjusted per-pane"),
+            adjustment=Gtk.Adjustment(
+                value=self.settings_manager.get("interface.find_bar_opacity"),
+                lower=20, upper=100, step_increment=5
+            )
+        )
+        group_find.add(self.find_bar_opacity_row)
+
         group_debug = Adw.PreferencesGroup(title=_("Debugging"))
         page_interface.add(group_debug)
 
@@ -2616,6 +2744,7 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("interface.theme", theme_value)
         self.settings_manager.set("interface.tree_row_striping", self.tree_row_striping_row.get_active())
         self.settings_manager.set("interface.tabbar_height", int(self.tabbar_height_row.get_value()))
+        self.settings_manager.set("interface.find_bar_opacity", int(self.find_bar_opacity_row.get_value()))
 
         search_position_map_rev = {0: "top", 1: "bottom"}
         self.settings_manager.set(
@@ -3012,6 +3141,7 @@ class SettingsDialog(Adw.Window):
             self.theme_row.set_selected(default_theme_index)
             self.tree_row_striping_row.set_active(DEFAULT_SETTINGS["interface.tree_row_striping"])
             self.tabbar_height_row.set_value(DEFAULT_SETTINGS["interface.tabbar_height"])
+            self.find_bar_opacity_row.set_value(DEFAULT_SETTINGS["interface.find_bar_opacity"])
             search_position_map = {"top": 0, "bottom": 1}
             self.search_position_row.set_selected(
                 search_position_map.get(DEFAULT_SETTINGS["interface.host_search_position"], 1)

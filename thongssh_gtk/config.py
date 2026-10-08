@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-2026 lknsfos
 
+import copy
 import json
 import os
 import shutil
@@ -60,6 +61,8 @@ HOST_CONFIG_TEMPLATE = {
     "telnet_local_echo": False,
     "save_log": False,
     "tab_color": None,
+    "post_connect_commands": [],  # list[str] — sent in order, once, right after connecting
+    "regexp_commands": [],  # list[{"pattern": str, "command": str}] — sent whenever new output matches
 }
 
 
@@ -71,7 +74,14 @@ def _recursive_migrate(node):
             needs_save = True
         for key, default_value in HOST_CONFIG_TEMPLATE.items():
             if key not in node["config"]:
-                node["config"][key] = default_value
+                # Mutable defaults (post_connect_commands/regexp_commands's
+                # "[]") are ONE object, created once at module import — not
+                # copied, every host missing the key would silently end up
+                # sharing that exact same list, so appending a command to
+                # one host would append it to every other migrated host too.
+                node["config"][key] = (
+                    copy.deepcopy(default_value) if isinstance(default_value, (list, dict)) else default_value
+                )
                 needs_save = True
         # A *present* null "host"/"name" (e.g. migrated from an older
         # HOST_CONFIG_TEMPLATE whose default for these was None, before

@@ -38,6 +38,7 @@ DEFAULT_SETTINGS = {
     "interface.language": "system", # "system" (follow the OS/locale, the normal gettext default) or a code from i18n.LANGUAGES — takes effect on next launch, see i18n.py
     "interface.tree_row_striping": False,
     "interface.tabbar_height": 26, # px, target height of the tab strip (Adw.TabBar) — see window.py's setup_css, everything in the "tabbar ..." CSS block scales off this
+    "interface.find_bar_opacity": 90, # percent (20-100) — default opacity of the in-terminal find bar's own card background (not the "Highlight all" terminal tint, which is a fixed alpha); each find bar's own slider (see TerminalPaneWindow._build_find_bar) starts here but can be adjusted per-pane for that session without changing this default
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default
     "interface.host_search_position": "bottom", # "top" or "bottom" — where the host-tree search bar sits
     # Gtk accelerator names (Gtk.accelerator_parse/_name understand them
