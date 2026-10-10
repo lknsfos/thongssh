@@ -62,7 +62,7 @@ HOST_CONFIG_TEMPLATE = {
     "save_log": False,
     "tab_color": None,
     "post_connect_commands": [],  # list[str] — sent in order, once, right after connecting
-    "regexp_commands": [],  # list[{"pattern": str, "command": str}] — sent whenever new output matches
+    "regexp_commands": [],  # list[{"pattern": str, "command": str, "repeat": bool}] — sent once the first time new output matches; "repeat" (default False, missing == False for configs saved before this existed) re-arms it to fire every time the pattern reappears instead
 }
 
 

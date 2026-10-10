@@ -726,21 +726,24 @@ class HostDialog(ResponseDialog):
         group_regexp = Adw.PreferencesGroup(
             title=_("Regexp Commands"),
             description=_(
-                "Sent whenever new terminal output matches the pattern — every time it "
-                "reappears, not just the first. Available variables in Command: "
+                "Sent once, the first time new terminal output matches the pattern. "
+                "Check \"Every time\" to re-send it each time the pattern reappears "
+                "instead of just once. Available variables in Command: "
                 "$name, $host, $user"
             ),
         )
         page_commands.add(group_regexp)
 
-        self._regexp_rows = []  # [{"row_widget", "pattern_entry", "command_entry"}, ...]
+        self._regexp_rows = []  # [{"row_widget", "pattern_entry", "command_entry", "repeat_check"}, ...]
         self._regexp_add_row = None
 
-        def add_regexp_row(pattern="", command=""):
+        def add_regexp_row(pattern="", command="", repeat=False):
             pattern_entry = Gtk.Entry(hexpand=True, placeholder_text=_("Pattern"))
             pattern_entry.set_text(pattern)
             command_entry = Gtk.Entry(hexpand=True, placeholder_text=_("Command"))
             command_entry.set_text(command)
+            repeat_check = Gtk.CheckButton(label=_("Every time"), valign=Gtk.Align.CENTER)
+            repeat_check.set_active(repeat)
             remove_button = Gtk.Button(icon_name="user-trash-symbolic", css_classes=["flat"], valign=Gtk.Align.CENTER)
 
             row_box = Gtk.Box(
@@ -749,9 +752,13 @@ class HostDialog(ResponseDialog):
             )
             row_box.append(pattern_entry)
             row_box.append(command_entry)
+            row_box.append(repeat_check)
             row_box.append(remove_button)
 
-            row_state = {"row_widget": row_box, "pattern_entry": pattern_entry, "command_entry": command_entry}
+            row_state = {
+                "row_widget": row_box, "pattern_entry": pattern_entry,
+                "command_entry": command_entry, "repeat_check": repeat_check,
+            }
 
             def on_remove(_btn, state=row_state):
                 group_regexp.remove(state["row_widget"])
@@ -765,7 +772,7 @@ class HostDialog(ResponseDialog):
                 group_regexp.add(self._regexp_add_row)
 
         for rule in (self.host_config.get("regexp_commands") or []):
-            add_regexp_row(rule.get("pattern", ""), rule.get("command", ""))
+            add_regexp_row(rule.get("pattern", ""), rule.get("command", ""), rule.get("repeat", False))
 
         add_regexp_action_row = Adw.ActionRow(title=_("Add Rule"))
         add_regexp_action_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
@@ -971,7 +978,10 @@ class HostDialog(ResponseDialog):
             "tab_color": _rgba_to_hex(self.tab_color_button.get_rgba()) if self.tab_color_switch.get_active() else None,
             "post_connect_commands": [row.get_text() for row in self._post_connect_rows if row.get_text().strip()],
             "regexp_commands": [
-                {"pattern": s["pattern_entry"].get_text(), "command": s["command_entry"].get_text()}
+                {
+                    "pattern": s["pattern_entry"].get_text(), "command": s["command_entry"].get_text(),
+                    "repeat": s["repeat_check"].get_active(),
+                }
                 for s in self._regexp_rows if s["pattern_entry"].get_text().strip()
             ],
         }

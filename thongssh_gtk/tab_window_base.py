@@ -1746,7 +1746,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
             if not pattern.strip() or not command.strip():
                 continue
             try:
-                compiled_rules.append((re.compile(pattern), command))
+                compiled_rules.append((re.compile(pattern), command, bool(rule.get("repeat"))))
             except re.error as e:
                 logging.warning(f"Regexp Commands: skipping invalid pattern {pattern!r}: {e}")
 
@@ -1759,6 +1759,11 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         tab_info["_connect_cmds"] = post_connect
         tab_info["_connect_cmds_sent"] = not bool(post_connect)
         tab_info["_compiled_regexp_cmds"] = compiled_rules
+        # Indices into _compiled_regexp_cmds that have already fired once —
+        # only consulted for a rule whose own "repeat" is False (see
+        # _tick_command_watch); a repeating rule's index is never added
+        # here, so it keeps firing on every new match regardless.
+        tab_info["_regexp_fired"] = set()
         tab_info["_cmdwatch_last_text"] = ""
         tab_info["_cmdwatch_timeout_id"] = GLib.timeout_add(500, self._tick_command_watch, page)
 
@@ -1799,10 +1804,30 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
             return True
 
         host_config = tab_info.get("config", {})
-        for regex, command in tab_info.get("_compiled_regexp_cmds", []):
+        fired = tab_info.setdefault("_regexp_fired", set())
+        compiled_rules = tab_info.get("_compiled_regexp_cmds", [])
+        for i, (regex, command, repeat) in enumerate(compiled_rules):
+            if not repeat and i in fired:
+                continue  # already sent once, and not armed to repeat
             if regex.search(new_part):
                 rendered = self._render_template_text(command, host_config)
                 terminal.feed_child((rendered + "\n").encode("utf-8"))
+                if not repeat:
+                    fired.add(i)
+
+        # Stop polling once every rule is "done" (one-shot and already
+        # fired) — a repeating rule is never done, so its mere presence
+        # keeps this True forever, same as it keeps the loop above live.
+        # Recomputed fresh here (not tracked as a running flag inside the
+        # loop above) so one rule firing this same tick can't make an
+        # earlier, still-unfired rule look done too.
+        all_done = compiled_rules and all(
+            not repeat and i in fired
+            for i, (_regex, _command, repeat) in enumerate(compiled_rules)
+        )
+        if all_done:
+            tab_info.pop("_cmdwatch_timeout_id", None)
+            return False  # every rule was one-shot and has already fired — nothing left to watch for
         return True
 
     def _stop_command_watch(self, page):
