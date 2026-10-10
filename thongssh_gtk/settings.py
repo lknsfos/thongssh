@@ -216,11 +216,39 @@ class SettingsManager:
             for key in self.settings:
                 if key in loaded_settings:
                     self.settings[key] = loaded_settings[key]
+            self._restore_null_settings()
             self._migrate_macos_focus_pane_shortcuts(loaded_settings)
         except (json.JSONDecodeError, IOError) as e:
             logging.error(f"Failed to load settings: {e}. Using defaults.")
             if SETTINGS_FILE.exists():
                 SETTINGS_FILE.rename(f"{SETTINGS_FILE}.bak")
+
+    def _restore_null_settings(self):
+        """Replaces any setting that ended up `null` with its real default —
+        a real, reported crash: `interface.find_bar_opacity` (a percentage
+        int consumed as `.../100.0` in tab_window_base.py's find bar setup)
+        turned up `None` in a real settings.json, taking the whole app down
+        at startup (`TypeError: unsupported operand type(s) for /:
+        'NoneType' and 'float'`) before a single window could ever open —
+        no settings page, no way to fix it from inside the app at all. How
+        it got there isn't fully pinned down (interface.find_bar_opacity is
+        also one of sync.sync_terminal's synced keys — settings_sync.py —
+        so a merge against an older machine that pre-dates this setting is
+        one real candidate), but regardless of cause, no DEFAULT_SETTINGS
+        entry is ever legitimately None itself (confirmed: none of them
+        are), so a stored null is never a deliberate value to preserve —
+        always a sign this exact thing happened, for whichever key. Runs
+        for every key, not just this one, since the same class of
+        corruption could in principle hit any of them, and a crash this
+        early (before the main window, before Settings is reachable) is
+        unrecoverable without editing the JSON file by hand otherwise."""
+        changed = False
+        for key, default in DEFAULT_SETTINGS.items():
+            if self.settings.get(key) is None and default is not None:
+                self.settings[key] = default
+                changed = True
+        if changed:
+            self.save()
 
     def _migrate_macos_focus_pane_shortcuts(self, loaded_settings):
         """A settings.json saved before the current h/j/k/l macOS default

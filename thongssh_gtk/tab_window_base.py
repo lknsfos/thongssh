@@ -1466,38 +1466,58 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         without this needing to separately track which specific match is
         "the current one" itself.
 
-        Positions come from Vte.Terminal.get_text_format(Format.TEXT) — the
-        WHOLE-buffer dump, not get_text_range_format(Format.TEXT, first_row,
-        0, ...) with an explicit row range, even though the latter looks
-        like the more direct fit. Confirmed live: get_text_range_format
-        silently mis-addresses rows while VTE's alternate screen buffer is
-        active (i.e. whenever a full-screen program like `less`, `vim`,
-        `top`, etc. is running) — it returns a blank string for every row,
-        even though get_vadjustment()/get_row_count() keep reporting
-        correct values and get_text_format() keeps returning the real
-        on-screen content. Since there's no scrollback at all while the
-        alternate screen is active (confirmed: the vadjustment's upper
-        bound equals its page_size in that state), slicing the visible
-        window out of the whole-buffer dump ourselves
-        (lines[first_row:first_row + num_rows]) sidesteps the broken
-        row-range call entirely and works in both modes. Also NOT using
-        the richer get_text_range()/get_text() pair that return
-        per-character Vte.CharAttributes (which would have made
+        Positions normally come from Vte.Terminal.get_text_range_format(),
+        queried one real VISUAL row at a time (start_row == end_row, an
+        explicit end_col — NOT -1, which silently returns blank for every
+        row on the installed VTE/binding combo regardless of mode). A
+        single call across the whole visible range used to come from
+        get_text_format(Format.TEXT) (the WHOLE-buffer dump) instead,
+        sliced by "\\n": that was a real, reported bug — get_text_format's
+        "\\n"s mark only actual hard line breaks, not where a long line
+        soft-wraps onto the next visual row, so a single long wrapped line
+        anywhere earlier in the buffer collapses what should be N separate
+        "\\n"-delimited slices into one, permanently shifting every row
+        index (and therefore the highlight rectangles' Y position) for
+        everything after it — confirmed live: a 100-character line in a
+        40-column terminal produced ONE newline-free slice spanning what
+        VTE itself reports as 3 separate rows, not two embedded newlines.
+        The drift only ever appears/worsens with scrollback for exactly
+        this reason: the more has scrolled by, the more such wraps have
+        likely occurred somewhere before the current viewport.
+
+        The one real exception is VTE's alternate screen buffer (active
+        whenever a full-screen program like `less`, `vim`, `top`, etc. is
+        running): there, confirmed live, get_text_range_format silently
+        mis-addresses every row and returns blank, even though
+        get_vadjustment()/get_row_count() keep reporting correct values
+        and get_text_format() keeps returning the real on-screen content.
+        There's also no real scrollback while the alternate screen is
+        active (confirmed: the vadjustment's upper bound equals its
+        page_size in that state) — first_row is always 0 there and
+        num_rows covers the whole visible area, so the old whole-buffer-
+        dump-and-slice approach is kept as a fallback for that one case
+        specifically, where it's materially less likely to actually hit a
+        wrapped line in practice (an alt-screen TUI app's own internal
+        line wrapping already accounts for the terminal width itself)
+        than it would be for arbitrary shell scrollback.
+
+        Also NOT using the richer get_text_range()/get_text() pair that
+        return per-character Vte.CharAttributes (which would have made
         row/column lookup exact even across double-width characters):
         confirmed live on the installed VTE (3.91) that the moment
         Python's binding passes the (mandatory, automatic) GArray for
         those methods' attributes out-param, VTE's own internal assertion
         (`attributes == nullptr`) fails and they return None instead of
         text — a real, present-day break in the already-deprecated
-        get_text_range/get_text, not a future risk. Splitting the
-        whole-buffer dump on "\\n" recovers (row, column) well enough for
-        this purpose instead — at the cost of a double-width character
-        counting as one column instead of two, a cosmetic inaccuracy only
-        for CJK/emoji text, not a correctness issue for the feature
-        itself. A match spanning two on-screen rows (wrapped mid-match)
-        also won't be found here, since each row is searched
-        independently — VTE's own search (used for actual navigation)
-        isn't limited this way, only this visual overlay is.
+        get_text_range/get_text, not a future risk. Per-row text recovers
+        (row, column) well enough for this purpose instead — at the cost
+        of a double-width character counting as one column instead of
+        two, a cosmetic inaccuracy only for CJK/emoji text, not a
+        correctness issue for the feature itself. A match spanning two
+        on-screen rows (wrapped mid-match) also won't be found here, since
+        each row is searched independently — VTE's own search (used for
+        actual navigation) isn't limited this way, only this visual
+        overlay is.
 
         `tabview` identifies which pane's own find bar/state governs this
         terminal (see _build_find_bar — one bar per pane, not one global
@@ -1518,13 +1538,29 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         vadjustment = terminal.get_vadjustment()
         first_row = int(vadjustment.get_value())
         num_rows = terminal.get_row_count()
-        try:
-            whole_text = terminal.get_text_format(Vte.Format.TEXT)
-        except GLib.GError:
-            return
-        if not whole_text:
-            return
-        visible_lines = whole_text.split("\n")[first_row:first_row + num_rows]
+        # No scrollback at all == the alternate screen buffer is active
+        # (see docstring) — get_text_range_format is unusable there, so
+        # fall back to the old whole-buffer-dump-and-slice approach.
+        is_alt_screen = vadjustment.get_upper() <= vadjustment.get_page_size()
+        if is_alt_screen:
+            try:
+                whole_text = terminal.get_text_format(Vte.Format.TEXT)
+            except GLib.GError:
+                return
+            if not whole_text:
+                return
+            visible_lines = whole_text.split("\n")[first_row:first_row + num_rows]
+        else:
+            last_col = terminal.get_column_count() - 1
+            visible_lines = []
+            for row in range(first_row, first_row + num_rows):
+                try:
+                    line, _length = terminal.get_text_range_format(
+                        Vte.Format.TEXT, row, 0, row, last_col
+                    )
+                except GLib.GError:
+                    line = None
+                visible_lines.append(line or "")
 
         char_width = terminal.get_char_width()
         char_height = terminal.get_char_height()
