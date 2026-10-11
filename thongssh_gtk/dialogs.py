@@ -15,7 +15,6 @@ from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_P
 from .widgets import PositionGrid, set_split_button_active_style, ShortcutPicker, install_shortcut_capture
 from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
 from .settings import DEFAULT_SETTINGS
-from .launcher_icon import apply_launcher_icon
 from .keyring import KeyringManager
 from .ai_providers import DEFAULT_MODELS as AI_DEFAULT_MODELS, DEFAULT_BASE_URLS as AI_DEFAULT_BASE_URLS, fetch_models
 from .cli_providers import is_available as cli_is_available
@@ -1913,24 +1912,6 @@ class SettingsDialog(Adw.Window):
         self.theme_row.set_selected(current_theme_index)
         group_appearance.add(self.theme_row)
 
-        group_logo = Adw.PreferencesGroup(title=_("Logo"))
-        page_interface.add(group_logo)
-
-        # (label, settings value / icon file stem without extension)
-        self._icon_options = [
-            (_("Safe"), "thongssh"),
-            (_("Original"), "thongssh_orig"),
-        ]
-        icon_labels = [label for label, stem in self._icon_options]
-        self.icon_row = Adw.ComboRow(title=_("App Icon"), model=Gtk.StringList.new(icon_labels))
-        current_icon_stem = self.settings_manager.get("interface.icon")
-        try:
-            current_icon_index = [stem for label, stem in self._icon_options].index(current_icon_stem)
-        except ValueError:
-            current_icon_index = 0
-        self.icon_row.set_selected(current_icon_index)
-        group_logo.add(self.icon_row)
-
         group_language = Adw.PreferencesGroup(
             title=_("Language"),
             description=_("Takes effect the next time ThongSSH starts."),
@@ -2758,9 +2739,6 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("sftp.remote_default_sort_column", sort_col_map_rev.get(self.sftp_remote_sort_col_row.get_selected(), "name"))
         self.settings_manager.set("sftp.remote_default_sort_direction", sort_dir_map_rev.get(self.sftp_remote_sort_dir_row.get_selected(), "asc"))
 
-        icon_stem = self._icon_options[self.icon_row.get_selected()][1]
-        self.settings_manager.set("interface.icon", icon_stem)
-
         language_code = self._language_options[self.language_row.get_selected()][0]
         self.settings_manager.set("interface.language", language_code)
 
@@ -2933,17 +2911,6 @@ class SettingsDialog(Adw.Window):
         # timer at whatever interval/enabled-state was just saved.
         self.parent_window.refresh_sync_button_visibility()
         self.parent_window.restart_sync_timer()
-
-        # Apply the icon change immediately — the window's own icon, the
-        # macOS Dock icon (About dialog just reads the setting fresh next
-        # time it's opened, no extra work needed there), and the GNOME
-        # Wayland dock/taskbar icon (via a user-local .desktop override,
-        # since Shell reads Icon= from the .desktop file, not the window).
-        self.parent_window.set_icon_name(icon_stem)
-        apply_launcher_icon(icon_stem)
-        app = self.parent_window.get_application()
-        if app is not None and hasattr(app, "apply_macos_dock_icon"):
-            app.apply_macos_dock_icon()
 
         # The striping cell-data-func reads the setting live, it just needs
         # a redraw to pick up the new value immediately.
@@ -3145,13 +3112,6 @@ class SettingsDialog(Adw.Window):
             self.sftp_remote_sort_col_row.set_selected(sort_col_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_column"], 0))
             self.sftp_remote_sort_dir_row.set_selected(sort_dir_map.get(DEFAULT_SETTINGS["sftp.remote_default_sort_direction"], 0))
         elif current_page_name == "interface":
-            try:
-                default_icon_index = [stem for _label, stem in self._icon_options].index(
-                    DEFAULT_SETTINGS["interface.icon"]
-                )
-            except ValueError:
-                default_icon_index = 0
-            self.icon_row.set_selected(default_icon_index)
             try:
                 default_language_index = [code for code, _label in self._language_options].index(
                     DEFAULT_SETTINGS["interface.language"]

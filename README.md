@@ -1,113 +1,134 @@
-# 👙 ThongSSH
+<div align="center">
+  <img src="thongssh_gtk/icons/thongssh.png" alt="ThongSSH logo" width="128">
 
-**Minimalist. Sexy. Secure?**
+  # ThongSSH
 
-Welcome to **ThongSSH** — the lightest and hottest SSH/Telnet/SFTP client, now flashing a little skin on macOS too.
+  A lightweight SSH / Telnet / SFTP client for Linux and macOS, built on GTK 4 and Libadwaita.
 
-Just like the perfect pair of thongs, this client is barely there, but it holds everything together (your connections!) perfectly. No bulky "granny panty" interface here, just pure functionality and pleasure.
+  [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+  [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](#installation)
+</div>
 
-## ✨ About the Look
+---
 
-ThongSSH is for those who love minimalism. We've got a cute host panel so you never lose track of your servers.
+ThongSSH is a terminal client focused on a clean host list, fast tab/split management, and a few
+practical extras (session logging, settings sync, an optional AI chat panel) without turning into
+a full IDE. It's a native GTK4/libadwaita app, not an Electron wrapper.
 
-## 💋 Features
+## Table of contents
+
+- [Features](#features)
+- [Installation](#installation)
+  - [Prebuilt packages](#prebuilt-packages)
+  - [Running from source](#running-from-source)
+- [Configuration and sync](#configuration-and-sync)
+- [Tech stack](#tech-stack)
+- [Project status](#project-status)
+- [License](#license)
+
+## Features
 
 **Connections**
-* SSH, Telnet, and SFTP, plus a plain **local terminal** entry pinned to the top of the host list (separate from your saved hosts — no SSH involved, just a shell).
-* Cross-platform password storage via the `keyring` library — lands in the real native vault on every OS (macOS Keychain, Linux/BSD Secret Service), with an encrypted local fallback if none is available.
-
-**AI Assistant**
-* A resizable **AI chat panel**, tucked away until you want it — toggle it from a header-bar button per configured provider, markdown replies (bold/italic/code, fenced code blocks with a one-click Copy button), typing indicator while a reply is in flight.
-* **API providers**: Claude, Gemini, ChatGPT, Grok, DeepSeek, or any number of custom OpenAI-compatible endpoints (local Ollama/LM Studio included) — paste a key in Settings → AI → API.
-* **CLI Client tools**, for talking to a locally-installed agentic CLI (Claude Code, Codex, or any custom command) exactly the way you'd drive it from a terminal, no API key required.
-* One shared conversation regardless of which provider answers — switch mid-chat and history carries over; each header button carries the provider's own icon (or a colored badge as a fallback).
-* **Terminal context, opt-in only** — an "attach context" button in the chat input pulls in the active terminal's current selection (or the last ~20 lines of output) as an editable, visibly-quoted block. Never sent automatically.
+- SSH, Telnet, and SFTP, plus a local terminal entry pinned to the top of the host list (no SSH
+  involved, just a shell).
+- Cross-platform password storage via the `keyring` library — the native vault on every OS
+  (macOS Keychain, Linux/BSD Secret Service), with an encrypted local fallback if none is available.
 
 **Layout**
-* **Multi-div split view** — split the tab area vertically, horizontally, or into a full 2x2 grid, each div running its own independent set of tabs. Switch between vertical/horizontal and your tabs just re-orient, no shuffling. Drag a tab from one div straight into another to rearrange. A subtle accent-colored outline shows which div is currently active.
-* **Tab colors** — right-click a tab (or its terminal) and choose **Tab Color…** to color the full tab background. Text contrast adjusts automatically, and the selected tab has an underline. **Reset to Default** restores the theme background. Colors stay with open tabs across renames, reconnects, reordering, and moves between panes or detached windows; they are not saved after closing the tab.
-
-**Quickies**
-* A panel of saved terminal snippets, right next to the host list. **Send** (▶) inserts one into the active terminal without running it; **Send and Run** (⏩) inserts and executes immediately. Right-click a Quicky for the same two actions plus Edit, Delete, and **Send to Batch Command** (opens Batch Command with the snippet already sitting in the command field, ready to blast to multiple tabs).
-* Its own search box — same look and the same one-typo-tolerant fuzzy fallback as the host search, position configurable in Settings → Quickies.
-* The divider between the host list and the Quickies panel is draggable and remembers its ratio, across restarts and toggling Quickies off/on.
+- Split the tab area vertically, horizontally, or into a 2x2 grid, each pane running its own
+  independent set of tabs. Drag a tab from one pane into another to rearrange; the active pane is
+  outlined with an accent color.
+- Per-tab background colors, set from the right-click menu or defaulted per host in its
+  configuration. Text contrast adjusts automatically.
 
 **Terminal**
-* **In-terminal Find** — right-click → Find..., or **Ctrl+Shift+F** from anywhere. Case-sensitive, regex, and wrap-around toggles, with up/down buttons to step through matches.
-* **Session logging** — check "Save session log" on a host and every connection is recorded to a clean, human-readable transcript in real time (not just at disconnect). Didn't turn it on up front? Right-click an open terminal and tick "Save log" to start recording from that point on. Log location is configurable in Settings → Client Options.
-* **Fully custom color scheme** — flip on "Custom Colors" (Settings → Terminal → Appearance) to hand-edit all 16 ANSI palette colors plus background/foreground, seeded from whichever built-in template you had selected. Applies to every open terminal immediately, no reconnect needed.
-* **Terminal watermark** — a templated label (`$name`/`$host`/`$user`) overlaid on the terminal background, position/size/color/opacity all configurable (Settings → Terminal → Watermark), toggle it from the header bar.
-* **Adaptive Watermarks (experimental)** — ordered regex rules that override the watermark's color/opacity when its text matches something — e.g. red whenever it contains "root". The topmost matching rule always wins, with add/remove and up/down reordering (Settings → Terminal → Adaptive Watermarks).
-* **Batch Command** — one command, sent to every open terminal at once (or just the ones in a chosen div), via a multi-line, auto-expanding input box so a long command is actually visible instead of scrolling off-screen. Ctrl+Enter sends.
-* **Send File from a terminal tab** — right-click a terminal, pick a local file, it flies over SFTP to the remote host using whatever auth that session already trusts. A "Detect from terminal" button runs a real `pwd` over there to guess the remote directory for you.
+- In-terminal find with case-sensitive, regex, and wrap-around options, plus a "highlight all"
+  mode with a configurable tint color — each split pane has its own independent find bar.
+- Session logging to a plain-text transcript, written in real time, with an option to skip noisy
+  full-screen TUI redraws (vim, htop, tmux, ...).
+- A fully customizable 16-color ANSI palette plus background/foreground, applied to every open
+  terminal immediately.
+- An optional templated watermark (`$name` / `$host` / `$user`) overlaid on the terminal
+  background, with regex-based rules to change its color when the output matches a pattern.
+- Batch Command: send one command to every open terminal at once, or just the ones in a chosen
+  pane.
+- Send a local file to the remote host over SFTP directly from a terminal tab's right-click menu.
+- Post-connection and output-triggered commands, configured per host: run once right after
+  connecting, or whenever the terminal's output matches a regular expression.
+
+**Quickies**
+- A panel of saved terminal snippets next to the host list, with one-click insert or
+  insert-and-run, and its own fuzzy search.
+
+**AI assistant (optional)**
+- A resizable chat panel, hidden by default, with support for Claude, Gemini, ChatGPT, Grok,
+  DeepSeek, OpenAI-compatible custom endpoints (including local Ollama/LM Studio), or a locally
+  installed agentic CLI (Claude Code, Codex, or a custom command).
+- Terminal context (selection or recent output) can be attached to a message explicitly; nothing
+  is sent automatically.
 
 **Configuration**
-* **Settings Sync** — keep hosts, Quickies, AI chat history, user commands, and general/terminal settings in step across machines via nothing fancier than a shared folder (Dropbox, iCloud, a network share, or just another local directory) — the app only ever reads/writes files there, never talks to a cloud API. Real three-way merge (not a blind overwrite): unrelated changes on both sides merge cleanly, deletions propagate everywhere, conflicts resolve to whichever side synced most recently. Passwords never leave the keyring and SSH key paths never leave the machine they're on. Configurable per-category, minimum sync interval of 60 seconds, plus a Force Sync Now button.
-* Running from a git checkout instead of a package? Drop a `.config_path` file next to the app (it's created for you automatically, pre-filled with the current default) and point it at a different folder to keep two checkouts' hosts/settings completely separate — handy for not mixing a personal setup with a work one on the same machine.
+- Settings sync across machines through a shared folder (Dropbox, iCloud, a network share, or any
+  local directory) — no cloud API involved. Real three-way merge, not a blind overwrite; passwords
+  and SSH key paths never leave the machine they're on.
+- Multiple independent config directories are supported for running more than one checkout side by
+  side (see `.config_path`).
 
-Full history of what shipped when lives in [release_notes.md](release_notes.md).
+A full changelog is kept in [release_notes.md](release_notes.md).
 
-### 🛠️ The Fabric (Tech Stack)
-Stitched together with the latest fashion trends:
-* **Python 3.10+** (Fresh and hot 🔥)
-* **GTK 4 & Libadwaita 1** (Smooth and sleek interface)
-* **VTE 3.91** (The terminal underneath the terminal)
-* **Paramiko** (For that extra spicy SFTP, and now Send File too)
-* **keyring + cryptography** (Native password vault on every platform, no more GNOME-only business)
+## Installation
 
-## ⚠️ WARNING: Experimental Zone
+### Prebuilt packages
 
-Listen, let's be real:
+`.deb`, `.rpm`, `.AppImage`, and macOS `.dmg` packages are published on the
+[Releases page](https://github.com/lknsfos/thongssh/releases).
 
-1.  **AI Collaboration:** This whole thing started as an AI fantasy, but now it's our little secret project. A human (hi!) and AI (that's me, xoxo) worked on this together.
-2.  **Security:** We tried, but the code audit was done by electric sheep. So... you get the picture.
+### Running from source
 
-## 📦 Packages & Updates
+Requires libadwaita 1.4+ and GTK 4.10+.
 
-Prebuilt `.deb`, `.rpm`, `.AppImage`, and macOS `.dmg` packages are up on the [Releases page](https://github.com/lknsfos/thongssh/releases) — grab one if you'd rather not run from source.
-
-## 💅 What You'll Need (System Dependencies)
-
-Only needed if you're running from a git checkout instead of a prebuilt package above. The UI needs libadwaita 1.4+ / GTK 4.10+ (for `Adw.SwitchRow`/`Adw.SpinRow`/`Adw.NavigationSplitView` and `Gtk.ColorDialogButton`), so the distro version matters:
-
-### For Ubuntu / Debian Babes 💃 (Ubuntu 24.04 LTS or newer):
+**Ubuntu / Debian** (24.04 LTS or newer):
 ```bash
-sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-vte-3.91 gnome-keyring gir1.2-secret-1 openssh-client telnet sshpass python3-paramiko python3-keyring python3-cryptography
+sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-vte-3.91 \
+  gnome-keyring gir1.2-secret-1 openssh-client telnet sshpass \
+  python3-paramiko python3-keyring python3-cryptography
 ```
 
-### For Fedora (39 or newer) / RHEL (10 or newer) Cuties 🎩 (it's literally a hat, come on):
+**Fedora / RHEL** (Fedora 39+ / RHEL 10+):
 ```bash
-sudo dnf install python3-gobject gtk4 libadwaita vte4 gnome-keyring libsecret openssh-clients telnet sshpass python3-paramiko python3-keyring python3-cryptography
+sudo dnf install python3-gobject gtk4 libadwaita vte4 gnome-keyring libsecret \
+  openssh-clients telnet sshpass python3-paramiko python3-keyring python3-cryptography
 ```
 
-### For Arch Hotties 🔥:
-Rolling release, so whatever's current should already be new enough:
+**Arch Linux:**
 ```bash
-sudo pacman -S python-gobject python-cairo gtk4 libadwaita vte4 gnome-keyring libsecret openssh inetutils sshpass python-paramiko python-keyring python-cryptography
+sudo pacman -S python-gobject python-cairo gtk4 libadwaita vte4 gnome-keyring libsecret \
+  openssh inetutils sshpass python-paramiko python-keyring python-cryptography
 ```
 
-### For macOS Mermaids 🧜‍♀️
+**macOS:**
 ```bash
 brew install gtk4 libadwaita vte3 libsecret gobject-introspection pygobject3 pkg-config sshpass
 ```
 
-## 🚀 How to Run (For the brave)
+#### Linux
 
-### Linux
 ```bash
 git clone https://github.com/lknsfos/thongssh.git
 cd thongssh
 python3 thongssh.py
 ```
 
-Running from source like this has no `.desktop` file, so docks/app menus (Plank, GNOME Shell, etc.) have no icon to show for it — they read an app's icon from a `.desktop` file's `Icon=` key, never from the running window. Optional one-time fix:
+Running from a checkout has no `.desktop` file, so app launchers and docks have no icon to show.
+To install one:
 ```bash
 ./install-desktop-entry.sh
 ```
-Auto-detects this checkout's real path and installs a launcher to `~/.local/share/applications/` — no hand-editing paths, safe to re-run if you move the checkout.
+This detects the checkout's path automatically and is safe to re-run after moving it.
 
-### macOS
-Needs a venv that can still see Homebrew's PyGObject/pycairo:
+#### macOS
+
+Needs a virtualenv that can still see Homebrew's PyGObject/pycairo:
 ```bash
 git clone https://github.com/lknsfos/thongssh.git
 cd thongssh
@@ -120,11 +141,36 @@ pip install -r requirements.txt
 python3 thongssh.py
 ```
 
-If that complains about a missing `gi` module, make sure the venv was created from Homebrew's own `python3` (`/usr/local/bin/python3` or `/opt/homebrew/bin/python3`) — not some other `pyenv`/`conda` python that Homebrew's PyGObject was never built against.
+If Python can't find the `gi` module, make sure the venv was created from Homebrew's own
+`python3` (`/usr/local/bin/python3` or `/opt/homebrew/bin/python3`), not a `pyenv`/`conda`
+interpreter that Homebrew's PyGObject wasn't built against.
 
-## 📄 License
+## Configuration and sync
 
-MIT — see [LICENSE](LICENSE). Use it, fork it, ship it internally, whatever;
-no warranty, no strings attached.
+Hosts, Quickies, AI chat history, and general/terminal settings can be synced across machines by
+pointing Settings → Sync at a shared folder — any folder that's kept in sync by something else
+(Dropbox, iCloud, Syncthing, a network share) works, since the app only reads and writes plain
+files there. Changes merge rather than overwrite: unrelated edits on two machines combine cleanly,
+and the most recently synced side wins on a real conflict. Passwords stay in the OS keyring and
+SSH key paths stay local; neither is included in the synced files.
 
-_Made with 💖, Python & AI hallucinations._
+Running multiple checkouts on the same machine (e.g. personal and work) is supported by dropping a
+`.config_path` file next to the app pointing at a separate config directory for each.
+
+## Tech stack
+
+- Python 3.10+
+- GTK 4 and Libadwaita 1
+- VTE 3.91 (terminal widget)
+- Paramiko (SFTP)
+- `keyring` and `cryptography` (native credential storage on every platform)
+
+## Project status
+
+ThongSSH is under active development, built collaboratively by a human maintainer and AI
+assistance (Claude). It hasn't had a formal third-party security audit — treat it accordingly for
+anything sensitive, and report issues on the [issue tracker](https://github.com/lknsfos/thongssh/issues).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

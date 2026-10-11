@@ -397,16 +397,14 @@ if command -v magick >/dev/null 2>&1; then resizer="magick"
 elif command -v convert >/dev/null 2>&1; then resizer="convert"
 elif python3 -c 'import PIL' >/dev/null 2>&1; then resizer="pil"; fi
 [[ -z "$resizer" ]] && ICON_SIZES="512"
-for variant in "thongssh:default" "thongssh_orig:orig"; do
-    src="$SRC_ROOT/thongssh_gtk/icons/${variant%%:*}.png"
-    stem="${variant##*:}"
-    for s in $ICON_SIZES; do
-        case "$resizer" in
-            pil) python3 -c "from PIL import Image; Image.open('$src').resize(($s,$s), Image.LANCZOS).save('$ASSETS_DIR/icons/$stem-$s.png')" ;;
-            "")  cp "$src" "$ASSETS_DIR/icons/$stem-$s.png" ;;
-            *)   "$resizer" "$src" -resize "${s}x${s}" "$ASSETS_DIR/icons/$stem-$s.png" ;;
-        esac
-    done
+src="$SRC_ROOT/thongssh_gtk/icons/thongssh.png"
+stem="default"
+for s in $ICON_SIZES; do
+    case "$resizer" in
+        pil) python3 -c "from PIL import Image; Image.open('$src').resize(($s,$s), Image.LANCZOS).save('$ASSETS_DIR/icons/$stem-$s.png')" ;;
+        "")  cp "$src" "$ASSETS_DIR/icons/$stem-$s.png" ;;
+        *)   "$resizer" "$src" -resize "${s}x${s}" "$ASSETS_DIR/icons/$stem-$s.png" ;;
+    esac
 done
 echo "$ICON_SIZES" > "$ASSETS_DIR/icon-sizes.txt"
 
@@ -505,7 +503,6 @@ echo "==> Icons + .desktop"
 ICON_SIZES="$(cat /assets/icon-sizes.txt)"
 for s in $ICON_SIZES; do
     install -D -m0644 "/assets/icons/default-$s.png" "$APPDIR/usr/share/icons/hicolor/${s}x${s}/apps/$APP_ID.png"
-    install -D -m0644 "/assets/icons/orig-$s.png" "$APPDIR/usr/share/icons/hicolor/${s}x${s}/apps/$APP_ID.orig.png"
 done
 cp /assets/app.desktop "$APPDIR/usr/share/applications/$APP_ID.desktop"
 ln -sf "usr/share/applications/$APP_ID.desktop" "$APPDIR/$APP_ID.desktop"

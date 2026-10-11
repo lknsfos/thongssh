@@ -138,7 +138,7 @@ TERMINAL_SETTINGS_KEYS = [
     "interface.watermark_scope", "interface.watermark_shrink_percent", "interface.watermark_rules",
 ]
 GENERAL_SETTINGS_KEYS = [
-    "interface.icon", "interface.tree_row_striping", "interface.debug_mode", "interface.host_search_position",
+    "interface.tree_row_striping", "interface.debug_mode", "interface.host_search_position",
     "interface.theme", "interface.tabbar_height", "interface.find_bar_opacity", "interface.find_highlight_color",
 ]
 # Kept separate from GENERAL_SETTINGS_KEYS (own sync.sync_shortcuts switch,

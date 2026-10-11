@@ -34,7 +34,6 @@ DEFAULT_SETTINGS = {
     "terminal.auto_save_log": False, # Whether every new terminal connection (host or local) starts with session logging already on, instead of needing the per-host switch or the terminal's own "Save log" menu item by hand
     "terminal.log_skip_interactive_screens": True, # Whether full-screen TUI redraws (vim, mc, tmux, htop, less, ...) are detected and left out of the session log instead of dumping the whole screen on every keystroke — see _tick_session_log's heuristic in window.py
     "interface.theme": "system", # "system", "light", or "dark" — the app's own libadwaita theme (Adw.StyleManager), not to be confused with terminal.color_scheme (the terminal's own text/background palette)
-    "interface.icon": "thongssh", # "thongssh" (Safe) or "thongssh_orig" (Original)
     "interface.language": "system", # "system" (follow the OS/locale, the normal gettext default) or a code from i18n.LANGUAGES — takes effect on next launch, see i18n.py
     "interface.tree_row_striping": False,
     "interface.tabbar_height": 26, # px, target height of the tab strip (Adw.TabBar) — see window.py's setup_css, everything in the "tabbar ..." CSS block scales off this

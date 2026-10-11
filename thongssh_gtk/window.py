@@ -25,7 +25,6 @@ from .config import load_and_migrate_config, save_config, CONFIG_DIR
 from .tab_window_base import TerminalPaneWindow, _tabview_has_page
 from .tab_colors import TabColors
 from .detached_tab_window import DetachedTabWindow
-from .launcher_icon import apply_launcher_icon
 from .sftp_widget import SftpWidget
 from .ai_panel import AiPanel
 from .provider_badges import icon_name_for as _icon_name_for, badge_family as _badge_family, badge_text as _badge_text
@@ -86,8 +85,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         # go stale silently whenever someone swapped the PNG on disk.
         icon_theme = Gtk.IconTheme.get_for_display(self.get_display())
         icon_theme.add_search_path(resource_path("icons"))
-        self.set_icon_name(self.settings_manager.get("interface.icon"))
-        apply_launcher_icon(self.settings_manager.get("interface.icon"))
+        self.set_icon_name("thongssh")
 
         self.setup_css()
 
@@ -3336,7 +3334,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         dialog.set_copyright(f"© {year_range} Mikhael Karpov")
         dialog.set_developers(["Gemini Code Assist", "Claude Code (Anthropic)"])
         dialog.set_designers(["Mikhael Karpov (lknsfos)"])
-        dialog.set_application_icon(self.settings_manager.get("interface.icon"))
+        dialog.set_application_icon("thongssh")
         dialog.present()
 
 

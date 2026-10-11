@@ -1,5 +1,12 @@
 # Release Notes
 
+### 🆕 What's New in 0.10.3
+
+A proper "Highlight and Find" to replace the old plain Find bar, and the "Original" app icon option is gone:
+
+* **New: "Highlight and Find"** — turn on "Highlight all" to tint every match currently on screen at once, in a color and opacity you choose (Settings → Interface → Find and Highlight sets the defaults). Works inside full-screen terminal apps like `less`, `vim`, and `htop`, not just a plain shell. Each split pane has its own independent Find bar now, so searching in one pane never affects another. The bar itself is compact — short icon toggles for case/regex/wrap instead of full-text checkboxes.
+* **Removed: the "Original" app icon option** — Settings → Interface no longer offers a choice of app icon; there's just the one icon now.
+
 ### 🐛 What's New in 0.10.2
 
 Tab colors, and three real bugs fixed — one that could silently drop your host-tree layout, one that quietly broke Sync for several newer settings, and one that left Send File permanently greyed out:

@@ -96,9 +96,6 @@ mkdir -p "$OUTDIR"
 # full-size PNG under 512x512/ if no resizer is available (GTK scales it).
 ICON_SIZES="512 256 128 64 48"
 ICON_DIR=""
-# Two icon variants are shipped: the Safe icon as the default themed icon
-# ($APP_ID) and the Original as a second named icon ($APP_ID.orig), so the
-# in-app icon switcher can point a user-local .desktop override at it.
 prepare_icons() {
     ICON_DIR="$BUILD_ROOT/icons"
     rm -rf "$ICON_DIR"; install -d "$ICON_DIR"
@@ -111,19 +108,16 @@ prepare_icons() {
         ICON_SIZES="512"
     }
 
-    local variant src stem s
-    for variant in "thongssh:default" "thongssh_orig:orig"; do
-        src="$SRC_ROOT/thongssh_gtk/icons/${variant%%:*}.png"
-        stem="${variant##*:}"
-        for s in $ICON_SIZES; do
-            case "$resizer" in
-                pil) python3 -c "from PIL import Image; Image.open('$src').resize(($s,$s), Image.LANCZOS).save('$ICON_DIR/$stem-$s.png')" ;;
-                "")  cp "$src" "$ICON_DIR/$stem-$s.png" ;;
-                *)   "$resizer" "$src" -resize "${s}x${s}" "$ICON_DIR/$stem-$s.png" ;;
-            esac
-        done
+    local src="$SRC_ROOT/thongssh_gtk/icons/thongssh.png"
+    local s
+    for s in $ICON_SIZES; do
+        case "$resizer" in
+            pil) python3 -c "from PIL import Image; Image.open('$src').resize(($s,$s), Image.LANCZOS).save('$ICON_DIR/default-$s.png')" ;;
+            "")  cp "$src" "$ICON_DIR/default-$s.png" ;;
+            *)   "$resizer" "$src" -resize "${s}x${s}" "$ICON_DIR/default-$s.png" ;;
+        esac
     done
-    echo "==> Icons prepared (default + orig): $ICON_SIZES"
+    echo "==> Icons prepared: $ICON_SIZES"
 }
 
 # --- stage a common rootfs ----------------------------------------------------
@@ -173,8 +167,6 @@ EOF
     for s in $ICON_SIZES; do
         install -D -m0644 "$ICON_DIR/default-$s.png" \
             "$ROOT/usr/share/icons/hicolor/${s}x${s}/apps/$APP_ID.png"
-        install -D -m0644 "$ICON_DIR/orig-$s.png" \
-            "$ROOT/usr/share/icons/hicolor/${s}x${s}/apps/$APP_ID.orig.png"
     done
 
     cp "$SRC_ROOT/README.md" "$ROOT/usr/share/doc/$APP/"
@@ -242,7 +234,6 @@ build_rpm() {
     local s
     for s in $ICON_SIZES; do
         cp "$ICON_DIR/default-$s.png" "$TARDIR/hicolor-icons/default-$s.png"
-        cp "$ICON_DIR/orig-$s.png"    "$TARDIR/hicolor-icons/orig-$s.png"
     done
     find "$TARDIR" -name '__pycache__' -type d -exec rm -rf {} + || true
     tar -C "$TOP/SOURCES" -czf "$TOP/SOURCES/$APP-$VERSION.tar.gz" "$APP-$VERSION"
@@ -321,8 +312,6 @@ EOF
 for s in %{icon_sizes}; do
     install -D -m0644 "hicolor-icons/default-\$s.png" \\
         "%{buildroot}%{_datadir}/icons/hicolor/\${s}x\${s}/apps/%{app_id}.png"
-    install -D -m0644 "hicolor-icons/orig-\$s.png" \\
-        "%{buildroot}%{_datadir}/icons/hicolor/\${s}x\${s}/apps/%{app_id}.orig.png"
 done
 
 %files

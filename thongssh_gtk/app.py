@@ -181,10 +181,6 @@ class ThongSSHApp(Adw.Application):
         # off the running process, not a .desktop file. Set it directly via
         # NSApplication so the icon shows even for a bare `python3 thongssh.py`
         # with no .app bundle involved.
-        #
-        # Public (no leading underscore): also called from SettingsDialog to
-        # refresh the Dock icon immediately after the user changes it, not
-        # just once at startup.
         if sys.platform != "darwin":
             return
         try:
@@ -192,8 +188,7 @@ class ThongSSHApp(Adw.Application):
         except ImportError:
             logging.warning("Dock icon: pyobjc-framework-Cocoa not installed; skipping native Dock icon.")
             return
-        icon_stem = self.settings_manager.get("interface.icon")
-        # icons/<stem>.png (used everywhere else — GTK window icon, Linux
+        # icons/thongssh.png (used everywhere else — GTK window icon, Linux
         # hicolor/.desktop) has a soft alpha fade at the edges, by design:
         # it's meant to blend into whatever's behind it, which is exactly
         # what Linux docks/app grids do with it. The static macOS .app
@@ -202,10 +197,10 @@ class ThongSSHApp(Adw.Application):
         # a neutral backdrop behind "incomplete" icons — but
         # setApplicationIconImage_ here does no such compositing, so the
         # exact same file would show the logo floating on pure transparency
-        # instead. icons/<stem>_dock.png is that same artwork with alpha
+        # instead. icons/thongssh_dock.png is that same artwork with alpha
         # forced fully opaque (RGB untouched) — matches what the bundle
         # icon already looks like, macOS-only, Linux assets untouched.
-        icon_path = resource_path(f"icons/{icon_stem}_dock.png")
+        icon_path = resource_path("icons/thongssh_dock.png")
         image = NSImage.alloc().initWithContentsOfFile_(icon_path)
         if image is None:
             logging.warning(f"Dock icon: could not load image from {icon_path}")
