@@ -36,6 +36,8 @@ DEFAULT_SETTINGS = {
     "interface.theme": "system", # "system", "light", or "dark" — the app's own libadwaita theme (Adw.StyleManager), not to be confused with terminal.color_scheme (the terminal's own text/background palette)
     "interface.language": "system", # "system" (follow the OS/locale, the normal gettext default) or a code from i18n.LANGUAGES — takes effect on next launch, see i18n.py
     "interface.tree_row_striping": False,
+    "interface.host_tree_show_info": False, # Host tree toolbar's "Info" toggle — shows each host's address (and user, if any) as a dimmed second line under its name
+    "interface.host_tree_sort_mode": "name_asc", # Host tree toolbar's "Sort" menu — "name_asc"/"name_desc" (grouped tree) or "address_asc"/"address_desc" (flat list, no groups, host_tree_show_info forced on — see window.py's sort_func / populate_tree / _tree_row_cell_data_func)
     "interface.tabbar_height": 26, # px, target height of the tab strip (Adw.TabBar) — see window.py's setup_css, everything in the "tabbar ..." CSS block scales off this
     "interface.find_bar_opacity": 90, # percent (20-100) — default opacity of the in-terminal find bar's own card background (not the "Highlight all" terminal tint); each find bar's own slider (see TerminalPaneWindow._build_find_bar) starts here but can be adjusted per-pane for that session without changing this default
     "interface.find_highlight_color": "#ffff00", # hex — default tint color for the "Highlight all" terminal overlay; each find bar's own color picker (see TerminalPaneWindow._build_find_bar) starts here but can be changed per-pane for that session without changing this default

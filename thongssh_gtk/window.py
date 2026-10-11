@@ -236,6 +236,11 @@ class ThongSSHWindow(TerminalPaneWindow):
         # a sliver of text visible/grabbable (see set_size_request below).
         self.paned.set_shrink_start_child(True)
         self.paned.set_vexpand(True)
+        # Real width for the handle's own slot (not just a thin line) —
+        # see .thongssh-host-tree-divider in setup_css for why this has to
+        # be the handle's own allocation growing, not cosmetic padding
+        # tacked onto either side of it.
+        self.paned.set_wide_handle(True)
         self.main_box.append(self.paned)
 
         # --- Full Left Panel (Tree [+ optional Quickies]) ---
@@ -246,6 +251,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         # touch left_panel as a whole, need no changes for Quickies.
         self.left_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.left_panel.set_size_request(80, -1) # Small floor only — default width is computed later (see on_first_map)
+        self.left_panel.add_css_class("thongssh-host-tree-divider")
         self.paned.set_start_child(self.left_panel)
         self.left_panel.set_visible(True)
 
@@ -381,12 +387,28 @@ class ThongSSHWindow(TerminalPaneWindow):
             if rank1 != rank2:
                 return -1 if rank1 < rank2 else 1
 
-            name1 = model.get_value(iter1, COL_NAME).lower()
-            name2 = model.get_value(iter2, COL_NAME).lower()
+            # Host-tree toolbar's "Sort" menu: name_asc/name_desc (default —
+            # grouped tree, sorted by name) or address_asc/address_desc
+            # (flat list, no groups — populate_tree stops creating them in
+            # that mode) sorted by address instead — same "user@address"
+            # convention split used everywhere else in this file
+            # (rpartition('@')). The check is scoped to type1=="host"
+            # anyway so a stray group row in address mode would just fall
+            # through to the normal by-name comparison below.
+            sort_mode = self.settings_manager.get("interface.host_tree_sort_mode") or "name_asc"
+            if type1 == "host" and sort_mode.startswith("address"):
+                config1 = model.get_value(iter1, COL_DATA) or {}
+                config2 = model.get_value(iter2, COL_DATA) or {}
+                key1 = config1.get("host", "").rpartition('@')[2].lower()
+                key2 = config2.get("host", "").rpartition('@')[2].lower()
+            else:
+                key1 = model.get_value(iter1, COL_NAME).lower()
+                key2 = model.get_value(iter2, COL_NAME).lower()
 
-            if name1 < name2: return -1
-            elif name1 > name2: return 1
-            else: return 0
+            if key1 < key2: result = -1
+            elif key1 > key2: result = 1
+            else: result = 0
+            return -result if sort_mode.endswith("_desc") else result
 
         self.main_tree_store.set_sort_func(COL_NAME, sort_func, None)
         self.main_tree_store.set_sort_column_id(COL_NAME, Gtk.SortType.ASCENDING)
@@ -406,13 +428,16 @@ class ThongSSHWindow(TerminalPaneWindow):
         column.pack_start(renderer_text, True)
         column.pack_start(renderer_tab_color, False)
 
-        column.add_attribute(renderer_text, "text", COL_NAME)
         column.add_attribute(renderer_pixbuf, "icon-name", COL_ICON)
 
         # ✨ Optional, very subtle alternating-row tint (interface.tree_row_striping
         # setting) — set as a per-cell data func rather than baked-in attributes
         # since it needs to react live to both the setting and the current accent
-        # color, not just row data.
+        # color, not just row data. The SAME func also builds renderer_text's
+        # markup every time (name alone, or name + a dimmed address line when
+        # the "Info" toggle/address-sort mode calls for it) — see its own
+        # docstring; there's no separate "text" attribute binding above
+        # because markup always fully replaces it now.
         column.set_cell_data_func(renderer_pixbuf, self._tree_row_cell_data_func)
         column.set_cell_data_func(renderer_text, self._tree_row_cell_data_func)
         # The little rounded-corner color swatch next to a host's name,
@@ -498,9 +523,56 @@ class ThongSSHWindow(TerminalPaneWindow):
         remove_btn.set_valign(Gtk.Align.CENTER)
         remove_btn.connect("clicked", self.on_remove_selected_clicked, None)
 
+        # "Info" — shows each host's address (and user, if any) as a dimmed
+        # second line under its name (interface.host_tree_show_info). Forced
+        # on/insensitive whenever the sort menu's address_asc/address_desc
+        # is active (see _apply_host_tree_info_forcing) — its own stored
+        # setting is never touched by that forcing, so switching back to a
+        # name-based sort restores whatever this toggle was actually set to
+        # beforehand, with no separate "remembered previous value"
+        # bookkeeping needed. Rebuilds the whole tree (not just queue_draw)
+        # when toggled: confirmed live that queue_draw() alone leaves the
+        # row's on-screen height at whatever was last measured (single-
+        # line), so the newly-added address line was being silently
+        # clipped away instead of actually appearing.
+        self.host_tree_info_btn = Gtk.ToggleButton(icon_name="dialog-information-symbolic")
+        self.host_tree_info_btn.set_tooltip_text(_("Show host address"))
+        self.host_tree_info_btn.set_valign(Gtk.Align.CENTER)
+        self.host_tree_info_btn.set_active(self.settings_manager.get("interface.host_tree_show_info"))
+        self.host_tree_info_btn.connect("toggled", self.on_host_tree_info_toggled)
+
+        # "Sort" — a menu button (not a plain toggle, there are 4 mutually
+        # exclusive modes) backed by a window-scoped stateful action so the
+        # popover shows the current mode with a radio mark.
+        self.host_tree_sort_action = Gio.SimpleAction.new_stateful(
+            "host-tree-sort-mode", GLib.VariantType.new("s"),
+            GLib.Variant.new_string(self.settings_manager.get("interface.host_tree_sort_mode") or "name_asc"),
+        )
+        self.host_tree_sort_action.connect("activate", self.on_host_tree_sort_mode_activate)
+        self.add_action(self.host_tree_sort_action)
+
+        sort_menu = Gio.Menu()
+        for mode_key, mode_label in (
+            ("name_asc", _("Name (A–Z)")),
+            ("name_desc", _("Name (Z–A)")),
+            ("address_asc", _("IP/Hostname (A–Z)")),
+            ("address_desc", _("IP/Hostname (Z–A)")),
+        ):
+            item = Gio.MenuItem.new(mode_label, None)
+            item.set_action_and_target_value("win.host-tree-sort-mode", GLib.Variant.new_string(mode_key))
+            sort_menu.append_item(item)
+
+        self.host_tree_sort_btn = Gtk.MenuButton(icon_name="view-sort-ascending-symbolic")
+        self.host_tree_sort_btn.set_valign(Gtk.Align.CENTER)
+        self.host_tree_sort_btn.set_tooltip_text(_("Sort hosts"))
+        self.host_tree_sort_btn.set_menu_model(sort_menu)
+        self._apply_host_tree_info_forcing()
+
         button_box.append(add_host_btn)
         button_box.append(add_group_btn)
         button_box.append(remove_btn)
+        button_box.append(self.host_tree_info_btn)
+        button_box.append(self.host_tree_sort_btn)
         # The collapse button is now in the HeaderBar
         self.hosts_box.append(button_box)
 
@@ -935,6 +1007,38 @@ class ThongSSHWindow(TerminalPaneWindow):
             min-height: 20px;
             padding: 2px;
         }
+        /* Visible divider between the host tree and the terminal area —
+           same reasoning/pattern as the Quickies divider above: a border
+           on the sidebar's own facing edge, with the paned handle's own
+           thickness (set_wide_handle(True), see self.paned's own setup)
+           as a real gap past that line.
+           Confirmed live this needs to be the HANDLE'S OWN width, not
+           cosmetic padding on the terminal's content: tried CSS padding
+           on vte-terminal itself first (padding only insets what VTE
+           *draws*, not its actual widget box/allocation) and confirmed by
+           hand that clicking in that padded strip still dragged the
+           divider — GTK's Paned grabs a zone around the handle slightly
+           wider than its own rendered line regardless of what's visually
+           drawn on either side of it, so the only way to put real
+           selectable terminal area outside that zone is to actually widen
+           the handle's own allocated slot, moving the terminal's true
+           edge further away from it. */
+        .thongssh-host-tree-divider {
+            border-right: 1px solid alpha(currentColor, 0.25);
+        }
+        /* On top of the above (not instead of it): a few px of the
+           terminal's OWN background before its text starts, purely so the
+           quiet zone the wide handle just created is actually visible
+           instead of reading as "text glued to the edge with some
+           unexplained dead air next to it." The wide handle is what
+           stops a click there from ever reaching the Paned (confirmed
+           live); this is just making that already-safe space look like
+           it belongs to the terminal, since VTE's own CSS node
+           ("vte-terminal") paints a real background under this padding,
+           not a transparent hole. */
+        vte-terminal {
+            padding-left: 5px;
+        }
         /* In-terminal find bar (TerminalPaneWindow._build_find_bar) —
            same lesson as .quicky-tiny-button above: "flat" alone doesn't
            touch the theme's own default clickable-target min-size, only
@@ -1038,30 +1142,64 @@ class ThongSSHWindow(TerminalPaneWindow):
     # --- 3. Tree Functionality (Left Panel) ---
 
     def _tree_row_cell_data_func(self, column, cell, model, tree_iter, data=None):
-        """Applies the optional interface.tree_row_striping tint. Off by
-        default — when on, every other row gets a barely-there accent-color
-        wash so rows are easier to track by eye without turning into a hard
-        highlight.
+        """Applies the optional interface.tree_row_striping tint (both
+        renderers sharing this func), and — renderer_text only — builds
+        its markup: just the name, or the name plus a dimmed second line
+        with the host's address and username (interface.host_tree_
+        show_info), the host-tree toolbar's "Info" toggle. That toggle is
+        forced on for DISPLAY purposes (without touching its own stored
+        setting value — see _apply_host_tree_info_forcing) whenever the
+        sort menu's address_asc/address_desc is active, since that
+        ordering is meaningless without the address visible.
 
-        Parity is the row's position among its own siblings (last path
-        index), not a true flattened visual row number — GtkTreeView has no
-        cheap way to compute "the Nth visible row" without walking the whole
-        model on every redraw. For this tree's shape (a couple of levels of
-        groups/hosts) that's an acceptable approximation of a zebra pattern,
-        not a literal one."""
+        The second line reads "address<TAB>user" (address first, a real
+        tab character, then the username if any) rather than the raw
+        "user@address" the config itself stores it as — tried that
+        first and it just looked like visual noise squeezed onto one
+        run of text; splitting it into two clearly separate fields reads
+        far better, and leads with the address since that's what you're
+        actually scanning for in a host list.
+
+        Striping parity is the row's position among its own siblings (last
+        path index), not a true flattened visual row number — GtkTreeView
+        has no cheap way to compute "the Nth visible row" without walking
+        the whole model on every redraw. For this tree's shape (a couple
+        of levels of groups/hosts) that's an acceptable approximation of a
+        zebra pattern, not a literal one."""
         if not self.settings_manager.get("interface.tree_row_striping"):
             cell.set_property("cell-background-set", False)
-            return
+        else:
+            path = model.get_path(tree_iter)
+            if path.get_indices()[-1] % 2 == 0:
+                cell.set_property("cell-background-set", False)
+            else:
+                accent = Adw.StyleManager.get_default().get_accent_color_rgba()
+                tint = Gdk.RGBA()
+                tint.red, tint.green, tint.blue, tint.alpha = accent.red, accent.green, accent.blue, 0.08
+                cell.set_property("cell-background-rgba", tint)
 
-        path = model.get_path(tree_iter)
-        if path.get_indices()[-1] % 2 == 0:
-            cell.set_property("cell-background-set", False)
-            return
+        if not isinstance(cell, Gtk.CellRendererText):
+            return  # the pixbuf renderer sharing this func has no text/markup to set
 
-        accent = Adw.StyleManager.get_default().get_accent_color_rgba()
-        tint = Gdk.RGBA()
-        tint.red, tint.green, tint.blue, tint.alpha = accent.red, accent.green, accent.blue, 0.08
-        cell.set_property("cell-background-rgba", tint)
+        name = model.get_value(tree_iter, COL_NAME) or ""
+        node_type = model.get_value(tree_iter, COL_TYPE)
+        sort_mode = self.settings_manager.get("interface.host_tree_sort_mode") or "name_asc"
+        show_info = node_type == "host" and (
+            self.settings_manager.get("interface.host_tree_show_info")
+            or sort_mode.startswith("address")
+        )
+        info_text = ""
+        if show_info:
+            config = model.get_value(tree_iter, COL_DATA)
+            host_value = config.get("host", "") if isinstance(config, dict) else ""
+            user, _sep, address = host_value.rpartition('@')
+            info_text = f"{address}\t{user}" if user else address
+        if not info_text:
+            cell.set_property("markup", GLib.markup_escape_text(name))
+            return
+        cell.set_property("markup", "{}\n<small><span alpha=\"60%\">{}</span></small>".format(
+            GLib.markup_escape_text(name), GLib.markup_escape_text(info_text)
+        ))
 
     def _tree_tab_color_cell_data_func(self, column, cell, model, tree_iter, data=None):
         """Shows a small rounded-corner swatch of a host's configured
@@ -1113,6 +1251,16 @@ class ThongSSHWindow(TerminalPaneWindow):
         # it's meant to read the same in every language (user request).
         local_config = {"name": "local", "protocol": "local"}
         self.main_tree_store.append(None, [local_config["name"], "local", "computer-symbolic", local_config])
+
+        # Host-tree toolbar's "Sort" menu, address_asc/address_desc: a flat
+        # list of every host, address-ordered (sort_func does the actual
+        # ordering; this just needs to never create a "group" row so none
+        # of them end up hidden under a collapsed parent that no longer
+        # exists on screen).
+        sort_mode = self.settings_manager.get("interface.host_tree_sort_mode") or "name_asc"
+        if sort_mode.startswith("address"):
+            self._populate_tree_flat_for_address_sort()
+            return
 
         # Groups whose saved state is collapsed — collected in post-order
         # (a group is only added here AFTER all its own children have been
@@ -1175,6 +1323,29 @@ class ThongSSHWindow(TerminalPaneWindow):
                 self.tree_view.collapse_row(self.main_tree_store.get_path(group_iter))
         finally:
             self._restoring_tree_state = False
+
+    def _populate_tree_flat_for_address_sort(self):
+        """populate_tree()'s alternate build for interface.host_tree_
+        sort_mode == address_asc/address_desc: every host anywhere in
+        config_data, inserted directly under the root with no group rows
+        at all — the actual address ordering comes from sort_func (same
+        setting), this just has to make sure nothing is nested under a
+        group that would hide it. No expand/collapse state to restore here
+        since there are no groups to have any."""
+        def collect(node_data):
+            if not isinstance(node_data, dict):
+                return
+            if node_data.get("type") == "host":
+                config = node_data.get("config", {})
+                name = config.get("name", "Unnamed Host")
+                self.main_tree_store.append(None, [name, "host", "computer-symbolic", config])
+            elif node_data.get("type") == "group":
+                for child in node_data.get("children", []):
+                    collect(child)
+
+        if self.config_data:
+            for node in self.config_data.get("children", []):
+                collect(node)
 
     def on_tree_row_expanded_or_collapsed(self, tree_view, tree_iter, path):
         """Persists the host tree the moment a group is actually toggled by
@@ -1293,8 +1464,6 @@ class ThongSSHWindow(TerminalPaneWindow):
         tab_bar.set_start_action_widget(new_local_btn)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        # ✨ Small margin to prevent accidentally grabbing a paned handle
-        box.set_margin_start(6)
         box.append(tab_bar)
 
         # Wraps just this pane's own tabview (not the whole split layout)
@@ -2565,6 +2734,49 @@ class ThongSSHWindow(TerminalPaneWindow):
         self.settings_manager.save()
         self._apply_left_panel_layout()
 
+    def on_host_tree_info_toggled(self, button):
+        """A no-op write while an address-based sort mode is forcing this
+        toggle on — _apply_host_tree_info_forcing is what drives
+        button.set_active(True) in that state, which itself re-enters
+        here; without this guard that would overwrite the user's real,
+        independent host_tree_show_info preference with True just because
+        address-sort happened to be active at the time.
+
+        Rebuilds the whole tree (populate_tree), not just queue_draw:
+        confirmed live that queue_draw() alone leaves each row's on-screen
+        height at whatever was last measured (single-line), silently
+        clipping away the newly-added address line instead of actually
+        showing it — a real rebuild re-measures every row from scratch."""
+        if (self.settings_manager.get("interface.host_tree_sort_mode") or "name_asc").startswith("address"):
+            return
+        self.settings_manager.set("interface.host_tree_show_info", button.get_active())
+        self.settings_manager.save()
+        self.populate_tree()
+
+    def on_host_tree_sort_mode_activate(self, action, param):
+        mode = param.get_string()
+        action.set_state(param)
+        self.settings_manager.set("interface.host_tree_sort_mode", mode)
+        self.settings_manager.save()
+        self._apply_host_tree_info_forcing()
+        self.populate_tree()
+
+    def _apply_host_tree_info_forcing(self):
+        """Keeps the Info toggle's own displayed state honest while an
+        address-based sort mode is active: shown active and made
+        insensitive (the actual rendering decision is
+        _tree_row_cell_data_func's own check against both settings
+        directly, not this button's state) — without ever writing to
+        interface.host_tree_show_info itself, so switching back to a
+        name-based sort restores whatever this toggle was genuinely set to
+        beforehand with no separate bookkeeping needed."""
+        forced = (self.settings_manager.get("interface.host_tree_sort_mode") or "name_asc").startswith("address")
+        self.host_tree_info_btn.set_sensitive(not forced)
+        if forced:
+            self.host_tree_info_btn.set_active(True)
+        else:
+            self.host_tree_info_btn.set_active(self.settings_manager.get("interface.host_tree_show_info"))
+
     def refresh_quickies_panel(self):
         """Called by Settings' on_apply after quickies.items/position/
         enabled change — rebuilds the live listbox and left_panel layout."""
@@ -2780,8 +2992,8 @@ class ThongSSHWindow(TerminalPaneWindow):
                 logging.debug("F2 pressed on host, calling edit handler...")
                 self.on_menu_edit_host(None, None)
             elif node_type == "group":
-                logging.debug("F2 pressed on group, calling rename handler...")
-                self.on_menu_rename_group(None, None)
+                logging.debug("F2 pressed on group, calling edit handler...")
+                self.on_menu_edit_group(None, None)
             return True # Event handled
 
         return False # For all other keys - propagate further
@@ -3034,9 +3246,9 @@ class ThongSSHWindow(TerminalPaneWindow):
         action_open_sftp.connect("activate", self.on_menu_open_sftp_from_tree)
         self.add_action(action_open_sftp)
 
-        action_rename = Gio.SimpleAction.new("rename", None)
-        action_rename.connect("activate", self.on_menu_rename_group)
-        self.add_action(action_rename)
+        action_edit_group = Gio.SimpleAction.new("edit-group", None)
+        action_edit_group.connect("activate", self.on_menu_edit_group)
+        self.add_action(action_edit_group)
 
         action_delete = Gio.SimpleAction.new("delete", None)
         action_delete.connect("activate", self.on_remove_selected_clicked)
@@ -3111,7 +3323,7 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         # Menu for a GROUP
         group_menu = Gio.Menu()
-        group_menu.append(_("Rename..."), "win.rename")
+        group_menu.append(_("Edit..."), "win.edit-group")
         group_menu.append(_("Delete"), "win.delete")
 
         quicky_menu = Gio.Menu()
@@ -3299,7 +3511,7 @@ class ThongSSHWindow(TerminalPaneWindow):
     # --- Handlers for the global menu ---
 
     def on_menu_edit_rename(self, action, param):
-        """Calls 'Edit' or 'Rename' depending on the node type."""
+        """Calls 'Edit' on a host or a group, depending on the node type."""
         selection = self.tree_view.get_selection()
         model, tree_iter = selection.get_selected()
         if not tree_iter: return
@@ -3308,7 +3520,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         if node_type == "host":
             self.on_menu_edit_host(None, None)
         elif node_type == "group":
-            self.on_menu_rename_group(None, None)
+            self.on_menu_edit_group(None, None)
 
     def on_menu_settings(self, action, param):
         """Placeholder for the settings dialog."""
@@ -3491,30 +3703,73 @@ class ThongSSHWindow(TerminalPaneWindow):
         dialog.present()
 
 
-    def on_menu_rename_group(self, action, param):
-        """Callback for the 'win.rename' GAction."""
+    def _clone_tree_node(self, model, source_iter, dest_parent_iter, name_override=None):
+        """Deep-copies a TreeStore node (and, for a group, everything under
+        it) into a new location — used by on_menu_edit_group to actually
+        move a group, since Gtk.TreeStore has no "reparent" of its own.
+        name_override only ever applies to the node being cloned directly
+        (the group being moved itself); children keep whatever names they
+        already had. Returns the new iter."""
+        node_type = model.get_value(source_iter, COL_TYPE)
+        icon = model.get_value(source_iter, COL_ICON)
+        data = model.get_value(source_iter, COL_DATA)
+        data = copy.deepcopy(data) if isinstance(data, dict) else data
+        name = name_override if name_override is not None else model.get_value(source_iter, COL_NAME)
+        if name_override is not None and isinstance(data, dict):
+            data['name'] = name
+        new_iter = model.append(dest_parent_iter, [name, node_type, icon, data])
+        if node_type == "group":
+            child_iter = model.iter_children(source_iter)
+            while child_iter is not None:
+                self._clone_tree_node(model, child_iter, new_iter)
+                child_iter = model.iter_next(child_iter)
+        return new_iter
+
+    def on_menu_edit_group(self, action, param):
+        """Callback for the 'win.edit-group' GAction — name AND parent
+        folder in one dialog, same shape as "Create Group". There's no
+        separate drag-and-drop or cut/paste way to move a group in this
+        tree, so this dialog's parent-folder picker is the only way to do
+        it; picking a different parent here moves the whole group (with
+        everything nested inside it) there via _clone_tree_node, then
+        removes the original."""
         selection = self.tree_view.get_selection()
         model, tree_iter = selection.get_selected()
         if not tree_iter: return
 
         if self.is_filtered:
-            logging.warning("Renaming during an active search is not supported.")
+            logging.warning("Editing a group during an active search is not supported.")
             return
 
         old_name = model.get_value(tree_iter, COL_NAME)
-        dialog = InputDialog(self, title=_("Rename Group"), message=_("New name for '{old_name}':").format(old_name=old_name), default_text=old_name)
+        old_parent_iter = model.iter_parent(tree_iter)
+        dialog = GroupDialog(
+            self, self.main_tree_store, parent_iter=old_parent_iter,
+            initial_name=old_name, exclude_iter=tree_iter,
+        )
 
         def on_response(dialog, response):
             if response == Gtk.ResponseType.OK:
-                new_name = dialog.get_text()
-                if new_name and new_name != old_name:
-                    # Re-get the iter just in case
+                new_name, new_parent_iter = dialog.get_data()
+                if new_name:
+                    # Re-get the iter just in case the dialog was open a while.
                     selection = self.tree_view.get_selection()
                     model, tree_iter = selection.get_selected()
                     if tree_iter:
-                        data = model.get_value(tree_iter, COL_DATA)
-                        data['name'] = new_name
-                        model.set(tree_iter, [COL_NAME, COL_DATA], [new_name, data])
+                        current_parent_iter = model.iter_parent(tree_iter)
+                        parent_unchanged = (
+                            (current_parent_iter is None and new_parent_iter is None)
+                            or (current_parent_iter is not None and new_parent_iter is not None
+                                and model.get_path(current_parent_iter) == model.get_path(new_parent_iter))
+                        )
+                        if parent_unchanged:
+                            if new_name != old_name:
+                                data = model.get_value(tree_iter, COL_DATA)
+                                data['name'] = new_name
+                                model.set(tree_iter, [COL_NAME, COL_DATA], [new_name, data])
+                        else:
+                            self._clone_tree_node(model, tree_iter, new_parent_iter, name_override=new_name)
+                            model.remove(tree_iter)
                         self.rebuild_config_and_save()
             dialog.destroy()
 

@@ -5,16 +5,19 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gdk, GObject, Pango, GLib
+import os
 import stat
 import logging
 import uuid
 import re
 import datetime
 
-from .constants import COL_NAME, COL_TYPE, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS
+from .constants import COL_NAME, COL_TYPE, COL_DATA, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, CLI_MODEL_PRESETS
 from .widgets import PositionGrid, set_split_button_active_style, ShortcutPicker, install_shortcut_capture
 from .colors import COLOR_SCHEMES, DEFAULT_FALLBACK_COLORS, get_scheme_colors, save_custom_color_scheme
 from .settings import DEFAULT_SETTINGS
+from .config import _recursive_migrate
+from . import host_import
 from .keyring import KeyringManager
 from .ai_providers import DEFAULT_MODELS as AI_DEFAULT_MODELS, DEFAULT_BASE_URLS as AI_DEFAULT_BASE_URLS, fetch_models
 from .cli_providers import is_available as cli_is_available
@@ -64,12 +67,17 @@ def _widen_preferences_clamp(widget, max_size=900):
         child = child.get_next_sibling()
 
 
-def _populate_groups_combo(combo_group, group_iters, tree_store, active_parent_iter):
+def _populate_groups_combo(combo_group, group_iters, tree_store, active_parent_iter, exclude_iter=None):
     """
     Recursively populates a group Gtk.ComboBoxText with groups from a
     Gtk.TreeStore, and selects active_parent_iter's group if given.
     Shared by HostDialog and GroupDialog, which both keep their own
     `self.combo_group`/`self.group_iters`/`self.tree_store` for this.
+
+    exclude_iter (GroupDialog's "Edit Group" mode only) skips that exact
+    group AND everything under it — moving a group into itself or one of
+    its own descendants would create a cycle, so the picker simply never
+    offers those as a choice rather than needing a runtime guard later.
     """
     combo_group.append("root", _("Root (/)"))
     group_iters["root"] = None  # iter for the root
@@ -77,6 +85,8 @@ def _populate_groups_combo(combo_group, group_iters, tree_store, active_parent_i
     def iter_groups(model, tree_iter, prefix=""):
         node_type = model.get_value(tree_iter, COL_TYPE)
         if node_type == "group":
+            if exclude_iter is not None and model.get_path(tree_iter) == model.get_path(exclude_iter):
+                return
             name = model.get_value(tree_iter, COL_NAME)
             display_name = f"{prefix} {name}"
 
@@ -993,20 +1003,28 @@ class HostDialog(ResponseDialog):
 
 # --- CLASS: Add Group Dialog ---
 class GroupDialog(ResponseDialog):
+    """Add OR edit a group — same name+parent-folder shape either way.
+    Editing an existing group (initial_name given) additionally passes
+    exclude_iter (that same group's own iter) so the parent-folder combo
+    can't offer the group itself or any of its own descendants as its new
+    parent — moving a group into itself or a child of itself would create
+    a cycle. There's no separate "Rename" flow anymore: renaming a group
+    and moving it to a different parent are both just this one dialog."""
 
-    def __init__(self, parent_window, tree_store, parent_iter=None):
+    def __init__(self, parent_window, tree_store, parent_iter=None, initial_name=None, exclude_iter=None):
         super().__init__(transient_for=parent_window, modal=True)
         self.set_default_size(400, -1)
 
         self.tree_store = tree_store
+        is_edit = initial_name is not None
 
         header_bar = Adw.HeaderBar()
-        header_bar.set_title_widget(Adw.WindowTitle(title=_("Create New Group")))
+        header_bar.set_title_widget(Adw.WindowTitle(title=_("Edit Group") if is_edit else _("Create New Group")))
 
-        self.ok_button = Gtk.Button(label=_("Create"))
+        self.ok_button = Gtk.Button(label=_("Save") if is_edit else _("Create"))
         self.ok_button.add_css_class("suggested-action")
         self.ok_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.OK))
-        self.ok_button.set_sensitive(False)
+        self.ok_button.set_sensitive(is_edit)  # a pre-filled name is already valid
         header_bar.pack_end(self.ok_button)
 
         cancel_button = Gtk.Button(label=_("Cancel"))
@@ -1022,6 +1040,8 @@ class GroupDialog(ResponseDialog):
 
         content_box.append(Gtk.Label(label=_("Group Name:"), halign=Gtk.Align.START))
         self.entry_name = Gtk.Entry()
+        if initial_name is not None:
+            self.entry_name.set_text(initial_name)
         self.entry_name.connect("changed", self.on_validate)
         self.entry_name.connect("activate", lambda e: self.response(Gtk.ResponseType.OK))
         content_box.append(self.entry_name)
@@ -1031,7 +1051,7 @@ class GroupDialog(ResponseDialog):
         content_box.append(self.combo_group)
 
         self.group_iters = {}
-        self.populate_groups_combo(parent_iter)
+        self.populate_groups_combo(parent_iter, exclude_iter=exclude_iter)
 
         self.entry_name.grab_focus()
 
@@ -1039,8 +1059,8 @@ class GroupDialog(ResponseDialog):
         text = entry.get_text().strip()
         self.ok_button.set_sensitive(len(text) > 0)
 
-    def populate_groups_combo(self, active_parent_iter):
-        _populate_groups_combo(self.combo_group, self.group_iters, self.tree_store, active_parent_iter)
+    def populate_groups_combo(self, active_parent_iter, exclude_iter=None):
+        _populate_groups_combo(self.combo_group, self.group_iters, self.tree_store, active_parent_iter, exclude_iter=exclude_iter)
 
     def get_data(self):
         new_name = self.entry_name.get_text().strip()
@@ -1712,6 +1732,106 @@ class SettingsDialog(Adw.Window):
         sync_status_row.add_suffix(force_sync_button)
         group_sync_status.add(sync_status_row)
         self._refresh_sync_status_label()
+
+        # --- Import Hosts Page ---
+        page_import = Adw.PreferencesPage()
+        page_import.set_title(_("Import Hosts"))
+        page_import.set_icon_name("document-open-symbolic")
+
+        group_import_source = Adw.PreferencesGroup(
+            title=_("Source"),
+            description=_("Parses another SSH/terminal client's config file into a checkbox tree "
+                           "below — nothing is added to your host list until you pick what to "
+                           "import and press Import."),
+        )
+        page_import.add(group_import_source)
+
+        import_format_labels = [label for _key, label, _fn, _mode, _default in host_import.SOURCE_FORMATS]
+        self.import_format_row = Adw.ComboRow(
+            title=_("Format"), model=Gtk.StringList.new(import_format_labels)
+        )
+        self.import_format_row.connect("notify::selected", self.on_import_format_changed)
+        group_import_source.add(self.import_format_row)
+
+        self.import_path_row = Adw.EntryRow(title=_("Path"))
+        import_browse_button = Gtk.Button(icon_name="folder-open-symbolic")
+        import_browse_button.set_valign(Gtk.Align.CENTER)
+        import_browse_button.set_tooltip_text(_("Choose a file or folder"))
+        import_browse_button.connect("clicked", self.on_import_browse_clicked)
+        self.import_path_row.add_suffix(import_browse_button)
+        group_import_source.add(self.import_path_row)
+
+        import_parse_row = Adw.ActionRow(title=_("Parse"))
+        import_parse_button = Gtk.Button(label=_("Parse"), css_classes=["suggested-action"])
+        import_parse_button.set_valign(Gtk.Align.CENTER)
+        import_parse_button.connect("clicked", self.on_import_parse_clicked)
+        import_parse_row.add_suffix(import_parse_button)
+        import_parse_row.set_activatable_widget(import_parse_button)
+        group_import_source.add(import_parse_row)
+
+        self.import_status_label = Gtk.Label(label="", xalign=0, wrap=True)
+        self.import_status_label.add_css_class("dim-label")
+        self.import_status_label.set_margin_start(12)
+        self.import_status_label.set_margin_end(12)
+        self.import_status_label.set_margin_bottom(6)
+        group_import_source.add(self.import_status_label)
+
+        self._apply_import_format_default_path()
+
+        group_import_tree = Adw.PreferencesGroup(title=_("Hosts to Import"))
+        page_import.add(group_import_tree)
+
+        import_select_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        import_select_row.set_margin_start(12)
+        import_select_row.set_margin_end(12)
+        import_select_row.set_margin_bottom(6)
+        import_select_all_button = Gtk.Button(label=_("Select All"))
+        import_select_all_button.connect("clicked", lambda b: self._set_all_import_rows_checked(True))
+        import_deselect_all_button = Gtk.Button(label=_("Deselect All"))
+        import_deselect_all_button.connect("clicked", lambda b: self._set_all_import_rows_checked(False))
+        import_select_row.append(import_select_all_button)
+        import_select_row.append(import_deselect_all_button)
+        group_import_tree.add(import_select_row)
+
+        # (checked, display name, node type, the original parsed node dict)
+        self.import_tree_store = Gtk.TreeStore(bool, str, str, object)
+        self.import_tree_view = Gtk.TreeView(model=self.import_tree_store)
+        self.import_tree_view.set_headers_visible(False)
+        self.import_tree_view.set_hexpand(True)
+        self.import_tree_view.set_vexpand(True)
+
+        toggle_renderer = Gtk.CellRendererToggle()
+        toggle_renderer.connect("toggled", self.on_import_cell_toggled)
+        toggle_column = Gtk.TreeViewColumn("", toggle_renderer, active=0)
+        self.import_tree_view.append_column(toggle_column)
+
+        icon_renderer = Gtk.CellRendererPixbuf()
+        name_renderer = Gtk.CellRendererText()
+        name_column = Gtk.TreeViewColumn("")
+        name_column.pack_start(icon_renderer, False)
+        name_column.pack_start(name_renderer, True)
+        name_column.set_cell_data_func(icon_renderer, self._import_tree_icon_cell_data_func)
+        name_column.add_attribute(name_renderer, "text", 1)
+        self.import_tree_view.append_column(name_column)
+
+        import_scroller = Gtk.ScrolledWindow()
+        import_scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        import_scroller.set_min_content_height(260)
+        import_scroller.set_child(self.import_tree_view)
+        import_scroller.set_margin_start(12)
+        import_scroller.set_margin_end(12)
+        import_scroller.set_margin_bottom(12)
+        group_import_tree.add(import_scroller)
+
+        group_import_commit = Adw.PreferencesGroup()
+        page_import.add(group_import_commit)
+        import_commit_row = Adw.ActionRow(title=_("Import"))
+        import_commit_button = Gtk.Button(label=_("Import"), css_classes=["suggested-action"])
+        import_commit_button.set_valign(Gtk.Align.CENTER)
+        import_commit_button.connect("clicked", self.on_import_commit_clicked)
+        import_commit_row.add_suffix(import_commit_button)
+        import_commit_row.set_activatable_widget(import_commit_button)
+        group_import_commit.add(import_commit_row)
 
         # --- User Commands Page (Placeholder) ---
         page_commands = Adw.PreferencesPage()
@@ -2530,6 +2650,7 @@ class SettingsDialog(Adw.Window):
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
         self.stack.add_titled_with_icon(page_quickies, "quickies", _("Quickies"), "insert-text-symbolic")
         self.stack.add_titled_with_icon(page_sync, "sync", _("Sync"), "emblem-synchronizing-symbolic")
+        self.stack.add_titled_with_icon(page_import, "import_hosts", _("Import Hosts"), "document-open-symbolic")
         self.stack.add_titled_with_icon(page_sftp, "sftp", _("SFTP"), "folder-remote-symbolic")
         # API and CLI Client are nested tabs *inside* this one "AI" entry
         # (see the Gtk.Stack/StackSwitcher built above) — not separate
@@ -3006,6 +3127,220 @@ class SettingsDialog(Adw.Window):
             self._refresh_sync_id_label()
             return False
         GLib.timeout_add(100, poll)
+
+    # --- Import Hosts ---
+
+    def _selected_import_format(self):
+        """(key, label, parser_fn, chooser_mode, default_path) for whatever
+        self.import_format_row currently has selected."""
+        return host_import.SOURCE_FORMATS[self.import_format_row.get_selected()]
+
+    def _apply_import_format_default_path(self):
+        """Pre-fills the path row with the selected format's own default
+        (e.g. ~/.ssh/config) so "SSH config" needs no browsing at all,
+        satisfying "read the user's ssh hosts" with nothing more than
+        picking the format and pressing Parse. Formats with no sensible
+        default (own export, mRemoteNG, MobaXterm, SecureCRT's folder)
+        just clear the row instead."""
+        _key, _label, _fn, _mode, default_path = self._selected_import_format()
+        self.import_path_row.set_text(os.path.expanduser(default_path) if default_path else "")
+
+    def on_import_format_changed(self, combo_row, _pspec):
+        self._apply_import_format_default_path()
+        self.import_status_label.set_text("")
+        self.import_tree_store.clear()
+
+    def on_import_browse_clicked(self, button):
+        _key, _label, _fn, mode, _default = self._selected_import_format()
+        file_chooser = Gtk.FileChooserDialog(
+            title=_("Select Folder") if mode == "folder" else _("Select File"),
+            transient_for=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER if mode == "folder" else Gtk.FileChooserAction.OPEN,
+        )
+        file_chooser.add_button(_("Select"), Gtk.ResponseType.OK)
+        file_chooser.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        file_chooser.connect("response", self.on_import_path_chosen)
+        file_chooser.present()
+
+    def on_import_path_chosen(self, dialog, response):
+        if response == Gtk.ResponseType.OK:
+            gfile = dialog.get_file()
+            if gfile:
+                self.import_path_row.set_text(gfile.get_path())
+        dialog.destroy()
+
+    def _import_tree_icon_cell_data_func(self, column, cell, model, tree_iter, data=None):
+        node_type = model.get_value(tree_iter, 2)
+        cell.set_property("icon-name", "folder-symbolic" if node_type == "group" else "computer-symbolic")
+
+    def _populate_import_tree_store(self, parent_iter, nodes):
+        for node in nodes:
+            if node.get("type") == "group":
+                name = node.get("name") or _("Unnamed")
+                group_iter = self.import_tree_store.append(parent_iter, [True, name, "group", node])
+                self._populate_import_tree_store(group_iter, node.get("children", []))
+            else:
+                name = (node.get("config") or {}).get("name") or _("Unnamed")
+                self.import_tree_store.append(parent_iter, [True, name, "host", node])
+
+    def on_import_parse_clicked(self, button):
+        key, label, parser_fn, _mode, _default = self._selected_import_format()
+        path = self.import_path_row.get_text().strip()
+        if not path:
+            self.import_status_label.set_text(_("Choose a file or folder first."))
+            return
+        try:
+            result = parser_fn(os.path.expanduser(path))
+        except ImportError as e:
+            # e.g. PyYAML missing for Asbru-CM — a clear, actionable
+            # message rather than a traceback or a silently empty tree.
+            self.import_status_label.set_text(str(e))
+            self.import_tree_store.clear()
+            return
+        except (OSError, ValueError) as e:
+            self.import_status_label.set_text(_("Could not parse {path} as {format}: {error}").format(
+                path=path, format=label, error=e
+            ))
+            self.import_tree_store.clear()
+            return
+
+        self.import_tree_store.clear()
+        self._populate_import_tree_store(None, result.nodes)
+        if result.skipped_count:
+            self.import_status_label.set_text(
+                _("Parsed {hosts} hosts in {groups} groups ({skipped} entries skipped — unsupported "
+                  "or incomplete).").format(
+                    hosts=result.host_count, groups=result.group_count, skipped=result.skipped_count
+                )
+            )
+        else:
+            self.import_status_label.set_text(
+                _("Parsed {hosts} hosts in {groups} groups.").format(
+                    hosts=result.host_count, groups=result.group_count
+                )
+            )
+
+    def _set_row_checked_recursive(self, tree_iter, checked):
+        while tree_iter is not None:
+            self.import_tree_store.set_value(tree_iter, 0, checked)
+            child_iter = self.import_tree_store.iter_children(tree_iter)
+            if child_iter is not None:
+                self._set_row_checked_recursive(child_iter, checked)
+            tree_iter = self.import_tree_store.iter_next(tree_iter)
+
+    def _set_all_import_rows_checked(self, checked):
+        self._set_row_checked_recursive(self.import_tree_store.get_iter_first(), checked)
+
+    def on_import_cell_toggled(self, cell_renderer, path_str):
+        tree_iter = self.import_tree_store.get_iter(path_str)
+        new_value = not self.import_tree_store.get_value(tree_iter, 0)
+        self.import_tree_store.set_value(tree_iter, 0, new_value)
+        # Checking/unchecking a group cascades to everything under it —
+        # plain top-down cascade only, no tri-state "some children differ"
+        # rendering, same as every other on/off control in this app.
+        child_iter = self.import_tree_store.iter_children(tree_iter)
+        if child_iter is not None:
+            self._set_row_checked_recursive(child_iter, new_value)
+
+    def _collect_checked_import_nodes(self, tree_iter):
+        """Walks the checkbox tree, returning only CHECKED nodes — an
+        unchecked group that still has checked descendants contributes
+        just those descendants (rebuilt under a fresh group of the same
+        name), not itself with everything."""
+        kept = []
+        while tree_iter is not None:
+            checked = self.import_tree_store.get_value(tree_iter, 0)
+            node_type = self.import_tree_store.get_value(tree_iter, 2)
+            node = self.import_tree_store.get_value(tree_iter, 3)
+            if node_type == "group":
+                child_iter = self.import_tree_store.iter_children(tree_iter)
+                children = self._collect_checked_import_nodes(child_iter)
+                if checked or children:
+                    kept.append({"type": "group", "name": node.get("name"), "expanded": True,
+                                 "children": children})
+            elif checked:
+                kept.append(node)
+            tree_iter = self.import_tree_store.iter_next(tree_iter)
+        return kept
+
+    def _rename_on_collision(self, node, existing_names):
+        """Per the exact requested format: a host whose name already
+        exists anywhere in the current tree gets renamed to
+        "$name [IMPORT HH:mm DDMMYYYY]" instead of silently shadowing or
+        replacing the existing one."""
+        if node.get("type") == "group":
+            for child in node.get("children", []):
+                self._rename_on_collision(child, existing_names)
+            return
+        config = node.get("config", {})
+        name = config.get("name", "")
+        if name in existing_names:
+            stamp = datetime.datetime.now().strftime("%H:%M %d%m%Y")
+            config["name"] = f"{name} [IMPORT {stamp}]"
+        existing_names.add(config.get("name", ""))
+
+    def _collect_existing_host_names(self, model, tree_iter, names):
+        while tree_iter is not None:
+            node_type = model.get_value(tree_iter, COL_TYPE)
+            if node_type == "host":
+                data = model.get_value(tree_iter, COL_DATA)
+                if isinstance(data, dict) and data.get("name"):
+                    names.add(data["name"])
+            child_iter = model.iter_children(tree_iter)
+            if child_iter is not None:
+                self._collect_existing_host_names(model, child_iter, names)
+            tree_iter = model.iter_next(tree_iter)
+        return names
+
+    def _insert_import_node(self, store, parent_iter, node):
+        if node.get("type") == "group":
+            name = node.get("name") or _("Unnamed")
+            group_iter = store.append(parent_iter, [name, "group", "folder-symbolic", {
+                "type": "group", "name": name, "expanded": node.get("expanded", True),
+            }])
+            for child in node.get("children", []):
+                self._insert_import_node(store, group_iter, child)
+        else:
+            config = node["config"]
+            store.append(parent_iter, [config.get("name", ""), "host", "computer-symbolic", config])
+
+    def on_import_commit_clicked(self, button):
+        root_iter = self.import_tree_store.get_iter_first()
+        if root_iter is None:
+            self.import_status_label.set_text(_("Nothing parsed yet — choose a source and press Parse."))
+            return
+        kept_nodes = self._collect_checked_import_nodes(root_iter)
+        if not kept_nodes:
+            self.import_status_label.set_text(_("Nothing selected to import."))
+            return
+
+        key, label, _fn, _mode, _default = self._selected_import_format()
+        wrapper_name = _("Import {format} {date}").format(
+            format=label, date=datetime.datetime.now().strftime("%d.%m.%Y")
+        )
+        wrapper = {"type": "group", "name": wrapper_name, "expanded": True, "children": kept_nodes}
+
+        existing_names = self._collect_existing_host_names(
+            self.parent_window.main_tree_store, self.parent_window.main_tree_store.get_iter_first(), set()
+        )
+        self._rename_on_collision(wrapper, existing_names)
+        wrapper, _needs_save = _recursive_migrate(wrapper)
+
+        self._insert_import_node(self.parent_window.main_tree_store, None, wrapper)
+        self.parent_window.rebuild_config_and_save()
+
+        host_count = sum(1 for _n in self._walk_host_configs(wrapper))
+        self.import_status_label.set_text(
+            _("Imported {count} hosts into \"{group}\".").format(count=host_count, group=wrapper_name)
+        )
+        self.import_tree_store.clear()
+
+    def _walk_host_configs(self, node):
+        if node.get("type") == "group":
+            for child in node.get("children", []):
+                yield from self._walk_host_configs(child)
+        else:
+            yield node
 
     def on_command_edited(self, widget, path, text, column_index):
         """Saves the edited text in the user commands ListStore."""

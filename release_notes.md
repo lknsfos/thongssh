@@ -1,5 +1,14 @@
 # Release Notes
 
+### 🆕 What's New in 0.10.4
+
+Importing hosts from other SSH clients, two new ways to browse the host list, and a real "Edit Group":
+
+* **New: Import Hosts** (Settings → Import Hosts) — bring in hosts from `~/.ssh/config`, GNOME Connection Manager, Asbru-CM, SecureCRT, mRemoteNG, MobaXterm, or another ThongSSH export. Pick a format, point it at the file (or folder, for SecureCRT), and it's parsed into a checkbox tree — pick exactly which hosts and groups to bring in (with Select All/Deselect All), then Import drops them into a new group alongside your existing ones. A host whose name already exists gets renamed to `name [IMPORT HH:mm DDMMYYYY]` instead of clashing. Importing an Asbru-CM config needs `pyyaml` installed; every other format needs nothing extra.
+* **New: host tree "Info" and "Sort"** — the two new buttons next to Add Host/Add Group/Remove. "Info" shows each host's address (and username, if set) as a second, dimmed line under its name. "Sort" opens a menu with four orders: Name (A–Z/Z–A) or IP/Hostname (A–Z/Z–A) — sorting by address flattens the list (no groups) and turns Info on for the duration, since the address needs to stay visible for that order to make sense.
+* **New: a real "Edit Group"**, replacing "Rename" — same shape as "Create Group": a name field and a parent-folder picker. Picking a different parent actually moves the group there, with everything nested inside it, instead of only ever being able to rename a group in place. A group can't be moved into itself or one of its own subgroups — those simply aren't offered as choices.
+* **Fixed: the gap next to the host tree could still grab the resize handle** — the small reserved space between the host tree and the terminal (there so starting a text selection near that edge doesn't keep snagging the panel divider instead) looked safe but wasn't: clicking anywhere in it still resized the panel. The divider now has real width of its own there, with a visible line marking it and a matching bit of breathing room on the terminal's own side, so that whole area is unambiguously either "divider" or "terminal," never both at once.
+
 ### 🆕 What's New in 0.10.3
 
 A proper "Highlight and Find" to replace the old plain Find bar, and the "Original" app icon option is gone:

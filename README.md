@@ -73,6 +73,11 @@ a full IDE. It's a native GTK4/libadwaita app, not an Electron wrapper.
   and SSH key paths never leave the machine they're on.
 - Multiple independent config directories are supported for running more than one checkout side by
   side (see `.config_path`).
+- Import hosts from `~/.ssh/config`, GNOME Connection Manager, Asbru-CM, SecureCRT, mRemoteNG, or
+  MobaXterm (Settings → Import Hosts) — parsed into a checkbox tree so you pick exactly which hosts
+  and groups to bring in, landing in a new group alongside your existing ones. Importing an
+  Asbru-CM config needs `pyyaml` installed (`pip install pyyaml`, or your distro's
+  `python3-yaml`/`python3-pyyaml`/`python-yaml` package); every other format needs nothing extra.
 
 A full changelog is kept in [release_notes.md](release_notes.md).
 
