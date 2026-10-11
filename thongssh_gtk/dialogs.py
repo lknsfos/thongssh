@@ -1998,6 +1998,20 @@ class SettingsDialog(Adw.Window):
         )
         group_find.add(self.find_bar_opacity_row)
 
+        find_highlight_color_row = Adw.ActionRow(
+            title=_("Highlight color"),
+            subtitle=_("Default tint color for \"Highlight all\" matches — each find bar's own picker "
+                       "starts here and can still be changed per-pane"),
+        )
+        self.find_highlight_color_button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False))
+        self.find_highlight_color_button.set_valign(Gtk.Align.CENTER)
+        find_highlight_color_rgba = Gdk.RGBA()
+        find_highlight_color_rgba.parse(self.settings_manager.get("interface.find_highlight_color"))
+        self.find_highlight_color_button.set_rgba(find_highlight_color_rgba)
+        find_highlight_color_row.add_suffix(self.find_highlight_color_button)
+        find_highlight_color_row.set_activatable_widget(self.find_highlight_color_button)
+        group_find.add(find_highlight_color_row)
+
         group_debug = Adw.PreferencesGroup(title=_("Debugging"))
         page_interface.add(group_debug)
 
@@ -2755,6 +2769,9 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("interface.tree_row_striping", self.tree_row_striping_row.get_active())
         self.settings_manager.set("interface.tabbar_height", int(self.tabbar_height_row.get_value()))
         self.settings_manager.set("interface.find_bar_opacity", int(self.find_bar_opacity_row.get_value()))
+        self.settings_manager.set(
+            "interface.find_highlight_color", _rgba_to_hex(self.find_highlight_color_button.get_rgba())
+        )
 
         search_position_map_rev = {0: "top", 1: "bottom"}
         self.settings_manager.set(
@@ -3152,6 +3169,9 @@ class SettingsDialog(Adw.Window):
             self.tree_row_striping_row.set_active(DEFAULT_SETTINGS["interface.tree_row_striping"])
             self.tabbar_height_row.set_value(DEFAULT_SETTINGS["interface.tabbar_height"])
             self.find_bar_opacity_row.set_value(DEFAULT_SETTINGS["interface.find_bar_opacity"])
+            default_highlight_color_rgba = Gdk.RGBA()
+            default_highlight_color_rgba.parse(DEFAULT_SETTINGS["interface.find_highlight_color"])
+            self.find_highlight_color_button.set_rgba(default_highlight_color_rgba)
             search_position_map = {"top": 0, "bottom": 1}
             self.search_position_row.set_selected(
                 search_position_map.get(DEFAULT_SETTINGS["interface.host_search_position"], 1)

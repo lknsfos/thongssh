@@ -1090,26 +1090,44 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         bar["css_provider"] = Gtk.CssProvider()
         widget.get_style_context().add_provider(bar["css_provider"], Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        box.set_margin_top(8)
-        box.set_margin_bottom(8)
-        box.set_margin_start(10)
-        box.set_margin_end(10)
+        # Kept deliberately tight (smaller margins/spacing than a typical
+        # Adw dialog) — this floats over the user's actual terminal
+        # content, so every extra pixel of chrome directly costs visible
+        # screen space, unlike a normal dialog with the whole window to
+        # itself.
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_top(6)
+        box.set_margin_bottom(6)
+        box.set_margin_start(8)
+        box.set_margin_end(8)
         widget.append(box)
 
-        entry_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        # Just the entry + navigation here — case/regex toggles live down
+        # in bottom_row instead (see below). Keeping this row to 4 widgets
+        # rather than 7 is what actually shrinks the bar's overall width:
+        # GtkSearchEntry's own built-in icon padding already makes it the
+        # widest single element, so every extra button crammed in next to
+        # it added directly to the bar's minimum width (confirmed live —
+        # this row alone drove the old layout's ~450px width).
+        entry_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         entry = Gtk.SearchEntry()
         entry.set_hexpand(True)
-        entry.set_width_chars(24)
+        entry.set_width_chars(14)
+        entry.add_css_class("thongssh-find-bar-entry")
         entry_row.append(entry)
         bar["entry"] = entry
 
         prev_button = Gtk.Button(icon_name="go-up-symbolic")
         prev_button.set_tooltip_text(_("Previous match"))
+        prev_button.add_css_class("flat")
+        prev_button.add_css_class("thongssh-find-bar-btn")
         next_button = Gtk.Button(icon_name="go-down-symbolic")
         next_button.set_tooltip_text(_("Next match"))
+        next_button.add_css_class("flat")
+        next_button.add_css_class("thongssh-find-bar-btn")
         close_button = Gtk.Button(icon_name="window-close-symbolic")
         close_button.add_css_class("flat")
+        close_button.add_css_class("thongssh-find-bar-btn")
         close_button.set_tooltip_text(_("Close"))
         close_button.connect("clicked", lambda b: widget.set_visible(False))
         entry_row.append(prev_button)
@@ -1117,38 +1135,43 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         entry_row.append(close_button)
         box.append(entry_row)
 
-        options_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        case_toggle = Gtk.CheckButton(label=_("Case sensitive"))
-        regex_toggle = Gtk.CheckButton(label=_("Regular expression"))
+        # "Highlight all" gets its own row (rather than sharing one with
+        # case/regex/wrap, which made that row the widest part of the old
+        # layout) so there's room for its color picker right next to it —
+        # the color this checkbox's own tint uses, not a generic settings
+        # row buried elsewhere.
+        highlight_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         highlight_toggle = Gtk.CheckButton(label=_("Highlight all"))
-        wrap_toggle = Gtk.ToggleButton(icon_name="view-refresh-symbolic")
-        wrap_toggle.set_tooltip_text(_("Wrap around"))
-        wrap_toggle.set_active(True)
-        options_row.append(case_toggle)
-        options_row.append(regex_toggle)
-        options_row.append(highlight_toggle)
-        options_row.append(wrap_toggle)
-        bar["case_toggle"] = case_toggle
-        bar["regex_toggle"] = regex_toggle
-        bar["highlight_toggle"] = highlight_toggle
-        bar["wrap_toggle"] = wrap_toggle
-
+        highlight_toggle.add_css_class("thongssh-find-bar-check")
+        highlight_color_button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False))
+        highlight_color_button.set_valign(Gtk.Align.CENTER)
+        highlight_color_button.set_tooltip_text(_("Highlight color"))
+        highlight_color_button.add_css_class("flat")
+        highlight_color_button.add_css_class("thongssh-find-bar-btn")
+        default_highlight_rgba = Gdk.RGBA()
+        default_highlight_rgba.parse(self.settings_manager.get("interface.find_highlight_color"))
+        highlight_color_button.set_rgba(default_highlight_rgba)
         status_label = Gtk.Label(label="")
         status_label.add_css_class("dim-label")
         status_label.set_hexpand(True)
         status_label.set_halign(Gtk.Align.END)
-        options_row.append(status_label)
-        box.append(options_row)
+        highlight_row.append(highlight_toggle)
+        highlight_row.append(highlight_color_button)
+        highlight_row.append(status_label)
+        box.append(highlight_row)
+        bar["highlight_toggle"] = highlight_toggle
+        bar["highlight_color_button"] = highlight_color_button
         bar["status_label"] = status_label
 
-        # Opacity slider for the find bar's OWN card background — not the
-        # "Highlight all" terminal tint (that stays a fixed, fairly subtle
-        # alpha, see _draw_search_highlights). Starts from Settings ->
+        # Bottom row: wrap-around + the find bar's OWN card-background
+        # opacity slider (not the highlight tint's alpha, which stays
+        # fixed — see _draw_search_highlights). Starts from Settings ->
         # Interface's configured default (interface.find_bar_opacity, a
         # 20-100 percentage) each time the bar is built; adjusting it here
         # is a per-pane, session-only override of that default, not
-        # written back to Settings — mirrors how wrap/case/regex are also
-        # plain per-bar toggles with no persistence of their own.
+        # written back to Settings — mirrors how wrap/case/regex/highlight
+        # color are also plain per-bar state with no persistence of their
+        # own.
         #
         # Deliberately NOT Gtk.Widget.set_opacity: that fades the whole
         # widget (including its own text/buttons) as one compositing layer
@@ -1162,8 +1185,32 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         # genuinely opaque at 100% regardless of what's underneath, since
         # it's the bar's background paint itself, not a transparency
         # composited over it.
-        opacity_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        opacity_row.append(Gtk.Label(label=_("Opacity")))
+        bottom_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        # "Aa" / ".*" as short-label toggles rather than full "Case
+        # sensitive" / "Regular expression" checkboxes — same role, far
+        # less width, mirroring the compact find bars of most editors/
+        # browsers. Live here (not next to the entry) specifically to keep
+        # entry_row's own width down — see that row's own comment.
+        case_toggle = Gtk.ToggleButton(label="Aa")
+        case_toggle.set_tooltip_text(_("Case sensitive"))
+        case_toggle.add_css_class("flat")
+        case_toggle.add_css_class("thongssh-find-bar-btn")
+        regex_toggle = Gtk.ToggleButton(label=".*")
+        regex_toggle.set_tooltip_text(_("Regular expression"))
+        regex_toggle.add_css_class("flat")
+        regex_toggle.add_css_class("thongssh-find-bar-btn")
+        wrap_toggle = Gtk.ToggleButton(icon_name="view-refresh-symbolic")
+        wrap_toggle.set_tooltip_text(_("Wrap around"))
+        wrap_toggle.add_css_class("flat")
+        wrap_toggle.add_css_class("thongssh-find-bar-btn")
+        wrap_toggle.set_active(True)
+        bottom_row.append(case_toggle)
+        bottom_row.append(regex_toggle)
+        bottom_row.append(wrap_toggle)
+        bar["case_toggle"] = case_toggle
+        bar["regex_toggle"] = regex_toggle
+        bar["wrap_toggle"] = wrap_toggle
+
         default_opacity = self.settings_manager.get("interface.find_bar_opacity") / 100.0
         opacity_scale = Gtk.Scale(
             orientation=Gtk.Orientation.HORIZONTAL,
@@ -1172,8 +1219,9 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         opacity_scale.set_hexpand(True)
         opacity_scale.set_draw_value(False)
         opacity_scale.set_tooltip_text(_("Find bar opacity"))
-        opacity_row.append(opacity_scale)
-        box.append(opacity_row)
+        opacity_scale.add_css_class("thongssh-find-bar-scale")
+        bottom_row.append(opacity_scale)
+        box.append(bottom_row)
         bar["opacity_scale"] = opacity_scale
         # Deferred to "realize": called this early, the widget isn't part
         # of any window's widget tree yet (overlay.add_overlay happens
@@ -1201,6 +1249,7 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         regex_toggle.connect("toggled", lambda b, bar=bar: self._on_find_text_changed(bar))
 
         highlight_toggle.connect("toggled", lambda b: self._queue_highlight_redraw_all())
+        highlight_color_button.connect("notify::rgba", lambda b, p: self._queue_highlight_redraw_all())
         wrap_toggle.connect("toggled", lambda b, bar=bar: self._apply_find_wrap_option(bar))
         opacity_scale.connect(
             "value-changed", lambda s, bar=bar: self._apply_find_bar_opacity(bar, s.get_value())
@@ -1215,6 +1264,19 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         given alpha (0.2-1.0), via the per-instance Gtk.CssProvider set up
         in _build_find_bar — see that method's own comment for why this
         replaces a plain Gtk.Widget.set_opacity call.
+
+        Scoped to ONLY this widget's own background, not its children's
+        sizing (see the separate .thongssh-find-bar-* classes in
+        window.py's setup_css for that): confirmed live that a
+        Gtk.CssProvider attached via get_style_context().add_provider()
+        only ever affects the SPECIFIC widget it's attached to, not that
+        widget's descendants — GTK4 style contexts are private per-widget,
+        unlike a provider added display-wide. The "box { background-color:
+        ... }" rule below only ever worked in the first place because
+        `widget` itself (a Gtk.Box) IS that exact node; the same approach
+        tried against descendant buttons/entries/etc. measurably changed
+        nothing (confirmed live), which is what sent this bug down a
+        wrong path before landing on the real fix.
 
         Uses the theme's "window_bg_color", NOT "card_bg_color" — confirmed
         live that the latter resolves to flat white (1, 1, 1) even in dark
@@ -1564,7 +1626,8 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
 
         char_width = terminal.get_char_width()
         char_height = terminal.get_char_height()
-        cr.set_source_rgba(1, 1, 0, 0.35)
+        color = bar["highlight_color_button"].get_rgba()
+        cr.set_source_rgba(color.red, color.green, color.blue, 0.35)
 
         for row_offset, line in enumerate(visible_lines):
             for match in compiled.finditer(line):

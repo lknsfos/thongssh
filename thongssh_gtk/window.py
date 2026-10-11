@@ -937,6 +937,46 @@ class ThongSSHWindow(TerminalPaneWindow):
             min-height: 20px;
             padding: 2px;
         }
+        /* In-terminal find bar (TerminalPaneWindow._build_find_bar) —
+           same lesson as .quicky-tiny-button above: "flat" alone doesn't
+           touch the theme's own default clickable-target min-size, only
+           explicit min-width/min-height does. These classes are added
+           DIRECTLY to each control (entry/button/checkbutton/scale), not
+           via an ancestor-scoped descendant selector like ".thongssh-
+           find-bar button" — confirmed live that form never matches:
+           Gtk.CssProvider.add_provider() on a style context only affects
+           that EXACT widget, not its descendants (each child has its own
+           private style context), so a selector scoped through an
+           ancestor class simply never sees the real target nodes. Direct
+           classes on a DISPLAY-WIDE provider (this one) sidestep that
+           entirely. */
+        .thongssh-find-bar-btn {
+            min-width: 22px;
+            min-height: 22px;
+            padding: 2px 6px;
+        }
+        /* Gtk.ColorDialogButton wraps its OWN internal Gtk.Button (a
+           separate node in the render tree, confirmed via live
+           introspection) — sizing the outer .thongssh-find-bar-btn node
+           alone does nothing since that inner button's un-shrunk natural
+           size (34px) still dictates the outer wrapper's effective
+           allocation regardless of its own min-height. Reaching through
+           to the actual inner node is what's needed. */
+        .thongssh-find-bar-btn button {
+            min-width: 22px;
+            min-height: 22px;
+            padding: 2px 6px;
+        }
+        .thongssh-find-bar-entry {
+            min-height: 22px;
+            padding: 2px 6px;
+        }
+        .thongssh-find-bar-check {
+            min-height: 22px;
+        }
+        .thongssh-find-bar-scale trough {
+            min-height: 4px;
+        }
         """
         css_data += self._tab_bar_css()
         if sys.platform == "darwin":
