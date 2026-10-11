@@ -4,7 +4,7 @@
 import sys
 import os
 
-__version__ = "0.10.4"
+__version__ = "0.10.4.1"
 
 APP_ID = "terminal.thongssh"
 
@@ -83,3 +83,16 @@ WATERMARK_POSITIONS = [
     ("center-left", "Center Left"), ("center", "Center"), ("center-right", "Center Right"),
     ("bottom-left", "Bottom Left"), ("bottom-center", "Bottom Center"), ("bottom-right", "Bottom Right"),
 ]
+
+# vte-terminal's own CSS padding-left (window.py's setup_css) — purely
+# cosmetic, filling the dead zone the host-tree divider's wide Paned handle
+# leaves with the terminal's own background instead of an unexplained gap.
+# CSS padding only shifts where VTE *draws*, not its widget allocation, so
+# anything computing pixel positions from column/row indices against the
+# terminal's own origin (tab_window_base.py's _draw_search_highlights, the
+# "Highlight all" find-bar overlay) has to add this back in by hand, or
+# every highlight ends up this many px left of the real text — a real,
+# reported bug the first time this padding was added. One shared constant
+# instead of the same literal "5" independently in both places, so a
+# future change to the padding can't silently desync the two again.
+VTE_LEFT_PADDING_PX = 5

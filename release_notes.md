@@ -1,5 +1,11 @@
 # Release Notes
 
+### 🐛 What's New in 0.10.4.1
+
+A quick fix for "Highlight all" misplacing its highlights:
+
+* **Fixed: "Highlight all" highlights drawn in the wrong spot** — a recent visual tweak (a few px of background now painted before the terminal's text starts, filling the gap next to the host-tree divider) shifted where terminal text is actually drawn without the search highlight overlay knowing about it, so every highlighted match landed slightly left of the real text. Highlights are back in the right place.
+
 ### 🆕 What's New in 0.10.4
 
 Importing hosts from other SSH clients, two new ways to browse the host list, and a real "Edit Group":

@@ -28,6 +28,7 @@ import subprocess
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio
 
 from .config import CONFIG_DIR
+from .constants import VTE_LEFT_PADDING_PX
 from .paths import resolve_log_dir
 from .dialogs import InputDialog, RenameTabDialog, TabColorDialog
 from .send_file import SendFileDialog, guess_remote_cwd
@@ -1634,7 +1635,15 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                 col0, col1 = match.start(), match.end()
                 if col0 == col1:
                     continue
-                cr.rectangle(col0 * char_width, row_offset * char_height,
+                # + VTE_LEFT_PADDING_PX: vte-terminal's own CSS padding-left
+                # (window.py's setup_css) shifts where VTE actually DRAWS
+                # its text right by that much, without moving the widget's
+                # allocation/origin at all — this overlay sits at that same
+                # un-shifted origin, so without adding it back in here by
+                # hand, every highlight lands this many px left of the real
+                # text (a real, reported bug the first time that padding
+                # was added).
+                cr.rectangle(VTE_LEFT_PADDING_PX + col0 * char_width, row_offset * char_height,
                              (col1 - col0) * char_width, char_height)
                 cr.fill()
 

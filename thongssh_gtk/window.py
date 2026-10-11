@@ -18,7 +18,7 @@ import cairo
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio
 
-from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, WATERMARK_POSITIONS, resource_path, __version__
+from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, WATERMARK_POSITIONS, VTE_LEFT_PADDING_PX, resource_path, __version__
 from .cli_providers import is_available as cli_is_available
 from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog, QuickyDialog # Removed SettingsDialog
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
@@ -1026,19 +1026,6 @@ class ThongSSHWindow(TerminalPaneWindow):
         .thongssh-host-tree-divider {
             border-right: 1px solid alpha(currentColor, 0.25);
         }
-        /* On top of the above (not instead of it): a few px of the
-           terminal's OWN background before its text starts, purely so the
-           quiet zone the wide handle just created is actually visible
-           instead of reading as "text glued to the edge with some
-           unexplained dead air next to it." The wide handle is what
-           stops a click there from ever reaching the Paned (confirmed
-           live); this is just making that already-safe space look like
-           it belongs to the terminal, since VTE's own CSS node
-           ("vte-terminal") paints a real background under this padding,
-           not a transparent hole. */
-        vte-terminal {
-            padding-left: 5px;
-        }
         /* In-terminal find bar (TerminalPaneWindow._build_find_bar) —
            same lesson as .quicky-tiny-button above: "flat" alone doesn't
            touch the theme's own default clickable-target min-size, only
@@ -1080,6 +1067,23 @@ class ThongSSHWindow(TerminalPaneWindow):
             min-height: 4px;
         }
         """
+        # A few px of the terminal's OWN background before its text starts,
+        # purely so the quiet zone the host-tree divider's wide Paned
+        # handle just created (.thongssh-host-tree-divider above) is
+        # actually visible instead of reading as "text glued to the edge
+        # with some unexplained dead air next to it." The wide handle is
+        # what stops a click there from ever reaching the Paned (confirmed
+        # live); this is just making that already-safe space look like it
+        # belongs to the terminal, since VTE's own CSS node ("vte-terminal")
+        # paints a real background under this padding, not a transparent
+        # hole. Built from VTE_LEFT_PADDING_PX (constants.py), not a literal
+        # "5px" here, since _draw_search_highlights (tab_window_base.py)
+        # has to add the exact same offset back in by hand when positioning
+        # the "Highlight all" find-bar overlay — CSS padding only shifts
+        # where VTE *draws*, not its widget allocation, so that overlay has
+        # no other way to find out about it. A real, reported bug the first
+        # time this padding was added and the two silently went out of sync.
+        css_data += f"vte-terminal {{ padding-left: {VTE_LEFT_PADDING_PX}px; }}\n"
         css_data += self._tab_bar_css()
         if sys.platform == "darwin":
             # Modern macOS clips every NSWindow to a rounded rect on all
