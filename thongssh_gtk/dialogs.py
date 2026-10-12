@@ -112,6 +112,33 @@ def _populate_groups_combo(combo_group, group_iters, tree_store, active_parent_i
                 return
 
 
+def prompt_export_to_file(parent_window, nodes, suggested_name, on_saved=None):
+    """Shared Save dialog for exporting host(s)/group(s) to a file in
+    ThongSSH's own format — used by both the Settings "Hosts" page's Export
+    button and the host tree's per-host/per-group "Export..." context menu
+    item. `on_saved(path, wrapper)` runs after a successful write."""
+    file_chooser = Gtk.FileChooserDialog(
+        title=_("Export Hosts"),
+        transient_for=parent_window,
+        action=Gtk.FileChooserAction.SAVE,
+    )
+    file_chooser.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+    file_chooser.add_button(_("Save"), Gtk.ResponseType.OK)
+    file_chooser.set_current_name(suggested_name)
+
+    def on_response(dialog, response):
+        if response == Gtk.ResponseType.OK:
+            gfile = dialog.get_file()
+            if gfile:
+                wrapper = host_import.write_export_file(gfile.get_path(), nodes)
+                if on_saved:
+                    on_saved(gfile.get_path(), wrapper)
+        dialog.destroy()
+
+    file_chooser.connect("response", on_response)
+    file_chooser.present()
+
+
 class ResponseDialog(Adw.Window):
     """
     Common base for the modal dialogs below: adds a 'response' signal (with
@@ -1735,7 +1762,7 @@ class SettingsDialog(Adw.Window):
 
         # --- Import Hosts Page ---
         page_import = Adw.PreferencesPage()
-        page_import.set_title(_("Import Hosts"))
+        page_import.set_title(_("Hosts"))
         page_import.set_icon_name("document-open-symbolic")
 
         group_import_source = Adw.PreferencesGroup(
@@ -1744,7 +1771,14 @@ class SettingsDialog(Adw.Window):
                            "below — nothing is added to your host list until you pick what to "
                            "import and press Import."),
         )
+        self.import_source_group = group_import_source
         page_import.add(group_import_source)
+
+        self.import_mode_row = Adw.ComboRow(
+            title=_("Action"), model=Gtk.StringList.new([_("Import"), _("Export")])
+        )
+        self.import_mode_row.connect("notify::selected", self.on_import_mode_changed)
+        group_import_source.add(self.import_mode_row)
 
         import_format_labels = [label for _key, label, _fn, _mode, _default in host_import.SOURCE_FORMATS]
         self.import_format_row = Adw.ComboRow(
@@ -1754,31 +1788,49 @@ class SettingsDialog(Adw.Window):
         group_import_source.add(self.import_format_row)
 
         self.import_path_row = Adw.EntryRow(title=_("Path"))
+        self.import_path_row.connect("changed", self.on_import_path_changed)
         import_browse_button = Gtk.Button(icon_name="folder-open-symbolic")
         import_browse_button.set_valign(Gtk.Align.CENTER)
         import_browse_button.set_tooltip_text(_("Choose a file or folder"))
         import_browse_button.connect("clicked", self.on_import_browse_clicked)
         self.import_path_row.add_suffix(import_browse_button)
+        # Parse lives right on the Path row itself (not its own separate
+        # row/frame below it) — it only ever acts on whatever's in that
+        # same entry, so there's no reason for it to be a step removed
+        # from it. Starts insensitive; on_import_path_changed flips it the
+        # moment there's actually a path to parse.
+        self.import_parse_button = Gtk.Button(label=_("Parse"), css_classes=["suggested-action"])
+        self.import_parse_button.set_valign(Gtk.Align.CENTER)
+        self.import_parse_button.set_sensitive(False)
+        self.import_parse_button.connect("clicked", self.on_import_parse_clicked)
+        self.import_path_row.add_suffix(self.import_parse_button)
         group_import_source.add(self.import_path_row)
 
-        import_parse_row = Adw.ActionRow(title=_("Parse"))
-        import_parse_button = Gtk.Button(label=_("Parse"), css_classes=["suggested-action"])
-        import_parse_button.set_valign(Gtk.Align.CENTER)
-        import_parse_button.connect("clicked", self.on_import_parse_clicked)
-        import_parse_row.add_suffix(import_parse_button)
-        import_parse_row.set_activatable_widget(import_parse_button)
-        group_import_source.add(import_parse_row)
-
+        # A plain label, not its own PreferencesGroup row — wrapping it in
+        # an Adw.ActionRow/bare-add-to-group gave it the same normalized
+        # min-height as a real row even while empty. Hidden entirely
+        # (not just empty text) whenever there's nothing to report —
+        # measured live against the Sync page's own group-to-group gap:
+        # an EMPTY-but-still-visible label/box was still reserving its own
+        # ~25px, stacking on top of the normal 24px inter-group gap for a
+        # combined gap well beyond any other page's, even though the two
+        # gaps measured identically once there WAS status text keeping it
+        # visible. set_visible(False) removes it from layout entirely
+        # instead of just leaving a blank space the same size.
+        self.import_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.import_status_box.set_margin_start(12)
+        self.import_status_box.set_margin_end(12)
+        self.import_status_box.set_margin_top(6)
+        self.import_status_box.set_visible(False)
         self.import_status_label = Gtk.Label(label="", xalign=0, wrap=True)
         self.import_status_label.add_css_class("dim-label")
-        self.import_status_label.set_margin_start(12)
-        self.import_status_label.set_margin_end(12)
-        self.import_status_label.set_margin_bottom(6)
-        group_import_source.add(self.import_status_label)
+        self.import_status_label.set_hexpand(True)
+        self.import_status_box.append(self.import_status_label)
+        group_import_source.add(self.import_status_box)
 
         self._apply_import_format_default_path()
 
-        group_import_tree = Adw.PreferencesGroup(title=_("Hosts to Import"))
+        group_import_tree = Adw.PreferencesGroup(title=_("Hosts"))
         page_import.add(group_import_tree)
 
         import_select_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -1823,15 +1875,35 @@ class SettingsDialog(Adw.Window):
         import_scroller.set_margin_bottom(12)
         group_import_tree.add(import_scroller)
 
-        group_import_commit = Adw.PreferencesGroup()
-        page_import.add(group_import_commit)
-        import_commit_row = Adw.ActionRow(title=_("Import"))
-        import_commit_button = Gtk.Button(label=_("Import"), css_classes=["suggested-action"])
-        import_commit_button.set_valign(Gtk.Align.CENTER)
-        import_commit_button.connect("clicked", self.on_import_commit_clicked)
-        import_commit_row.add_suffix(import_commit_button)
-        import_commit_row.set_activatable_widget(import_commit_button)
-        group_import_commit.add(import_commit_row)
+        # Plain buttons, not wrapped in their own Adw.ActionRow/
+        # PreferencesGroup — that wrapping made it look like a clickable
+        # card/frame around the buttons rather than just buttons. Both
+        # start insensitive; stay that way until at least one row in the
+        # tree above is actually checked (see _update_import_commit_
+        # sensitivity, called from parsing/loading, Select/Deselect All,
+        # and every individual checkbox toggle). Export writes the checked
+        # subset to a file in ThongSSH's own format (whatever populated the
+        # tree — a parsed competitor file or the live config loaded via
+        # Action: Export below); Import merges it into the live host tree
+        # as before. Having both lets this page double as a one-way
+        # converter into ThongSSH's format, without touching the live
+        # config, by parsing a competitor file and pressing Export instead
+        # of Import.
+        import_commit_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        import_commit_row.set_halign(Gtk.Align.END)
+        import_commit_row.set_margin_start(12)
+        import_commit_row.set_margin_end(12)
+        import_commit_row.set_margin_top(6)
+        import_commit_row.set_margin_bottom(12)
+        self.export_commit_button = Gtk.Button(label=_("Export"))
+        self.export_commit_button.set_sensitive(False)
+        self.export_commit_button.connect("clicked", self.on_export_commit_clicked)
+        self.import_commit_button = Gtk.Button(label=_("Import"), css_classes=["suggested-action"])
+        self.import_commit_button.set_sensitive(False)
+        self.import_commit_button.connect("clicked", self.on_import_commit_clicked)
+        import_commit_row.append(self.export_commit_button)
+        import_commit_row.append(self.import_commit_button)
+        group_import_tree.add(import_commit_row)
 
         # --- User Commands Page (Placeholder) ---
         page_commands = Adw.PreferencesPage()
@@ -2650,14 +2722,14 @@ class SettingsDialog(Adw.Window):
         self.stack.add_titled_with_icon(page_commands, "commands", _("User Commands"), "document-edit-symbolic")
         self.stack.add_titled_with_icon(page_quickies, "quickies", _("Quickies"), "insert-text-symbolic")
         self.stack.add_titled_with_icon(page_sync, "sync", _("Sync"), "emblem-synchronizing-symbolic")
-        self.stack.add_titled_with_icon(page_import, "import_hosts", _("Import Hosts"), "document-open-symbolic")
+        self.stack.add_titled_with_icon(page_import, "import_hosts", _("Hosts"), "document-open-symbolic")
         self.stack.add_titled_with_icon(page_sftp, "sftp", _("SFTP"), "folder-remote-symbolic")
         # API and CLI Client are nested tabs *inside* this one "AI" entry
         # (see the Gtk.Stack/StackSwitcher built above) — not separate
         # top-level sidebar entries.
         self.stack.add_titled_with_icon(page_ai_scrolled, "ai", _("AI"), "dialog-messages-symbolic")
 
-        for page in (page_terminal, page_sftp, page_commands, page_interface, page_shortcuts, page_ai_shared, page_api, page_cli, page_sync):
+        for page in (page_terminal, page_sftp, page_commands, page_interface, page_shortcuts, page_ai_shared, page_api, page_cli, page_sync, page_import):
             _widen_preferences_clamp(page)
 
         for page in self.stack.get_pages():
@@ -3130,10 +3202,73 @@ class SettingsDialog(Adw.Window):
 
     # --- Import Hosts ---
 
+    def _set_import_status(self, text):
+        """Sets the status label's text AND whether its row is visible at
+        all — an empty string hides it entirely rather than leaving an
+        empty-but-still-allocated row (see import_status_box's own
+        construction comment for why that distinction matters here)."""
+        self.import_status_label.set_text(text)
+        self.import_status_box.set_visible(bool(text))
+
     def _selected_import_format(self):
         """(key, label, parser_fn, chooser_mode, default_path) for whatever
         self.import_format_row currently has selected."""
         return host_import.SOURCE_FORMATS[self.import_format_row.get_selected()]
+
+    def on_import_mode_changed(self, combo_row, _pspec):
+        """Action: Import/Export — switches what populates the checkbox
+        tree below. Import keeps the existing Format+Path+Parse flow;
+        Export hides both (there's no file to pick — the source is your
+        already-loaded live config) and loads the current host tree
+        straight into the tree immediately."""
+        is_export = combo_row.get_selected() == 1
+        self.import_format_row.set_visible(not is_export)
+        self.import_path_row.set_visible(not is_export)
+        if is_export:
+            self.import_source_group.set_title(_("Current Hosts"))
+            self.import_source_group.set_description(
+                _("Loads your current host tree below — check what to include, then press "
+                  "Export to save it to a file in ThongSSH's own format.")
+            )
+            self._load_export_source_tree()
+        else:
+            self.import_source_group.set_title(_("Source"))
+            self.import_source_group.set_description(
+                _("Parses another SSH/terminal client's config file into a checkbox tree "
+                  "below — nothing is added to your host list until you pick what to "
+                  "import and press Import.")
+            )
+            self.import_tree_store.clear()
+            self._set_import_status("")
+            self._update_import_commit_sensitivity()
+
+    def _load_export_source_tree(self):
+        """Walks the live main host tree into the same checkbox tree the
+        Import side populates after a Parse — so Export reuses every bit
+        of the existing checkbox/Select-All/sensitivity machinery."""
+        model = self.parent_window.main_tree_store
+        nodes = []
+        tree_iter = model.get_iter_first()
+        while tree_iter is not None:
+            # The synthetic top-level "local machine" row isn't a real host
+            # (see on_tree_right_click's own "local" guard) — never part of
+            # an export.
+            if model.get_value(tree_iter, COL_TYPE) != "local":
+                nodes.append(host_import.tree_store_node_to_dict(model, tree_iter, COL_TYPE, COL_DATA))
+            tree_iter = model.iter_next(tree_iter)
+
+        self.import_tree_store.clear()
+        self._populate_import_tree_store(None, nodes)
+        self._update_import_commit_sensitivity()
+
+        result = host_import.ImportResult()
+        for node in nodes:
+            result.count_node(node)
+        self._set_import_status(
+            _("Loaded {hosts} hosts in {groups} groups from your current configuration.").format(
+                hosts=result.host_count, groups=result.group_count
+            )
+        )
 
     def _apply_import_format_default_path(self):
         """Pre-fills the path row with the selected format's own default
@@ -3147,8 +3282,12 @@ class SettingsDialog(Adw.Window):
 
     def on_import_format_changed(self, combo_row, _pspec):
         self._apply_import_format_default_path()
-        self.import_status_label.set_text("")
+        self._set_import_status("")
         self.import_tree_store.clear()
+        self._update_import_commit_sensitivity()
+
+    def on_import_path_changed(self, entry):
+        self.import_parse_button.set_sensitive(bool(entry.get_text().strip()))
 
     def on_import_browse_clicked(self, button):
         _key, _label, _fn, mode, _default = self._selected_import_format()
@@ -3187,18 +3326,18 @@ class SettingsDialog(Adw.Window):
         key, label, parser_fn, _mode, _default = self._selected_import_format()
         path = self.import_path_row.get_text().strip()
         if not path:
-            self.import_status_label.set_text(_("Choose a file or folder first."))
+            self._set_import_status(_("Choose a file or folder first."))
             return
         try:
             result = parser_fn(os.path.expanduser(path))
         except ImportError as e:
             # e.g. PyYAML missing for Asbru-CM — a clear, actionable
             # message rather than a traceback or a silently empty tree.
-            self.import_status_label.set_text(str(e))
+            self._set_import_status(str(e))
             self.import_tree_store.clear()
             return
         except (OSError, ValueError) as e:
-            self.import_status_label.set_text(_("Could not parse {path} as {format}: {error}").format(
+            self._set_import_status(_("Could not parse {path} as {format}: {error}").format(
                 path=path, format=label, error=e
             ))
             self.import_tree_store.clear()
@@ -3206,15 +3345,16 @@ class SettingsDialog(Adw.Window):
 
         self.import_tree_store.clear()
         self._populate_import_tree_store(None, result.nodes)
+        self._update_import_commit_sensitivity()
         if result.skipped_count:
-            self.import_status_label.set_text(
+            self._set_import_status(
                 _("Parsed {hosts} hosts in {groups} groups ({skipped} entries skipped — unsupported "
                   "or incomplete).").format(
                     hosts=result.host_count, groups=result.group_count, skipped=result.skipped_count
                 )
             )
         else:
-            self.import_status_label.set_text(
+            self._set_import_status(
                 _("Parsed {hosts} hosts in {groups} groups.").format(
                     hosts=result.host_count, groups=result.group_count
                 )
@@ -3230,6 +3370,25 @@ class SettingsDialog(Adw.Window):
 
     def _set_all_import_rows_checked(self, checked):
         self._set_row_checked_recursive(self.import_tree_store.get_iter_first(), checked)
+        self._update_import_commit_sensitivity()
+
+    def _any_import_row_checked(self, tree_iter):
+        while tree_iter is not None:
+            if self.import_tree_store.get_value(tree_iter, 0):
+                return True
+            child_iter = self.import_tree_store.iter_children(tree_iter)
+            if child_iter is not None and self._any_import_row_checked(child_iter):
+                return True
+            tree_iter = self.import_tree_store.iter_next(tree_iter)
+        return False
+
+    def _update_import_commit_sensitivity(self):
+        """Both Import and Export stay greyed out until at least one row
+        (host or group) in the tree is actually checked — pressing either
+        with nothing selected would otherwise just silently do nothing."""
+        sensitive = self._any_import_row_checked(self.import_tree_store.get_iter_first())
+        self.import_commit_button.set_sensitive(sensitive)
+        self.export_commit_button.set_sensitive(sensitive)
 
     def on_import_cell_toggled(self, cell_renderer, path_str):
         tree_iter = self.import_tree_store.get_iter(path_str)
@@ -3241,6 +3400,7 @@ class SettingsDialog(Adw.Window):
         child_iter = self.import_tree_store.iter_children(tree_iter)
         if child_iter is not None:
             self._set_row_checked_recursive(child_iter, new_value)
+        self._update_import_commit_sensitivity()
 
     def _collect_checked_import_nodes(self, tree_iter):
         """Walks the checkbox tree, returning only CHECKED nodes — an
@@ -3307,11 +3467,11 @@ class SettingsDialog(Adw.Window):
     def on_import_commit_clicked(self, button):
         root_iter = self.import_tree_store.get_iter_first()
         if root_iter is None:
-            self.import_status_label.set_text(_("Nothing parsed yet — choose a source and press Parse."))
+            self._set_import_status(_("Nothing parsed yet — choose a source and press Parse."))
             return
         kept_nodes = self._collect_checked_import_nodes(root_iter)
         if not kept_nodes:
-            self.import_status_label.set_text(_("Nothing selected to import."))
+            self._set_import_status(_("Nothing selected to import."))
             return
 
         key, label, _fn, _mode, _default = self._selected_import_format()
@@ -3330,10 +3490,40 @@ class SettingsDialog(Adw.Window):
         self.parent_window.rebuild_config_and_save()
 
         host_count = sum(1 for _n in self._walk_host_configs(wrapper))
-        self.import_status_label.set_text(
+        self._set_import_status(
             _("Imported {count} hosts into \"{group}\".").format(count=host_count, group=wrapper_name)
         )
         self.import_tree_store.clear()
+        self._update_import_commit_sensitivity()
+
+    def on_export_commit_clicked(self, button):
+        """Saves the checked subset of the tree (parsed from a competitor
+        file, or loaded from the live config via Action: Export) to a file
+        in ThongSSH's own format. Unlike Import, this never touches the
+        live host tree, so the tree here is left as-is afterwards — you can
+        export it again elsewhere, or still press Import."""
+        root_iter = self.import_tree_store.get_iter_first()
+        if root_iter is None:
+            self._set_import_status(_("Nothing to export yet."))
+            return
+        kept_nodes = self._collect_checked_import_nodes(root_iter)
+        if not kept_nodes:
+            self._set_import_status(_("Nothing selected to export."))
+            return
+
+        result = host_import.ImportResult()
+        for node in kept_nodes:
+            result.count_node(node)
+        date_str = datetime.datetime.now().strftime("%Y%m%d")
+
+        def on_saved(path, _wrapper):
+            self._set_import_status(
+                _("Exported {hosts} hosts in {groups} groups to {path}.").format(
+                    hosts=result.host_count, groups=result.group_count, path=path
+                )
+            )
+
+        prompt_export_to_file(self, kept_nodes, f"thongssh_export_{date_str}.json", on_saved)
 
     def _walk_host_configs(self, node):
         if node.get("type") == "group":

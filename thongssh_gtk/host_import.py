@@ -16,18 +16,28 @@ every other HOST_CONFIG_TEMPLATE field exactly the way a hand-added host
 would get them (key_path, forward_x, post_connect_commands, ...).
 
 Format-accuracy note: ssh_config, mRemoteNG's confCons.xml, MobaXterm's
-.mxtsessions, and Asbru-CM's asbru.yml were confirmed against real
-documentation/source. GNOME Connection Manager's and SecureCRT's exact file
-layouts could NOT be independently verified (no official spec, sparse/
-conflicting sources) — those two parsers are best-effort and marked as such
-below. Every parser fails soft per-entry (skips what it can't confidently
-read, appends to a running `skipped` counter) rather than raising, so one
-wrong assumption about an obscure field degrades to "fewer hosts parsed,"
-never a crash.
+.mxtsessions, Asbru-CM's asbru.yml, and RustConn's native .rcn export were
+confirmed against real documentation/source (RustConn's directly against its
+own export/native.rs and models/connection.rs|group.rs on GitHub). GNOME
+Connection Manager's and SecureCRT's exact file layouts could NOT be
+independently verified (no official spec, sparse/conflicting sources) —
+those two parsers are best-effort and marked as such below. Every parser
+fails soft per-entry (skips what it can't confidently read, appends to a
+running `skipped` counter) rather than raising, so one wrong assumption
+about an obscure field degrades to "fewer hosts parsed," never a crash.
+
+This module also provides the other direction — exporting ThongSSH's own
+host tree (or a subset of it) back out as a file in ThongSSH's own JSON
+shape (see write_export_file below). That file is both a valid Import
+Hosts source (parse_own) and a drop-in replacement for hosts.json itself,
+which combined with every parser above also makes this a one-way converter
+into ThongSSH's format: parse a competitor's config, then Export instead of
+Import to get a plain .json file without touching the live host list.
 """
 
 import configparser
 import glob
+import json
 import logging
 import os
 import re
@@ -86,7 +96,6 @@ def parse_own(path):
     """A hosts.json-shaped file — another ThongSSH install's export, or a
     backup copy. Just validated and handed back as-is (already migrated by
     the caller's shared _recursive_migrate pass)."""
-    import json
     result = ImportResult()
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -496,6 +505,96 @@ def parse_mobaxterm(path):
     return result
 
 
+# --- 8. RustConn ---------------------------------------------------------------
+
+def parse_rustconn(path):
+    """RustConn's native .rcn export (plain JSON): a top-level object with
+    flat "connections" and "groups" lists, each referencing its parent via
+    group_id/parent_id (None/omitted for a root-level item) rather than
+    nesting — confirmed directly against RustConn's own
+    export/native.rs (NativeExport) and models/connection.rs|group.rs on
+    GitHub, not best-effort like GCM/SecureCRT above. Only "ssh"/"telnet"
+    connections are kept; RDP/VNC/SPICE/Zero Trust/Serial/Kubernetes/MOSH/
+    Web have no ThongSSH equivalent and are skipped."""
+    result = ImportResult()
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict) or "connections" not in data or "groups" not in data:
+        raise ValueError("Not a RustConn .rcn export (expected top-level 'connections'/'groups').")
+
+    groups_by_id = {g["id"]: g for g in data.get("groups", []) if isinstance(g, dict) and g.get("id")}
+    connections_by_id = {c["id"]: c for c in data.get("connections", []) if isinstance(c, dict) and c.get("id")}
+
+    children_by_parent = {}
+    for group in groups_by_id.values():
+        children_by_parent.setdefault(group.get("parent_id"), []).append(("group", group["id"]))
+    for conn in connections_by_id.values():
+        children_by_parent.setdefault(conn.get("group_id"), []).append(("conn", conn["id"]))
+
+    def build_conn(conn_id):
+        conn = connections_by_id.get(conn_id)
+        protocol = (conn.get("protocol") or "").lower()
+        if protocol not in ("ssh", "telnet"):
+            result.skipped_count += 1
+            return None
+        host = conn.get("host")
+        if not host:
+            result.skipped_count += 1
+            return None
+        port = conn.get("port") if isinstance(conn.get("port"), int) else None
+        node = _make_host_node(conn.get("name"), host, port=port, user=conn.get("username"), protocol=protocol)
+        key_path = (conn.get("protocol_config") or {}).get("key_path")
+        if key_path:
+            node["config"]["key_path"] = key_path
+        return node
+
+    def build_group(group_id):
+        group = groups_by_id[group_id]
+        children = []
+        for kind, child_id in children_by_parent.get(group_id, []):
+            child = build_group(child_id) if kind == "group" else build_conn(child_id)
+            if child is not None:
+                children.append(child)
+        return _make_group_node(group.get("name") or "Unnamed", children)
+
+    for kind, top_id in children_by_parent.get(None, []):
+        node = build_group(top_id) if kind == "group" else build_conn(top_id)
+        if node is not None:
+            result.add_top_level(node)
+            result.count_node(node)
+    return result
+
+
+# --- Export (the reverse direction) ---------------------------------------------
+
+def tree_store_node_to_dict(model, tree_iter, col_type, col_data):
+    """Walks one Gtk.TreeStore row (and its subtree) into ThongSSH's own
+    node shape. Duck-typed on `model` (just get_value/iter_children/
+    iter_next) so this module stays GTK-import-free; callers pass their own
+    tree store plus its COL_TYPE/COL_DATA column indices."""
+    node_type = model.get_value(tree_iter, col_type)
+    data = model.get_value(tree_iter, col_data)
+    if node_type == "group":
+        children = []
+        child_iter = model.iter_children(tree_iter)
+        while child_iter is not None:
+            children.append(tree_store_node_to_dict(model, child_iter, col_type, col_data))
+            child_iter = model.iter_next(child_iter)
+        return {"type": "group", "name": data.get("name"), "expanded": data.get("expanded", True),
+                "children": children}
+    return {"type": "host", "config": dict(data)}
+
+
+def write_export_file(path, nodes):
+    """Writes `nodes` (a list of ThongSSH's own node-shape dicts) wrapped
+    exactly like hosts.json's own root — re-importable via parse_own AND
+    usable as a direct drop-in replacement for hosts.json itself."""
+    wrapper = {"type": "group", "name": "Root", "expanded": True, "children": nodes}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(wrapper, f, indent=2, ensure_ascii=False)
+    return wrapper
+
+
 # --- Dispatch table ------------------------------------------------------------
 
 # (key, display label, parser fn, chooser mode "file"|"folder", default path or None)
@@ -507,4 +606,5 @@ SOURCE_FORMATS = [
     ("securecrt", "SecureCRT", parse_securecrt, "folder", None),
     ("mremoteng", "mRemoteNG", parse_mremoteng, "file", None),
     ("mobaxterm", "MobaXterm", parse_mobaxterm, "file", None),
+    ("rustconn", "RustConn (.rcn)", parse_rustconn, "file", None),
 ]

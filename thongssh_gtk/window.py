@@ -20,8 +20,9 @@ from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio
 
 from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, WATERMARK_POSITIONS, VTE_LEFT_PADDING_PX, resource_path, __version__
 from .cli_providers import is_available as cli_is_available
-from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog, QuickyDialog # Removed SettingsDialog
+from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog, QuickyDialog, prompt_export_to_file # Removed SettingsDialog
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
+from . import host_import
 from .tab_window_base import TerminalPaneWindow, _tabview_has_page
 from .tab_colors import TabColors
 from .detached_tab_window import DetachedTabWindow
@@ -3241,6 +3242,14 @@ class ThongSSHWindow(TerminalPaneWindow):
         action_clone.connect("activate", self.on_menu_clone_host)
         self.add_action(action_clone)
 
+        action_export_host = Gio.SimpleAction.new("export-host", None)
+        action_export_host.connect("activate", self.on_menu_export_host)
+        self.add_action(action_export_host)
+
+        action_export_group = Gio.SimpleAction.new("export-group", None)
+        action_export_group.connect("activate", self.on_menu_export_group)
+        self.add_action(action_export_group)
+
         # Host-tree-only — the tab context menu's own "Connect SFTP" is the
         # app-scoped app.open-sftp (see app.py / TerminalPaneWindow.
         # open_sftp_for_tab_page), unrelated to this action despite the
@@ -3321,6 +3330,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         host_menu.append(_("Clone"), "win.clone")
         host_menu.append(_("Connect SFTP"), "win.open-sftp")
         host_menu.append_submenu(_("Copy to Clipboard"), self.copy_host_menu)
+        host_menu.append(_("Export..."), "win.export-host")
         host_menu.append(_("Delete"), "win.delete")
         self.user_commands_menu_section = Gio.Menu()
         host_menu.append_section(None, self.user_commands_menu_section)
@@ -3328,6 +3338,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         # Menu for a GROUP
         group_menu = Gio.Menu()
         group_menu.append(_("Edit..."), "win.edit-group")
+        group_menu.append(_("Export..."), "win.export-group")
         group_menu.append(_("Delete"), "win.delete")
 
         quicky_menu = Gio.Menu()
@@ -3666,6 +3677,29 @@ class ThongSSHWindow(TerminalPaneWindow):
             new_config
         ])
         self.rebuild_config_and_save()
+
+    def on_menu_export_host(self, action, param):
+        """Callback for the 'win.export-host' GAction — saves just this one
+        host to a file in ThongSSH's own format (also a valid Import Hosts
+        source, or a drop-in hosts.json replacement)."""
+        selection = self.tree_view.get_selection()
+        model, tree_iter = selection.get_selected()
+        if not tree_iter:
+            return
+        node = host_import.tree_store_node_to_dict(model, tree_iter, COL_TYPE, COL_DATA)
+        name = node.get("config", {}).get("name") or "host"
+        prompt_export_to_file(self, [node], f"{name}.json")
+
+    def on_menu_export_group(self, action, param):
+        """Callback for the 'win.export-group' GAction — saves this group
+        (and everything under it) to a file in ThongSSH's own format."""
+        selection = self.tree_view.get_selection()
+        model, tree_iter = selection.get_selected()
+        if not tree_iter:
+            return
+        node = host_import.tree_store_node_to_dict(model, tree_iter, COL_TYPE, COL_DATA)
+        name = node.get("name") or "group"
+        prompt_export_to_file(self, [node], f"{name}.json")
 
     def on_add_group_clicked(self, *args):
         """Callback for the 'Create Group' button."""
