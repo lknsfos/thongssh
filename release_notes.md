@@ -1,5 +1,17 @@
 # Release Notes
 
+### 🎉 What's New in 0.11.0 — One-Year Anniversary Edition
+
+Multi-select in the host tree with bulk editing, a Smart Search filter, importing from RustConn plus a new Export side, and a proper command history for Batch Command:
+
+* **New: multi-select hosts with bulk Edit** — Ctrl/Click or Shift/Click to select several hosts in the tree at once (selecting a group alongside them clears the bulk action, since there's nothing sensible to do across mixed types). Right-click → **Edit...** on the selection to move them all into one group and/or stamp a prefix/postfix onto every one of their names in a single pass.
+* **New: Smart Search for the host tree** — a funnel toggle next to the search bar's Up/Down buttons. On, it hides every host that doesn't match (and every group with no matching host left inside it) instead of just skipping over them; off, it behaves exactly as before. Remembered across restarts.
+* **New: RustConn import** — alongside SSH config, GNOME Connection Manager, Asbru-CM, SecureCRT, mRemoteNG and MobaXterm, Import Hosts now reads RustConn's native `.rcn` export too.
+* **New: Export** — Import Hosts is now Settings → **Hosts**, with an Import/Export switch at the top. Export writes the checked hosts/groups to a file in ThongSSH's own format — re-importable, or droppable straight in as a replacement `hosts.json`. Parsing a competitor's file and pressing Export instead of Import turns the page into a one-way converter to ThongSSH's format without touching your live config. The host tree's own right-click menu also gained **Export...** for a single host or group.
+* **New: Batch Command remembers "Close window after send"** and gained a proper **command history** — Up/Down cycle through past commands (even mid multi-line edit, at the first/last line), a history button opens a pickable list, and Clear History wipes it. Capped at 300 entries.
+* **Changed: the tab strip's right-click menu no longer has "Disconnect"** — it only ever closed the tab, duplicating the tab's own close button while sitting first in the menu, the easiest item to hit by mistake.
+* **New: double-click action for tabs** — Settings → General → Tabs lets a tab's double-click run Duplicate, Reconnect, Disconnect, Detach, or Rename instead of doing nothing.
+
 ### 🐛 What's New in 0.10.4.1
 
 A quick fix for "Highlight all" misplacing its highlights:

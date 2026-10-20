@@ -640,6 +640,57 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         else:  # terminal
             self.start_session(tab_info["config"])
 
+    def _attach_tab_bar_double_click(self, tab_bar, tabview, new_tab_btn):
+        """Wires interface.tab_double_click_action: double-clicking a tab
+        in the given Adw.TabBar runs the configured action on it. Shared by
+        ThongSSHWindow._create_pane_tabview and DetachedTabWindow (each
+        builds its own Adw.TabBar).
+
+        Adw.TabBar has no public "which tab is at this point"/double-click
+        API, so this uses a GestureClick on the bar itself (BUBBLE phase,
+        so it only sees the event after the tab's own internal click
+        handling — part of Adw's private tab-button widget — has already
+        run and switched the active page) plus Gtk.Widget.pick() purely to
+        reject clicks that land on the start-action ("+") button or on
+        empty tab-bar background rather than an actual tab. Once a real
+        tab is confirmed, tabview.get_selected_page() IS the double-clicked
+        tab, since the first of the two clicks already selected it."""
+        gesture = Gtk.GestureClick.new()
+        gesture.set_button(1)
+        gesture.set_propagation_phase(Gtk.PropagationPhase.BUBBLE)
+
+        def on_pressed(gesture, n_press, x, y):
+            if n_press != 2:
+                return
+            picked = tab_bar.pick(x, y, Gtk.PickFlags.DEFAULT)
+            if picked is None or picked is tab_bar:
+                return  # empty tab-bar background, not a tab
+            widget = picked
+            while widget is not None and widget is not tab_bar:
+                if widget is new_tab_btn:
+                    return  # the "+" new-local-terminal button, not a tab
+                widget = widget.get_parent()
+            page = tabview.get_selected_page()
+            if page is not None:
+                self._run_tab_double_click_action(page)
+
+        gesture.connect("pressed", on_pressed)
+        tab_bar.add_controller(gesture)
+
+    def _run_tab_double_click_action(self, page):
+        action = self.settings_manager.get("interface.tab_double_click_action")
+        if action == "duplicate":
+            self.on_menu_tab_duplicate(None, None, page=page)
+        elif action == "reconnect":
+            self.on_menu_tab_reconnect(None, None, page=page)
+        elif action == "disconnect":
+            self.on_menu_tab_disconnect(None, None, page=page)
+        elif action == "detach":
+            self.detach_tab_page(page)
+        elif action == "rename":
+            self.rename_tab_page(page)
+        # "nothing" (or any unrecognized value) — do nothing.
+
     def on_menu_open_ssh_from_tab(self, action, param, page=None):
         """Opens a terminal session based on the given (or active) SFTP tab's config."""
         if page is None:
@@ -734,7 +785,10 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         window's own tab_copy_host_menu submenu instance (mutated live per
         right-click by on_tabview_setup_menu/_populate_tab_copy_host_menu)."""
         tab_menu_model = Gio.Menu()
-        tab_menu_model.append(_("Disconnect"), "app.tab-disconnect")
+        # "Disconnect" used to be here, first in the list — it just closed
+        # the tab (same as its own native close button/"x"), duplicating
+        # that with no added function, while being the easiest item to hit
+        # by accident since it was first.
         tab_menu_model.append(_("Reconnect"), "app.tab-reconnect")
         tab_menu_model.append(_("Duplicate"), "app.tab-duplicate")
         tab_menu_model.append(_("Detach"), "app.tab-detach")

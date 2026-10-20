@@ -23,6 +23,7 @@ DEFAULT_SETTINGS = {
     "client.sshpass_path": shutil.which("sshpass") or "/usr/bin/sshpass",
     "client.log_dir": "", # empty = fall back to .config_path's terminal_logs_path, then CONFIG_DIR (see paths.resolve_log_dir)
     "user_commands": [],
+    "batch_command_history": [], # list[str], most-recent-first, capped at 300 — BatchCommandDialog's Up/Down history navigation and history popover. Not synced (sync_settings.py) — too ephemeral/personal to be worth merging across machines, unlike user_commands.
     "sftp.local_default_path": "~/Downloads",
     "sftp.local_default_sort_column": "name", # name, size, date
     "sftp.local_default_sort_direction": "asc", # asc, desc
@@ -43,6 +44,9 @@ DEFAULT_SETTINGS = {
     "interface.find_highlight_color": "#ffff00", # hex — default tint color for the "Highlight all" terminal overlay; each find bar's own color picker (see TerminalPaneWindow._build_find_bar) starts here but can be changed per-pane for that session without changing this default
     "interface.debug_mode": False, # Verbose debug logging to the console; off by default
     "interface.host_search_position": "bottom", # "top" or "bottom" — where the host-tree search bar sits
+    "interface.host_tree_smart_search": False, # Host search bar's "Smart Search" toggle — when on, non-matching hosts AND groups with no matching descendant are hidden entirely instead of just being skipped by the Up/Down match navigation; see window.py's tree_filter/_smart_search_visible_func
+    "interface.tab_double_click_action": "nothing", # "nothing"/"duplicate"/"reconnect"/"disconnect"/"detach"/"rename" — double-clicking a tab in the tab strip (not its native single-click select) runs this action on it, see TerminalPaneWindow._attach_tab_bar_double_click
+    "interface.batch_command_close_after_send": True, # BatchCommandDialog's own "Close window after send" checkbox — remembered across dialog opens
     # Gtk accelerator names (Gtk.accelerator_parse/_name understand them
     # directly, e.g. "<Control>w") for every keyboard shortcut this app
     # used to hardcode — several collide with standard shell keybindings

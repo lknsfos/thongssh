@@ -20,7 +20,7 @@ from gi.repository import Gtk, Adw, Gdk, GLib, Vte, Pango, Gio
 
 from .constants import APP_ID, COL_NAME, COL_TYPE, COL_ICON, COL_DATA, AI_STANDARD_PROVIDERS, CLI_STANDARD_PROVIDERS, WATERMARK_POSITIONS, VTE_LEFT_PADDING_PX, resource_path, __version__
 from .cli_providers import is_available as cli_is_available
-from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog, QuickyDialog, prompt_export_to_file # Removed SettingsDialog
+from .dialogs import InputDialog, HostDialog, GroupDialog, BatchCommandDialog, QuickyDialog, BulkEditHostsDialog, prompt_export_to_file # Removed SettingsDialog
 from .config import load_and_migrate_config, save_config, CONFIG_DIR
 from . import host_import
 from .tab_window_base import TerminalPaneWindow, _tabview_has_page
@@ -352,14 +352,38 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         self.search_up_button = Gtk.Button(icon_name="go-up-symbolic")
         self.search_down_button = Gtk.Button(icon_name="go-down-symbolic")
+        # Smart Search — hides every non-matching host AND every group with
+        # no matching descendant, instead of just leaving the full tree
+        # shown and skipping over non-matches with Up/Down. A funnel reads
+        # as "filter" at a glance — distinct from a magnifying glass, which
+        # would just look like a second, confusing "search" icon right next
+        # to the search box itself. funnel-symbolic is a newer Adwaita
+        # addition plenty of still-current icon themes don't ship
+        # (confirmed missing even on this app's own dev machine, falling
+        # back to GTK's broken-icon glyph) — icons/funnel-symbolic.svg
+        # bundles our own, registered onto the icon theme's search path
+        # right above (see this __init__'s "bundled icon resolvable by
+        # name" block), so it resolves the same way regardless of the
+        # system theme. edit-find-symbolic (ancient, universally shipped)
+        # is a last-resort fallback only if that file is ever missing.
+        smart_search_icon = self._pick_available_icon("funnel-symbolic", "edit-find-symbolic")
+        self.smart_search_toggle = Gtk.ToggleButton(icon_name=smart_search_icon)
+        self.smart_search_toggle.set_tooltip_text(_("Smart Search — hide non-matching hosts and groups"))
+        self.smart_search_toggle.set_active(self.settings_manager.get("interface.host_tree_smart_search"))
+        self.smart_search_toggle.connect("toggled", self.on_smart_search_toggled)
         # "flat" + "circular" (the standard GNOME compact-icon-button combo)
         # instead of full-size bordered buttons — these are just a pair of
-        # nav arrows next to a search box, not primary actions.
-        for _btn in (self.search_up_button, self.search_down_button):
+        # nav arrows (plus the filter toggle) next to a search box, not
+        # primary actions. ".thongssh-search-nav-btn" (setup_css) shrinks
+        # their min-size further still — "circular" alone doesn't override
+        # the theme's own default clickable-target minimum.
+        for _btn in (self.search_up_button, self.search_down_button, self.smart_search_toggle):
             _btn.add_css_class("flat")
             _btn.add_css_class("circular")
+            _btn.add_css_class("thongssh-search-nav-btn")
         search_box.append(self.search_up_button)
         search_box.append(self.search_down_button)
+        search_box.append(self.smart_search_toggle)
 
         self.search_bar.set_child(search_box)
         self.search_results = []
@@ -372,8 +396,24 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         # Tree model (4 columns). Using Python types works when GObject is correctly imported.
         self.main_tree_store = Gtk.TreeStore(str, str, str, object)
-        self.view_tree_store = self.main_tree_store # The model for display (can be changed)
-        self.is_filtered = False # Flag indicating if a filter is active
+        self.is_filtered = False # True only while Smart Search is actually hiding rows (toggle on AND a non-empty query) — see on_smart_search_toggled/on_search_changed
+        self._smart_search_query = None # compiled regex, or None — _smart_search_visible_func's predicate; None means "show everything"
+
+        # Smart Search (the search bar's funnel toggle): a Gtk.TreeModelFilter
+        # wrapping main_tree_store, built once and kept around for the rest
+        # of this window's life — toggling on/off later just calls set_model()
+        # on self.tree_view to swap between this and main_tree_store itself
+        # (see on_smart_search_toggled), never rebuilt. main_tree_store stays
+        # the one real data source either way (rebuild_config_and_save,
+        # every edit/clone/add/remove action, all read/write it directly,
+        # never the filter) — this is purely a display-time view over it.
+        self.tree_filter = self.main_tree_store.filter_new()
+        self.tree_filter.set_visible_func(self._smart_search_visible_func)
+        # The model for display (can be changed) — see _apply_smart_search_state,
+        # the single place that ever reassigns this. Always main_tree_store at
+        # startup regardless of the remembered toggle state: the search box
+        # always starts empty, and with no query there's nothing to filter.
+        self.view_tree_store = self.main_tree_store
 
 
         # --- Sorting setup ---
@@ -416,6 +456,15 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         self.tree_view = Gtk.TreeView(model=self.view_tree_store)
         self.tree_view.set_headers_visible(False)
+        # Ctrl/Shift-click to select several hosts at once — for the bulk
+        # "Edit..." context menu item (move to group / add prefix-postfix,
+        # see _show_bulk_host_menu/on_menu_bulk_edit_hosts). Every other
+        # existing single-row action (Edit, Clone, Connect, SFTP, ...)
+        # still only ever acts on one row: Gtk.TreeSelection.get_selected()
+        # hard-asserts once the mode is MULTIPLE (even with just one row
+        # selected), so every call site goes through _get_selected_tree_
+        # iter()/_get_selected_tree_iters() instead now.
+        self.tree_view.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
 
         # Disable the old built-in search, as we now have our own SearchBar
         self.tree_view.set_enable_search(False)
@@ -478,9 +527,13 @@ class ThongSSHWindow(TerminalPaneWindow):
         self.tree_view.add_controller(self.tree_left_gesture)
         # RIGHT button gesture — claim on press (and cancel left gesture to
         # prevent deadlock), show menu on release so the button-release event
-        # is never delivered into the open popover.
+        # is never delivered into the open popover. CAPTURE phase so our own
+        # press handler (which also settles what right-clicking does to the
+        # selection — see its docstring) runs before GtkTreeView's own
+        # built-in click-to-select handling does.
         right_click_gesture = Gtk.GestureClick.new()
         right_click_gesture.set_button(Gdk.BUTTON_SECONDARY)
+        right_click_gesture.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         right_click_gesture.connect("pressed", self._on_tree_right_press)
         right_click_gesture.connect("released", self.on_tree_right_click)
         self.tree_view.add_controller(right_click_gesture)
@@ -825,6 +878,19 @@ class ThongSSHWindow(TerminalPaneWindow):
         }}
         """
 
+    def _pick_available_icon(self, *candidates):
+        """Returns the first icon name in `candidates` that the current
+        icon theme actually has, falling back to the last one if none of
+        them do (so a typo'd/removed icon name still renders GTK's own
+        broken-icon glyph instead of silently crashing) — some symbolic
+        icon names (e.g. funnel-symbolic) are newer Adwaita additions
+        that plenty of still-current icon themes simply don't ship."""
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        for name in candidates:
+            if theme.has_icon(name):
+                return name
+        return candidates[-1]
+
     def setup_css(self):
         """Applies custom CSS to the application. Re-callable: reuses the
         same Gtk.CssProvider (added to the display exactly once) so this
@@ -1027,6 +1093,14 @@ class ThongSSHWindow(TerminalPaneWindow):
         .thongssh-host-tree-divider {
             border-right: 1px solid alpha(currentColor, 0.25);
         }
+        /* Host search bar's Up/Down/Smart-Search buttons — "circular"
+           alone doesn't override the theme's own default clickable-target
+           min-size, same lesson as .thongssh-find-bar-btn below. */
+        .thongssh-search-nav-btn {
+            min-width: 16px;
+            min-height: 16px;
+            padding: 1px;
+        }
         /* In-terminal find bar (TerminalPaneWindow._build_find_bar) —
            same lesson as .quicky-tiny-button above: "flat" alone doesn't
            touch the theme's own default clickable-target min-size, only
@@ -1121,13 +1195,30 @@ class ThongSSHWindow(TerminalPaneWindow):
             while tree_iter:
                 node_type = model.get_value(tree_iter, COL_TYPE)
                 data = model.get_value(tree_iter, COL_DATA)
-                path = model.get_path(tree_iter)
 
                 if node_type == "group":
                     child_iter = model.iter_children(tree_iter)
                     group_children = iter_tree(model, child_iter)
                     data['children'] = group_children
-                    data['expanded'] = self.tree_view.row_expanded(path) # ✨ Save expansion state
+                    # self.tree_view.row_expanded(path) only means what we
+                    # want it to when `path` (always in main_tree_store's
+                    # own coordinate space, since that's `model` here) and
+                    # tree_view's ACTUAL current model agree on path
+                    # numbering — true when showing main_tree_store itself,
+                    # but NOT the Smart Search Gtk.TreeModelFilter, whose
+                    # paths skip hidden rows. While filtered, every visible
+                    # group is auto-expanded anyway (_apply_smart_search_
+                    # state) regardless of its real saved state, so that's
+                    # not the user's actual intended layout either — just
+                    # leave whatever was already saved alone rather than
+                    # overwrite it with a value that's only true for this
+                    # transient filtered display (this is also what was
+                    # silently collapsing a group that was expanded before
+                    # filtering, the moment the filter cleared and this ran
+                    # against stale/mismatched path coordinates).
+                    if not self.is_filtered:
+                        path = model.get_path(tree_iter)
+                        data['expanded'] = self.tree_view.row_expanded(path)
                     children.append(data)
 
                 elif node_type == "host":
@@ -1325,7 +1416,61 @@ class ThongSSHWindow(TerminalPaneWindow):
         try:
             self.tree_view.expand_all()
             for group_iter in groups_to_collapse:
-                self.tree_view.collapse_row(self.main_tree_store.get_path(group_iter))
+                # Converts the main_tree_store-space path to whatever model
+                # the tree view is ACTUALLY showing right now (itself, or
+                # the Smart Search filter) — same reasoning as
+                # _main_path_to_view_path's other callers.
+                view_path = self._main_path_to_view_path(self.main_tree_store.get_path(group_iter))
+                if view_path is not None:
+                    self.tree_view.collapse_row(view_path)
+        finally:
+            self._restoring_tree_state = False
+
+        # A rebuild that happens WHILE Smart Search has a live query (e.g.
+        # changing the host tree's Sort mode while actively filtering) can
+        # leave a group's own visibility stuck stale: Gtk.TreeModelFilter
+        # tests a group's visible-func the moment it's inserted, which (for
+        # an incremental build like this one) is always BEFORE its children
+        # exist yet, and never automatically re-tests a parent just because
+        # a child was added later. An explicit refilter() re-tests every
+        # row fresh, sidestepping that entirely.
+        if self.is_filtered:
+            self.tree_filter.refilter()
+
+    def _restore_main_tree_expand_states(self):
+        """Re-applies every group's own saved 'expanded' flag (COL_DATA)
+        onto the live tree_view after switching back to main_tree_store as
+        its model — Gtk.TreeView resets ALL rows to collapsed on every
+        single set_model() call, even re-attaching the exact same model
+        instance it displayed before (e.g. Smart Search turning off, or
+        its query clearing), with no memory of that model's own real
+        layout from before the switch.
+
+        Same two-phase trick as populate_tree's own restore, for the same
+        reason: expand_row() silently no-ops for a row whose ancestor is
+        currently collapsed (its entry doesn't exist yet to expand), so
+        this expands EVERYTHING first — genuinely materializing every row,
+        nested or not — then collapses exactly the ones that should be.
+        Guards on_tree_row_expanded_or_collapsed (like populate_tree's own
+        restore) so this doesn't trigger its own pointless save."""
+        groups_to_collapse = []
+
+        def collect(tree_iter):
+            while tree_iter is not None:
+                if self.main_tree_store.get_value(tree_iter, COL_TYPE) == "group":
+                    collect(self.main_tree_store.iter_children(tree_iter))
+                    data = self.main_tree_store.get_value(tree_iter, COL_DATA)
+                    if not data.get("expanded", True):
+                        groups_to_collapse.append(self.main_tree_store.get_path(tree_iter))
+                tree_iter = self.main_tree_store.iter_next(tree_iter)
+
+        collect(self.main_tree_store.get_iter_first())
+
+        self._restoring_tree_state = True
+        try:
+            self.tree_view.expand_all()
+            for path in groups_to_collapse:
+                self.tree_view.collapse_row(path)
         finally:
             self._restoring_tree_state = False
 
@@ -1467,6 +1612,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         new_local_btn.add_css_class("flat")
         new_local_btn.connect("clicked", self._on_new_local_terminal_clicked, tabview)
         tab_bar.set_start_action_widget(new_local_btn)
+        self._attach_tab_bar_double_click(tab_bar, tabview, new_local_btn)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.append(tab_bar)
@@ -2848,6 +2994,7 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         if not query:
             self.search_entry.remove_css_class("error")
+            self._update_smart_search_filter(None)
             self.update_search_ui()
             return
 
@@ -2857,8 +3004,14 @@ class ThongSSHWindow(TerminalPaneWindow):
             self.search_entry.remove_css_class("error")
         except re.error:
             self.search_entry.add_css_class("error")
+            # An invalid regex while still typing it (e.g. a lone "(")
+            # shouldn't hide the whole tree — just don't filter until it's
+            # valid again.
+            self._update_smart_search_filter(None)
             self.update_search_ui()
             return
+
+        self._update_smart_search_filter(regex)
 
         def find_matches(model, path, iter):
             name = model.get_value(iter, COL_NAME)
@@ -2899,7 +3052,9 @@ class ThongSSHWindow(TerminalPaneWindow):
         """Handler for Enter key press in the search entry: opens the
         currently selected search result, if it's a host."""
         if self.search_results and 0 <= self.current_search_index < len(self.search_results):
-            path = self.search_results[self.current_search_index]
+            path = self._main_path_to_view_path(self.search_results[self.current_search_index])
+            if path is None:
+                return
             model = self.tree_view.get_model()
             tree_iter = model.get_iter(path)
             node_type = model.get_value(tree_iter, COL_TYPE)
@@ -2918,14 +3073,39 @@ class ThongSSHWindow(TerminalPaneWindow):
         self.navigate_to_result(self.current_search_index)
         self.update_search_ui()
 
+    def _main_path_to_view_path(self, child_path):
+        """self.search_results stores paths in main_tree_store's own
+        coordinate space (built via main_tree_store.foreach) — converts to
+        whatever model the tree view is ACTUALLY showing right now (itself,
+        normally, or the Smart Search Gtk.TreeModelFilter when that toggle
+        is on). A TreeModelFilter's own paths skip hidden rows, so they
+        don't line up with the child model's path numbering whenever
+        anything is actually hidden. Returns None if the row is currently
+        filtered out (shouldn't normally happen — a search match is always
+        made visible by _smart_search_visible_func)."""
+        model = self.tree_view.get_model()
+        if model is self.main_tree_store:
+            return child_path
+        return model.convert_child_path_to_path(child_path)
+
     def navigate_to_result(self, index):
         """Moves focus to the found item."""
         if 0 <= index < len(self.search_results):
-            path = self.search_results[index]
+            path = self._main_path_to_view_path(self.search_results[index])
+            if path is None:
+                return
             # Expand all parent nodes
             self.tree_view.expand_to_path(path)
-            # Select the row
-            self.tree_view.get_selection().select_path(path)
+            # Select the row — unselect_all() first: now that the tree's
+            # selection mode is MULTIPLE (for the bulk-edit feature),
+            # select_path() on its own ADDS to the selection instead of
+            # replacing it the way it always did under the old SINGLE
+            # mode, so every search match visited while typing/navigating
+            # would otherwise stay highlighted, piling up instead of the
+            # highlight following just the current result.
+            selection = self.tree_view.get_selection()
+            selection.unselect_all()
+            selection.select_path(path)
             # Scroll to it
             self.tree_view.scroll_to_cell(path, None, True, 0.5, 0.0)
 
@@ -2934,6 +3114,99 @@ class ThongSSHWindow(TerminalPaneWindow):
         has_results = len(self.search_results) > 0
         self.search_up_button.set_sensitive(has_results)
         self.search_down_button.set_sensitive(has_results)
+
+    def _smart_search_visible_func(self, model, tree_iter, data):
+        """Gtk.TreeModelFilter's visible-func for self.tree_filter — `model`
+        here is main_tree_store itself (TreeModelFilter always calls this
+        with child-model iters, not its own). A host is visible iff its own
+        name matches self._smart_search_query; a group is visible iff
+        EITHER its own name matches OR any descendant (recursively) does,
+        so a matching host's whole ancestor chain stays visible even when
+        none of those groups' own names match. The synthetic "local"
+        row is always visible — it isn't part of the search space at all,
+        and hiding the one thing that's never searched for would be purely
+        confusing with no benefit."""
+        if self._smart_search_query is None:
+            return True
+        node_type = model.get_value(tree_iter, COL_TYPE)
+        if node_type == "local":
+            return True
+        name = model.get_value(tree_iter, COL_NAME)
+        if self._smart_search_query.search(name):
+            return True
+        if node_type != "group":
+            return False
+        child_iter = model.iter_children(tree_iter)
+        while child_iter is not None:
+            if self._smart_search_visible_func(model, child_iter, data):
+                return True
+            child_iter = model.iter_next(child_iter)
+        return False
+
+    def _apply_smart_search_state(self):
+        """The single place that decides which model the host tree shows —
+        main_tree_store itself whenever there's nothing to actually filter
+        (Smart Search off, OR on but the search box is empty), and the
+        Smart Search Gtk.TreeModelFilter only when BOTH the toggle is on
+        AND there's a live query. Called whenever either of those two
+        things changes (the toggle itself, or the search text).
+
+        Deliberately does NOT leave main_tree_store permanently wrapped in
+        the filter and rely on an empty query's visible-func/refilter() to
+        "show everything" instead — that trusted Gtk.TreeModelFilter to
+        correctly re-surface every previously-hidden row on every single
+        query change, and in practice the tree could be left stuck
+        filtered down to the last non-empty query after clearing the
+        search box. Not touching the filter model at all for the empty-
+        query case removes that failure mode entirely: main_tree_store
+        itself is always trivially "everything visible"."""
+        was_filtered = self.is_filtered
+        should_filter = self.smart_search_toggle.get_active() and self._smart_search_query is not None
+        self.is_filtered = should_filter
+        self.view_tree_store = self.tree_filter if should_filter else self.main_tree_store
+        if should_filter:
+            self.tree_filter.refilter()
+        self.tree_view.set_model(self.view_tree_store)
+        if should_filter:
+            # Gtk.TreeView tracks expanded/collapsed state per row of
+            # whatever model it's CURRENTLY showing, independently of
+            # main_tree_store's own saved expand state — so the filter
+            # model starts every group collapsed. Every group that's even
+            # visible here is one _smart_search_visible_func already
+            # determined either matches itself or has a matching
+            # descendant, so leaving it collapsed would hide the very
+            # match the filter just surfaced behind an unopened arrow.
+            self.tree_view.expand_all()
+        elif was_filtered:
+            # Coming BACK from the filter: Gtk.TreeView resets every row to
+            # collapsed on ANY set_model() call, even re-attaching the
+            # exact same main_tree_store instance it showed before — it
+            # has no memory of "this model used to have these rows
+            # expanded." Without this, a group the user had expanded
+            # before turning Smart Search on (or before typing a query)
+            # visibly collapses the moment the filter clears, even though
+            # its own saved 'expanded' data was never actually touched.
+            self._restore_main_tree_expand_states()
+
+    def _update_smart_search_filter(self, query_regex):
+        """Updates Smart Search's filter predicate (query_regex=None means
+        "nothing to filter on" — an empty search box, or an invalid regex
+        while still being typed) and applies it."""
+        self._smart_search_query = query_regex
+        self._apply_smart_search_state()
+
+    def on_smart_search_toggled(self, button):
+        """The search bar's funnel toggle — swaps the host tree between
+        showing everything (Up/Down just skip over non-matches, same as
+        before this existed) and self.tree_filter, which actually hides
+        every non-matching row. Persists immediately (interface.host_tree_
+        smart_search) so it stays on for the next search, and next launch."""
+        is_active = button.get_active()
+        self.settings_manager.set("interface.host_tree_smart_search", is_active)
+        self.settings_manager.save()
+        self._apply_smart_search_state()
+        if self.search_results and 0 <= self.current_search_index < len(self.search_results):
+            self.navigate_to_result(self.current_search_index)
 
     def _on_right_press_guard(self, gesture, n_press, x, y):
         """Generic right-click press guard for terminal and tab gestures.
@@ -2950,7 +3223,26 @@ class ThongSSHWindow(TerminalPaneWindow):
         """Fired when right button goes DOWN on the tree.
         If LMB is physically held, DENY immediately — calling popup() while
         any button is held creates a Wayland implicit-grab conflict that
-        freezes the entire GTK main loop with no recovery path."""
+        freezes the entire GTK main loop with no recovery path.
+
+        Also where the right-click's effect on selection is actually
+        decided — NOT in on_tree_right_click (release). GtkTreeView's own
+        built-in "select the row under the pointer" behavior fires on
+        PRESS, isn't implemented as a GtkGesture of its own (TreeView
+        predates GtkEventController), and so can't be pre-empted by merely
+        claiming a sibling gesture's sequence once that behavior has
+        already run. This controller is CAPTURE-phase (see its setup)
+        specifically so this handler runs, and claims the sequence, before
+        GtkTreeView's own target-phase click handling gets to act on the
+        same press — which is what previously let a right-click silently
+        collapse an existing multi-selection down to just the row under
+        the cursor even though on_tree_right_click's own selection-
+        preserving check looked correct in isolation; by the time it ran
+        (on release), the damage was already done on press.
+
+        Right-clicking a row that's already part of a multi-selection
+        keeps that whole selection; right-clicking a row outside it
+        replaces the selection with just that row, same as a left-click."""
         sequence = gesture.get_last_updated_sequence()
         event = gesture.get_last_event(sequence)
         if event and (event.get_modifier_state() & Gdk.ModifierType.BUTTON1_MASK):
@@ -2958,6 +3250,36 @@ class ThongSSHWindow(TerminalPaneWindow):
             return
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         self.tree_left_gesture.reset()
+
+        tree_view = gesture.get_widget()
+        path_info = tree_view.get_path_at_pos(int(x), int(y))
+        if not path_info:
+            return
+        path, _col, _cell_x, _cell_y = path_info
+        selection = tree_view.get_selection()
+        if not selection.path_is_selected(path):
+            selection.unselect_all()
+            selection.select_path(path)
+
+    def _get_selected_tree_iters(self):
+        """Multi-select-safe replacement for Gtk.TreeSelection.get_selected()
+        — that call hard-asserts (and returns (None, None)) once the host
+        tree's selection mode is MULTIPLE, even when only one row is
+        actually selected. Returns (model, [iters]) for every currently
+        selected row, in display order."""
+        selection = self.tree_view.get_selection()
+        model, paths = selection.get_selected_rows()
+        return model, [model.get_iter(p) for p in paths]
+
+    def _get_selected_tree_iter(self):
+        """The first selected row (or None) — for every action that only
+        ever applies to a single row (Edit, Clone, Connect, SFTP, ...).
+        Those are simply never exposed in the UI while 2+ rows are
+        selected (see on_tree_right_click/_show_bulk_host_menu), so in
+        practice this is never actually called with more than one row
+        selected."""
+        model, iters = self._get_selected_tree_iters()
+        return model, (iters[0] if iters else None)
 
     def on_tree_left_click(self, gesture, n_press, x, y):
         """LEFT click handler: deselects if clicked in an empty area."""
@@ -2977,10 +3299,9 @@ class ThongSSHWindow(TerminalPaneWindow):
         # Ctrl+F is handled globally now (see on_window_key_pressed), which
         # fires first regardless of where focus is.
 
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, iters = self._get_selected_tree_iters()
 
-        if not tree_iter:
+        if not iters:
             return False # Not handled, propagate further
 
         # --- Deletion with Delete key ---
@@ -2992,7 +3313,13 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         # --- Edit/Rename with F2 ---
         if keyval == Gdk.KEY_F2:
-            node_type = model.get_value(tree_iter, COL_TYPE) if tree_iter else None
+            if len(iters) > 1:
+                # Only a well-defined action when every selected row is a
+                # plain host — see _show_bulk_host_menu's own identical rule.
+                if {model.get_value(it, COL_TYPE) for it in iters} == {"host"}:
+                    self.on_menu_bulk_edit_hosts(None, None)
+                return True
+            node_type = model.get_value(iters[0], COL_TYPE)
             if node_type == "host":
                 logging.debug("F2 pressed on host, calling edit handler...")
                 self.on_menu_edit_host(None, None)
@@ -3193,9 +3520,8 @@ class ThongSSHWindow(TerminalPaneWindow):
         self.lookup_action("close-tab").set_enabled(can_close_tab)
 
         # "Edit" and "Delete"
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
-        item_selected = tree_iter is not None
+        _model, iters = self._get_selected_tree_iters()
+        item_selected = len(iters) > 0
 
         self.lookup_action("edit-rename").set_enabled(item_selected)
         self.lookup_action("delete").set_enabled(item_selected)
@@ -3262,6 +3588,10 @@ class ThongSSHWindow(TerminalPaneWindow):
         action_edit_group = Gio.SimpleAction.new("edit-group", None)
         action_edit_group.connect("activate", self.on_menu_edit_group)
         self.add_action(action_edit_group)
+
+        action_bulk_edit = Gio.SimpleAction.new("bulk-edit", None)
+        action_bulk_edit.connect("activate", self.on_menu_bulk_edit_hosts)
+        self.add_action(action_bulk_edit)
 
         action_delete = Gio.SimpleAction.new("delete", None)
         action_delete.connect("activate", self.on_remove_selected_clicked)
@@ -3341,6 +3671,15 @@ class ThongSSHWindow(TerminalPaneWindow):
         group_menu.append(_("Export..."), "win.export-group")
         group_menu.append(_("Delete"), "win.delete")
 
+        # Menu for MULTIPLE selected hosts (see _show_bulk_host_menu) —
+        # only ever shown when every selected row is a plain host, never a
+        # group or the synthetic "local" row, so unlike host_menu above it
+        # has no Connect/Clone/SFTP/Copy/Export — those don't have a
+        # well-defined meaning across several different hosts at once.
+        bulk_host_menu = Gio.Menu()
+        bulk_host_menu.append(_("Edit..."), "win.bulk-edit")
+        bulk_host_menu.append(_("Delete"), "win.delete")
+
         quicky_menu = Gio.Menu()
         quicky_menu.append(_("Insert into Terminal"), "win.quicky-insert")
         quicky_menu.append(_("Run"), "win.quicky-run")
@@ -3353,10 +3692,12 @@ class ThongSSHWindow(TerminalPaneWindow):
         # 3. Create Popover (widgets)
         self.popover_host = Gtk.PopoverMenu.new_from_model(host_menu)
         self.popover_group = Gtk.PopoverMenu.new_from_model(group_menu)
+        self.popover_bulk_host = Gtk.PopoverMenu.new_from_model(bulk_host_menu)
         self.popover_quicky = Gtk.PopoverMenu.new_from_model(quicky_menu)
         self.popover_host.set_parent(self) # Set parent once to the main window
         self.popover_quicky.set_parent(self)
         self.popover_group.set_parent(self) # Set parent once to the main window
+        self.popover_bulk_host.set_parent(self)
 
         # Built once here — not lazily on the host tree's first right-click
         # (see on_tree_right_click's history) — so the section's one-time
@@ -3369,50 +3710,74 @@ class ThongSSHWindow(TerminalPaneWindow):
 
     def on_tree_right_click(self, gesture, n_press, x, y):
         """Right-click handler: Shows PopoverMenu (100% GTK4).
-        Connected to 'released' so the button is already up when the popover
-        opens — prevents the release event from activating the first menu item."""
+        What this click did to the selection is already settled by
+        _on_tree_right_press on the preceding press (see its docstring for
+        why that has to happen there, not here) — this just reads the
+        now-final selection and shows the right popover for it. Connected
+        to 'released' so the button is already up when the popover opens —
+        prevents the release event from activating the first menu item."""
         tree_view = gesture.get_widget()
         path_info = tree_view.get_path_at_pos(int(x), int(y))
 
-        if path_info:
-            path, col, cell_x, cell_y = path_info
-            tree_view.get_selection().select_path(path)
+        if not path_info:
+            return
+        path, col, cell_x, cell_y = path_info
 
-            model = tree_view.get_model()
-            tree_iter = model.get_iter(path)
-            node_type = model.get_value(tree_iter, COL_TYPE)
+        model = tree_view.get_model()
+        selected_paths = tree_view.get_selection().get_selected_rows()[1]
 
-            # The synthetic "local machine" row isn't a real host — no
-            # edit/clone/remove/SFTP menu applies to it.
-            if node_type == "local":
-                return
+        if len(selected_paths) > 1:
+            self._show_bulk_host_menu(tree_view, model, selected_paths, path, col)
+            return
 
-            # Get the row's rectangle to "attach" the popover to
-            rect = tree_view.get_cell_area(path, col)
+        tree_iter = model.get_iter(path)
+        node_type = model.get_value(tree_iter, COL_TYPE)
 
-            self.lookup_action("connect").set_enabled(True)
-            self.lookup_action("open-sftp").set_enabled(True)
-            self.lookup_action("edit").set_enabled(True)
-            self.lookup_action("clone").set_enabled(True)
+        # The synthetic "local machine" row isn't a real host — no
+        # edit/clone/remove/SFTP menu applies to it.
+        if node_type == "local":
+            return
 
-            if node_type == "host":
-                host_config = model.get_value(tree_iter, COL_DATA)
-                has_user = "@" in (host_config.get("host") or "")
-                # Always real hosts here (the "local" node type returns
-                # early above) — name/address are unconditionally
-                # applicable; only re-enabling them (not just userhost)
-                # matters because these actions are shared with the tab
-                # menu, which may have last disabled them for a local tab.
-                self.lookup_action("copy-host-name").set_enabled(True)
-                self.lookup_action("copy-host-address").set_enabled(True)
-                self.lookup_action("copy-host-userhost").set_enabled(has_user)
-                self._populate_copy_host_menu(host_config)
-                self.popover_host.set_pointing_to(rect)
-                self.popover_host.popup()
+        # Get the row's rectangle to "attach" the popover to
+        rect = tree_view.get_cell_area(path, col)
 
-            elif node_type == "group":
-                self.popover_group.set_pointing_to(rect)
-                self.popover_group.popup()
+        self.lookup_action("connect").set_enabled(True)
+        self.lookup_action("open-sftp").set_enabled(True)
+        self.lookup_action("edit").set_enabled(True)
+        self.lookup_action("clone").set_enabled(True)
+
+        if node_type == "host":
+            host_config = model.get_value(tree_iter, COL_DATA)
+            has_user = "@" in (host_config.get("host") or "")
+            # Always real hosts here (the "local" node type returns
+            # early above) — name/address are unconditionally
+            # applicable; only re-enabling them (not just userhost)
+            # matters because these actions are shared with the tab
+            # menu, which may have last disabled them for a local tab.
+            self.lookup_action("copy-host-name").set_enabled(True)
+            self.lookup_action("copy-host-address").set_enabled(True)
+            self.lookup_action("copy-host-userhost").set_enabled(has_user)
+            self._populate_copy_host_menu(host_config)
+            self.popover_host.set_pointing_to(rect)
+            self.popover_host.popup()
+
+        elif node_type == "group":
+            self.popover_group.set_pointing_to(rect)
+            self.popover_group.popup()
+
+    def _show_bulk_host_menu(self, tree_view, model, selected_paths, click_path, click_col):
+        """Right-click popover for 2+ selected rows — only a well-defined
+        action (Edit..., which moves them into one group and/or stamps a
+        prefix/postfix onto all their names, see on_menu_bulk_edit_hosts)
+        when every single one of them is a plain host; a group or the
+        synthetic "local" row anywhere in the selection means no popover
+        at all, since there's no sensible bulk action across mixed types."""
+        node_types = {model.get_value(model.get_iter(p), COL_TYPE) for p in selected_paths}
+        if node_types != {"host"}:
+            return
+        rect = tree_view.get_cell_area(click_path, click_col)
+        self.popover_bulk_host.set_pointing_to(rect)
+        self.popover_bulk_host.popup()
 
     def build_user_commands_menu(self):
         """(Re)populates the user commands section of the host context menu
@@ -3453,8 +3818,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         command_name = param.get_string()
         logging.debug(f"User command '{command_name}' activated.")
 
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if not tree_iter: return
 
         host_config = model.get_value(tree_iter, COL_DATA)
@@ -3515,8 +3879,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         action registered only on the main window, which is why these are
         no longer the same action (they used to be, keyed off
         self.last_clicked_tab, before detachable tabs)."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if not tree_iter:
             return
         host_config = model.get_value(tree_iter, COL_DATA)
@@ -3526,12 +3889,18 @@ class ThongSSHWindow(TerminalPaneWindow):
     # --- Handlers for the global menu ---
 
     def on_menu_edit_rename(self, action, param):
-        """Calls 'Edit' on a host or a group, depending on the node type."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
-        if not tree_iter: return
+        """Calls 'Edit' on a host or a group, depending on the node type —
+        or, when several hosts are selected at once, the bulk editor (see
+        _show_bulk_host_menu's identical host-only rule)."""
+        model, iters = self._get_selected_tree_iters()
+        if not iters: return
 
-        node_type = model.get_value(tree_iter, COL_TYPE)
+        if len(iters) > 1:
+            if {model.get_value(it, COL_TYPE) for it in iters} == {"host"}:
+                self.on_menu_bulk_edit_hosts(None, None)
+            return
+
+        node_type = model.get_value(iters[0], COL_TYPE)
         if node_type == "host":
             self.on_menu_edit_host(None, None)
         elif node_type == "group":
@@ -3568,8 +3937,7 @@ class ThongSSHWindow(TerminalPaneWindow):
     # --- 5. Dialogs ---
     def on_add_host_clicked(self, *args):
         parent_iter = None
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         child_iter = None
 
         if tree_iter:
@@ -3601,8 +3969,7 @@ class ThongSSHWindow(TerminalPaneWindow):
 
     def on_menu_connect_host(self, action, param):
         """Handles the 'Connect' action from the context menu."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if not tree_iter: return
 
         host_config = model.get_value(tree_iter, COL_DATA)
@@ -3612,8 +3979,7 @@ class ThongSSHWindow(TerminalPaneWindow):
 
     def on_menu_edit_host(self, action, param):
         """Callback for the 'win.edit' GAction."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if not tree_iter: return
 
         # If search is active, editing can be risky. Let's warn.
@@ -3651,8 +4017,7 @@ class ThongSSHWindow(TerminalPaneWindow):
 
     def on_menu_clone_host(self, action, param):
         """Callback for the 'win.clone' GAction."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if not tree_iter: return
 
         if self.is_filtered:
@@ -3682,8 +4047,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         """Callback for the 'win.export-host' GAction — saves just this one
         host to a file in ThongSSH's own format (also a valid Import Hosts
         source, or a drop-in hosts.json replacement)."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if not tree_iter:
             return
         node = host_import.tree_store_node_to_dict(model, tree_iter, COL_TYPE, COL_DATA)
@@ -3693,8 +4057,7 @@ class ThongSSHWindow(TerminalPaneWindow):
     def on_menu_export_group(self, action, param):
         """Callback for the 'win.export-group' GAction — saves this group
         (and everything under it) to a file in ThongSSH's own format."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if not tree_iter:
             return
         node = host_import.tree_store_node_to_dict(model, tree_iter, COL_TYPE, COL_DATA)
@@ -3706,8 +4069,7 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         # Determine which group is SELECTED to suggest it as a parent
         parent_iter = None
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         child_iter = None
 
         if tree_iter:
@@ -3771,8 +4133,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         it; picking a different parent here moves the whole group (with
         everything nested inside it) there via _clone_tree_node, then
         removes the original."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if not tree_iter: return
 
         if self.is_filtered:
@@ -3791,8 +4152,7 @@ class ThongSSHWindow(TerminalPaneWindow):
                 new_name, new_parent_iter = dialog.get_data()
                 if new_name:
                     # Re-get the iter just in case the dialog was open a while.
-                    selection = self.tree_view.get_selection()
-                    model, tree_iter = selection.get_selected()
+                    model, tree_iter = self._get_selected_tree_iter()
                     if tree_iter:
                         current_parent_iter = model.iter_parent(tree_iter)
                         parent_unchanged = (
@@ -3814,32 +4174,69 @@ class ThongSSHWindow(TerminalPaneWindow):
         dialog.connect("response", on_response)
         dialog.present()
 
+    def on_menu_bulk_edit_hosts(self, action, param):
+        """win.bulk-edit — the host tree's multi-selection context menu's
+        own "Edit..." item (see on_tree_right_click/_show_bulk_host_menu,
+        which only ever shows this menu when every selected row is a plain
+        host). Moves every selected host into one group and/or stamps a
+        prefix/postfix onto all their names in one pass."""
+        model, iters = self._get_selected_tree_iters()
+        host_iters = [it for it in iters if model.get_value(it, COL_TYPE) == "host"]
+        if len(host_iters) < 2:
+            return
+
+        if self.is_filtered:
+            logging.warning("Bulk editing during an active search is not supported.")
+            return
+
+        dialog = BulkEditHostsDialog(self, self.main_tree_store, len(host_iters))
+
+        def on_response(dialog, response):
+            if response == Gtk.ResponseType.OK:
+                move, new_parent_iter, prefix, postfix = dialog.get_data()
+                for tree_iter in host_iters:
+                    config = model.get_value(tree_iter, COL_DATA)
+                    if prefix or postfix:
+                        config['name'] = f"{prefix}{config['name']}{postfix}"
+                    if move:
+                        model.remove(tree_iter)
+                        self.main_tree_store.append(new_parent_iter, [
+                            config['name'], 'host', 'computer-symbolic', config
+                        ])
+                    else:
+                        model.set(tree_iter, [COL_NAME, COL_DATA], [config['name'], config])
+                self.rebuild_config_and_save()
+            dialog.destroy()
+
+        dialog.connect("response", on_response)
+        dialog.present()
+
     def on_remove_selected_clicked(self, action_or_widget, param):
-        """Callback for the 'win.delete' GAction AND the 'Delete' button."""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
-        if not tree_iter: return
+        """Callback for the 'win.delete' GAction AND the 'Delete' button —
+        deletes every currently selected row (the host tree's selection
+        mode is MULTIPLE, see __init__'s tree_view setup), skipping the
+        synthetic "local machine" row if it happens to be among them."""
+        model, iters = self._get_selected_tree_iters()
+        iters = [it for it in iters if model.get_value(it, COL_TYPE) != "local"]
+        if not iters: return
 
         if self.is_filtered:
             logging.warning("Deletion during an active search is not supported.")
             return
 
-        node_type = model.get_value(tree_iter, COL_TYPE)
-        name = model.get_value(tree_iter, COL_NAME)
-
-        # The synthetic "local machine" row can't be deleted (it isn't part
-        # of hosts.json to begin with).
-        if node_type == "local":
-            return
-
-        # Prepare default text
-        heading = _("Delete {node_type} '{name}'?").format(node_type=node_type, name=name)
-        body = _("This action cannot be undone.")
-
-        # If it's a NON-EMPTY group, change the text
-        if node_type == "group" and model.iter_has_child(tree_iter):
-            heading = _("Delete group '{name}' and ALL its contents?").format(name=name)
-            body = _("All hosts and subgroups inside will be recursively deleted.\nThis action cannot be undone.")
+        if len(iters) == 1:
+            tree_iter = iters[0]
+            node_type = model.get_value(tree_iter, COL_TYPE)
+            name = model.get_value(tree_iter, COL_NAME)
+            heading = _("Delete {node_type} '{name}'?").format(node_type=node_type, name=name)
+            body = _("This action cannot be undone.")
+            # If it's a NON-EMPTY group, change the text
+            if node_type == "group" and model.iter_has_child(tree_iter):
+                heading = _("Delete group '{name}' and ALL its contents?").format(name=name)
+                body = _("All hosts and subgroups inside will be recursively deleted.\nThis action cannot be undone.")
+        else:
+            heading = _("Delete {count} selected items?").format(count=len(iters))
+            body = _("Any selected groups' contents will be recursively deleted too.\nThis action cannot be undone.")
 
         dialog = Adw.MessageDialog(
             transient_for=self,
@@ -3852,12 +4249,16 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         def on_response(dialog, response):
             if response == "delete":
-                logging.info(f"Deleting {name} and all its children...")
-                # Re-get the iter
-                model, tree_iter = selection.get_selected()
-                if tree_iter:
-                    model.remove(tree_iter)
-                    self.rebuild_config_and_save()
+                logging.info(f"Deleting {len(iters)} selected item(s)...")
+                for tree_iter in iters:
+                    # Deleting a group that's an ancestor of a LATER item in
+                    # this same list already recursively removed that item —
+                    # its iter is now dangling, so check before each remove
+                    # rather than assuming every iter collected up front is
+                    # still valid by the time we get to it.
+                    if model.iter_is_valid(tree_iter):
+                        model.remove(tree_iter)
+                self.rebuild_config_and_save()
 
         dialog.connect("response", on_response)
         dialog.present()
@@ -3869,8 +4270,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         tab-menu case via self.last_clicked_tab; that's now the app-scoped
         app.copy-host-* / TerminalPaneWindow.copy_host_field_for_tab_page
         instead — see app.py.)"""
-        selection = self.tree_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_tree_iter()
         if tree_iter:
             return model.get_value(tree_iter, COL_DATA)
         return None

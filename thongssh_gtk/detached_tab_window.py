@@ -105,6 +105,7 @@ class DetachedTabWindow(TerminalPaneWindow):
         new_local_btn.add_css_class("flat")
         new_local_btn.connect("clicked", self._on_new_local_terminal_clicked)
         self.tab_bar.set_start_action_widget(new_local_btn)
+        self._attach_tab_bar_double_click(self.tab_bar, self.tabview, new_local_btn)
 
         pane_box.append(self.tab_bar)
         self.terminal_overlay.set_child(self.tabview)

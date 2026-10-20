@@ -1096,6 +1096,73 @@ class GroupDialog(ResponseDialog):
         return new_name, parent_iter
 
 
+class BulkEditHostsDialog(ResponseDialog):
+    """The host tree's multi-selection context menu's "Edit..." item
+    (window.py's on_menu_bulk_edit_hosts) — move every one of the selected
+    hosts into one group and/or stamp a prefix/postfix onto all their
+    names, in a single pass. Each field is independently optional: leaving
+    both Prefix and Postfix blank leaves every name untouched, and "— Don't
+    move —" (the default) leaves every host exactly where it already is —
+    so this also works as a pure rename-only or move-only bulk action."""
+
+    def __init__(self, parent_window, tree_store, count):
+        super().__init__(transient_for=parent_window, modal=True)
+        self.set_default_size(420, -1)
+        self.tree_store = tree_store
+
+        header_bar = Adw.HeaderBar()
+        header_bar.set_title_widget(Adw.WindowTitle(title=_("Edit {count} Hosts").format(count=count)))
+
+        self.ok_button = Gtk.Button(label=_("Apply"))
+        self.ok_button.add_css_class("suggested-action")
+        self.ok_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.OK))
+        header_bar.pack_end(self.ok_button)
+
+        cancel_button = Gtk.Button(label=_("Cancel"))
+        cancel_button.connect("clicked", lambda w: self.response(Gtk.ResponseType.CANCEL))
+        header_bar.pack_start(cancel_button)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main_box.append(header_bar)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                               margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        main_box.append(content_box)
+        self.set_content(main_box)
+
+        content_box.append(Gtk.Label(label=_("Move to Group:"), halign=Gtk.Align.START))
+        self.combo_group = Gtk.ComboBoxText()
+        # A sentinel distinct from "root" ("Root (/)" is a REAL destination
+        # — move every selected host to the top level) — this one means
+        # "leave each host exactly where it already is", so the dialog
+        # still works as a prefix/postfix-only rename with no move at all.
+        self.combo_group.append("__no_move__", _("— Don't move —"))
+        self.group_iters = {}
+        _populate_groups_combo(self.combo_group, self.group_iters, self.tree_store, None)
+        self.combo_group.set_active_id("__no_move__")
+
+        content_box.append(self.combo_group)
+
+        content_box.append(Gtk.Label(label=_("Add Prefix:"), halign=Gtk.Align.START))
+        self.prefix_entry = Gtk.Entry()
+        self.prefix_entry.set_placeholder_text(_("Leave empty for no prefix"))
+        content_box.append(self.prefix_entry)
+
+        content_box.append(Gtk.Label(label=_("Add Postfix:"), halign=Gtk.Align.START))
+        self.postfix_entry = Gtk.Entry()
+        self.postfix_entry.set_placeholder_text(_("Leave empty for no postfix"))
+        content_box.append(self.postfix_entry)
+
+    def get_data(self):
+        """(move: bool, new_parent_iter_or_None, prefix: str, postfix: str)
+        — new_parent_iter is None for both "don't move" (move=False, value
+        unused) and "move to root" (move=True, None IS the real target)."""
+        selected_id = self.combo_group.get_active_id()
+        move = selected_id is not None and selected_id != "__no_move__"
+        new_parent_iter = self.group_iters.get(selected_id) if move else None
+        return move, new_parent_iter, self.prefix_entry.get_text(), self.postfix_entry.get_text()
+
+
 class QuickyDialog(ResponseDialog):
     """Add/edit a single Quicky: a name + a multi-line text snippet that
     gets inserted — not executed — into the active terminal (see
@@ -2157,6 +2224,29 @@ class SettingsDialog(Adw.Window):
         )
         group_tabs.add(self.tabbar_height_row)
 
+        # (setting value, display label) — index into the combo IS the
+        # setting value's position here, so on_apply/the reset button just
+        # look up by index/value without a separate map (same pattern as
+        # self.import_mode_row elsewhere in this dialog).
+        self._tab_double_click_actions = [
+            ("nothing", _("Nothing")),
+            ("duplicate", _("Duplicate")),
+            ("reconnect", _("Reconnect")),
+            ("disconnect", _("Disconnect")),
+            ("detach", _("Detach")),
+            ("rename", _("Rename")),
+        ]
+        self.tab_double_click_row = Adw.ComboRow(
+            title=_("Double-click a tab"),
+            subtitle=_("Action to run when a tab in the tab strip is double-clicked"),
+            model=Gtk.StringList.new([label for _key, label in self._tab_double_click_actions]),
+        )
+        current_action = self.settings_manager.get("interface.tab_double_click_action")
+        self.tab_double_click_row.set_selected(
+            next((i for i, (key, _label) in enumerate(self._tab_double_click_actions) if key == current_action), 0)
+        )
+        group_tabs.add(self.tab_double_click_row)
+
         group_find = Adw.PreferencesGroup(title=_("Find and Highlight"))
         page_interface.add(group_find)
 
@@ -2939,6 +3029,10 @@ class SettingsDialog(Adw.Window):
         self.settings_manager.set("interface.theme", theme_value)
         self.settings_manager.set("interface.tree_row_striping", self.tree_row_striping_row.get_active())
         self.settings_manager.set("interface.tabbar_height", int(self.tabbar_height_row.get_value()))
+        self.settings_manager.set(
+            "interface.tab_double_click_action",
+            self._tab_double_click_actions[self.tab_double_click_row.get_selected()][0]
+        )
         self.settings_manager.set("interface.find_bar_opacity", int(self.find_bar_opacity_row.get_value()))
         self.settings_manager.set(
             "interface.find_highlight_color", _rgba_to_hex(self.find_highlight_color_button.get_rgba())
@@ -3653,6 +3747,11 @@ class SettingsDialog(Adw.Window):
             self.theme_row.set_selected(default_theme_index)
             self.tree_row_striping_row.set_active(DEFAULT_SETTINGS["interface.tree_row_striping"])
             self.tabbar_height_row.set_value(DEFAULT_SETTINGS["interface.tabbar_height"])
+            default_dbl_click_index = next(
+                (i for i, (key, _label) in enumerate(self._tab_double_click_actions)
+                 if key == DEFAULT_SETTINGS["interface.tab_double_click_action"]), 0
+            )
+            self.tab_double_click_row.set_selected(default_dbl_click_index)
             self.find_bar_opacity_row.set_value(DEFAULT_SETTINGS["interface.find_bar_opacity"])
             default_highlight_color_rgba = Gdk.RGBA()
             default_highlight_color_rgba.parse(DEFAULT_SETTINGS["interface.find_highlight_color"])
@@ -3693,6 +3792,14 @@ class BatchCommandDialog(Adw.Window):
         self.set_title(_("Batch Command"))
         self._syncing_select_all = False
         self._syncing_region_all = False
+        # Command history navigation (Up/Down, see on_command_key_pressed):
+        # -1 means "not currently browsing — showing whatever's actually
+        # being typed", 0..len-1 indexes into batch_command_history (0 =
+        # most recent). _history_draft holds the in-progress text from the
+        # moment Up first starts browsing, so Down can return to it.
+        self._history_index = -1
+        self._history_draft = ""
+        self._programmatic_text_change = False
 
         header_bar = Adw.HeaderBar()
         send_button = Gtk.Button(label=_("Send"), css_classes=["suggested-action"])
@@ -3718,6 +3825,7 @@ class BatchCommandDialog(Adw.Window):
         self.command_view.set_left_margin(8)
         self.command_view.set_right_margin(8)
         self.command_buffer = self.command_view.get_buffer()
+        self.command_buffer.connect("changed", self.on_command_buffer_changed)
 
         command_key_controller = Gtk.EventControllerKey.new()
         command_key_controller.connect("key-pressed", self.on_command_key_pressed)
@@ -3732,21 +3840,39 @@ class BatchCommandDialog(Adw.Window):
         escape_key_controller.connect("key-pressed", self.on_window_key_pressed)
         self.add_controller(escape_key_controller)
 
-        command_scroller = Gtk.ScrolledWindow()
+        command_scroller = Gtk.ScrolledWindow(hexpand=True)
         command_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         command_scroller.set_min_content_height(36)   # ~1 line
         command_scroller.set_max_content_height(150)  # ~6 lines, then it scrolls
         command_scroller.set_propagate_natural_height(True)
         command_scroller.set_child(self.command_view)
-        main_box.append(command_scroller)
+
+        # History button — a popover listing past commands (newest first;
+        # click one to load it) plus Clear History, beside Up/Down
+        # navigation (see on_command_key_pressed) as a mouse-driven way to
+        # reach the same history.
+        self.history_button = Gtk.MenuButton(icon_name="document-open-recent-symbolic", valign=Gtk.Align.START)
+        self.history_button.set_tooltip_text(_("Command history"))
+        self.history_popover = Gtk.Popover()
+        self.history_popover.connect("show", self.on_history_popover_show)
+        self.history_button.set_popover(self.history_popover)
+
+        command_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        command_row.append(command_scroller)
+        command_row.append(self.history_button)
+        main_box.append(command_row)
 
         command_hint = Gtk.Label(
-            label=_("Enter to send, Shift+Enter for a new line"),
+            label=_("Enter to send, Shift+Enter for a new line, Up/Down for history"),
             xalign=0, css_classes=["dim-label", "caption"],
         )
         main_box.append(command_hint)
 
-        self.close_after_send_check = Gtk.CheckButton(label=_("Close window after send"), active=True)
+        self.close_after_send_check = Gtk.CheckButton(
+            label=_("Close window after send"),
+            active=self.parent_window.settings_manager.get("interface.batch_command_close_after_send"),
+        )
+        self.close_after_send_check.connect("toggled", self.on_close_after_send_toggled)
         main_box.append(self.close_after_send_check)
 
         # --- "Select / Deselect All" + the div filter dropdown beside it ---
@@ -3895,7 +4021,13 @@ class BatchCommandDialog(Adw.Window):
         Tab/Shift+Tab move keyboard focus to the next/previous widget
         instead of Gtk.TextView's own default of inserting a literal tab
         character — without this, a mouse-free user typing a command had
-        no way to reach the terminal checkboxes or Send button at all."""
+        no way to reach the terminal checkboxes or Send button at all.
+
+        Up/Down step through batch_command_history — only when the cursor
+        is already on the first/last line respectively, so a genuinely
+        multi-line command can still be navigated internally with the
+        arrow keys; it's only at the top/bottom edge that Up/Down take on
+        shell-history meaning instead."""
         is_shift = modifier & Gdk.ModifierType.SHIFT_MASK
         if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
             if is_shift:
@@ -3906,7 +4038,126 @@ class BatchCommandDialog(Adw.Window):
             backward = is_shift or keyval == Gdk.KEY_ISO_Left_Tab
             self.child_focus(Gtk.DirectionType.TAB_BACKWARD if backward else Gtk.DirectionType.TAB_FORWARD)
             return True
+        if keyval == Gdk.KEY_Up and self._cursor_on_first_line():
+            self._history_step(1)
+            return True
+        if keyval == Gdk.KEY_Down and self._cursor_on_last_line():
+            self._history_step(-1)
+            return True
         return False
+
+    def _cursor_on_first_line(self):
+        insert_iter = self.command_buffer.get_iter_at_mark(self.command_buffer.get_insert())
+        return insert_iter.get_line() == 0
+
+    def _cursor_on_last_line(self):
+        insert_iter = self.command_buffer.get_iter_at_mark(self.command_buffer.get_insert())
+        return insert_iter.get_line() == self.command_buffer.get_line_count() - 1
+
+    def _set_command_text(self, text):
+        """Replaces the command box's text programmatically (history
+        navigation/the history popover) — flagged so on_command_buffer_
+        changed doesn't mistake this for a real edit and reset
+        self._history_index back out of history-browsing."""
+        self._programmatic_text_change = True
+        self.command_buffer.set_text(text)
+        self.command_buffer.place_cursor(self.command_buffer.get_end_iter())
+        self._programmatic_text_change = False
+
+    def on_command_buffer_changed(self, buffer):
+        """Any REAL edit (typing, pasting, ...) while browsing history
+        means the user is now editing that historical entry as a fresh
+        draft — further Down presses shouldn't still think there's an
+        unmodified "original draft" to return to."""
+        if self._programmatic_text_change:
+            return
+        self._history_index = -1
+
+    def _history_step(self, direction):
+        """direction=+1 (Up) moves toward OLDER entries; -1 (Down) toward
+        NEWER, eventually landing back on self._history_draft — whatever
+        was actually being typed before the first Up press."""
+        history = self.parent_window.settings_manager.get("batch_command_history") or []
+        if self._history_index == -1:
+            if direction < 0 or not history:
+                return  # already at the draft, or no history to go back to
+            start, end = self.command_buffer.get_bounds()
+            self._history_draft = self.command_buffer.get_text(start, end, False)
+            new_index = 0
+        else:
+            new_index = self._history_index + direction
+        if new_index < -1 or new_index >= len(history):
+            return
+        self._history_index = new_index
+        self._set_command_text(self._history_draft if new_index == -1 else history[new_index])
+
+    def on_history_popover_show(self, popover):
+        """(Re)builds the history popover fresh every time it's opened, so
+        it always reflects the latest batch_command_history — a Clear
+        History click, or a command just sent, can change it between
+        opens. Plain Gtk.ListBoxRow/Label rows (not a Gtk.Button per item)
+        — a lot more compact, no per-row button padding/min-height — and a
+        fixed minimum width, wide enough for a real command to actually be
+        readable instead of squeezed down to whatever the funnel/arrow
+        buttons' own narrow row happens to need."""
+        history = self.parent_window.settings_manager.get("batch_command_history") or []
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3,
+                       margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+        box.set_size_request(320, -1)
+        if not history:
+            box.append(Gtk.Label(label=_("No history yet."), css_classes=["dim-label"]))
+        else:
+            list_box = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+            list_box.add_css_class("boxed-list")
+            list_box.connect("row-activated", self.on_history_row_activated)
+            for command in history:
+                label = Gtk.Label(
+                    label=command, xalign=0, ellipsize=Pango.EllipsizeMode.END,
+                    margin_top=4, margin_bottom=4, margin_start=8, margin_end=8,
+                )
+                row = Gtk.ListBoxRow(child=label)
+                row.set_tooltip_text(command)
+                row.thongssh_command = command
+                list_box.append(row)
+            list_scroller = Gtk.ScrolledWindow()
+            list_scroller.set_max_content_height(240)
+            list_scroller.set_propagate_natural_height(True)
+            list_scroller.set_child(list_box)
+            box.append(list_scroller)
+            box.append(Gtk.Separator(margin_top=3, margin_bottom=3))
+            clear_button = Gtk.Button(label=_("Clear History"), css_classes=["destructive-action", "flat"])
+            clear_button.connect("clicked", self.on_clear_history_clicked)
+            box.append(clear_button)
+        popover.set_child(box)
+
+    def on_history_row_activated(self, list_box, row):
+        self._history_index = -1
+        self._set_command_text(row.thongssh_command)
+        self.history_popover.popdown()
+        self.command_view.grab_focus()
+
+    def on_clear_history_clicked(self, button):
+        self.parent_window.settings_manager.set("batch_command_history", [])
+        self.parent_window.settings_manager.save()
+        self._history_index = -1
+        self.history_popover.popdown()
+
+    def on_close_after_send_toggled(self, checkbutton):
+        self.parent_window.settings_manager.set(
+            "interface.batch_command_close_after_send", checkbutton.get_active()
+        )
+        self.parent_window.settings_manager.save()
+
+    def _record_history(self, command):
+        """Pushes a successfully-sent command to the front of
+        batch_command_history — de-duplicated (re-sending an existing
+        entry moves it to the front rather than appearing twice) and
+        capped at 300 entries."""
+        history = self.parent_window.settings_manager.get("batch_command_history") or []
+        history = [h for h in history if h != command]
+        history.insert(0, command)
+        self.parent_window.settings_manager.set("batch_command_history", history[:300])
+        self.parent_window.settings_manager.save()
 
     def on_send_clicked(self, *args):
         start, end = self.command_buffer.get_bounds()
@@ -3946,6 +4197,8 @@ class BatchCommandDialog(Adw.Window):
             # Nothing was actually selected/available — leave the window
             # open rather than closing on a no-op send.
             return
+
+        self._record_history(command)
 
         if self.close_after_send_check.get_active():
             self.close()
