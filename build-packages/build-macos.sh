@@ -297,7 +297,20 @@ OPTIONS = {
         'keyring.backends', 'keyring.backends.macOS',
         'gi.repository.Gtk', 'gi.repository.Adw', 'gi.repository.Vte',
         'gi.repository.GdkPixbuf', 'gi.repository.Gio', 'gi.repository.Pango',
-        'gi.repository.cairo', 'gi.repository.Atk', 'gi.repository.GLib', 'gi.repository.GObject'
+        'gi.repository.cairo', 'gi.repository.Atk', 'gi.repository.GLib', 'gi.repository.GObject',
+        # math.integer (PEP 791, new in Python 3.15) is backed by this C
+        # extension — too new for py2app's own modulegraph to know about
+        # (confirmed: py2app 0.28.x predates 3.15), so it's silently left
+        # out of the bundled stdlib. Nothing in this app imports it
+        # directly; something several layers down selectors/subprocess's
+        # own import chain does on 3.15, which is what actually crashed —
+        # "Standard library module '_math_integer' was not found" at
+        # launch, every time, since multiprocessing.util (imported by
+        # __boot__.py's own multiprocessing bootstrap) pulls in subprocess
+        # pulls in selectors unconditionally. 'math.integer' listed too
+        # since that's the real importable name PEP 791 exposes; '_math_
+        # integer' is what the traceback actually named.
+        'math.integer', '_math_integer',
     ],
     'frameworks': dylib_files,
     'plist': {
