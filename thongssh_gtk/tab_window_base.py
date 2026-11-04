@@ -1970,12 +1970,13 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
     def _compute_log_path(self, host_str, name):
         """Where a new session log should be written — directory per the
         client.log_dir -> .config_path -> CONFIG_DIR/logs fallback chain
-        (see paths.resolve_log_dir), filename "user@NAME-YYYYMMDD-hh:mm:ss"
+        (see paths.resolve_log_dir), filename "user@NAME-YYYYMMDD-hh-mm-ss.log"
         where NAME is the host's config name (the tree's friendly label),
         not its hostname/IP — the username comes off of host_str (the
         already-resolved "[user@]hostname" string, with any
         interactively-prompted username merged in) since that's the only
-        place it lives."""
+        place it lives. No ":" in the timestamp — illegal in Windows
+        filenames and awkward to tab-complete/select everywhere else."""
         log_dir = resolve_log_dir(self.settings_manager.get("client.log_dir"))
         if host_str and "@" in host_str:
             username, _sep, _hostname = host_str.partition("@")
@@ -1983,8 +1984,8 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         else:
             label = name or host_str or "session"
         label = label.replace("/", "_")
-        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H:%M:%S")
-        return log_dir / f"{label}-{timestamp}"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H-%M-%S")
+        return log_dir / f"{label}-{timestamp}.log"
 
     # --- Local-terminal cwd tracking ---
 
