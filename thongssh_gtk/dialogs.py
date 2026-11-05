@@ -1952,6 +1952,7 @@ class SettingsDialog(Adw.Window):
             ("shortcuts.focus_pane_left", _("Move Focus Left")),
             ("shortcuts.focus_pane_right", _("Move Focus Right")),
             ("shortcuts.close_div", _("Close All Tabs in Pane")),
+            ("shortcuts.toggle_maximize_pane", _("Maximize/Restore Active Pane")),
         ]:
             row = Adw.ActionRow(title=label)
             picker = ShortcutPicker(self.settings_manager.get(key))

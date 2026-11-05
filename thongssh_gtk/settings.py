@@ -83,6 +83,7 @@ DEFAULT_SETTINGS = {
     "shortcuts.focus_pane_left": "<Alt>Left",
     "shortcuts.focus_pane_right": "<Alt>Right",
     "shortcuts.close_div": "<Control><Alt>q", # closes every tab in the active pane; in a detached tab window, closes the window itself
+    "shortcuts.toggle_maximize_pane": "<Control><Shift>x", # active pane fills the whole tab area; press again to restore the split
     # Quick-access bindings for the first 10 Quickies, by position (see the
     # Quickies panel) — "paste" inserts the snippet without running it
     # (same as the panel's own Send ▶ button), "run" inserts and executes
