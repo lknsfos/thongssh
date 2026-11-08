@@ -1,5 +1,13 @@
 # Release Notes
 
+### 🆕 What's New in 0.11.1
+
+Clickable links in the terminal, a pane maximize shortcut, and a copy/paste fix for detached windows — three community contributions from [@worroc](https://github.com/worroc):
+
+* **New: Ctrl+click opens links in the terminal** — both plain-text URLs and OSC 8 hyperlinks (e.g. `ls --hyperlink=auto`) now open in your default browser with Ctrl (Cmd on macOS) held. The pointer turns into a hand over a link; a plain click still just selects text, same as before.
+* **New: maximize/restore the active pane** — Ctrl+Shift+X (configurable under Settings → Shortcuts) makes the active pane fill the whole tab area; press it again to bring the split back. Every pane also got its own maximize/restore button next to its "+" button. No tabs move and every divider keeps its position.
+* **Fixed: Ctrl+Shift+C/V didn't work in a detached terminal window** — copy did nothing, and paste landed in the main window's active tab instead of the detached one. Both now act on the terminal that's actually focused.
+
 ### 🎉 What's New in 0.11.0 — One-Year Anniversary Edition
 
 Multi-select in the host tree with bulk editing, a Smart Search filter, importing from RustConn plus a new Export side, and a proper command history for Batch Command:
