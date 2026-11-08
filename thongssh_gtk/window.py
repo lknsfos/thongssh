@@ -643,6 +643,7 @@ class ThongSSHWindow(TerminalPaneWindow):
         # changes.
         self.split_mode = None  # None | 'vertical' | 'horizontal' | 'grid'
         self._pane_boxes = []
+        self._pane_maximize_buttons = []  # one per pane, see _update_maximize_buttons
         self.pane_tabviews = []
         self.pane_tab_bars = []
         for _i in range(4):
@@ -652,6 +653,9 @@ class ThongSSHWindow(TerminalPaneWindow):
             self.pane_tab_bars.append(_tab_bar)
         self._pane_box_by_tabview = dict(zip(self.pane_tabviews, self._pane_boxes))
         self.active_pane = None
+        # Widgets hidden by _toggle_maximize_pane while one pane is
+        # maximized; empty when nothing is maximized.
+        self._maximize_hidden = []
         self._set_active_pane(self.pane_tabviews[0])
         self._apply_pane_layout()
 
@@ -1611,8 +1615,22 @@ class ThongSSHWindow(TerminalPaneWindow):
         new_local_btn.set_tooltip_text(_("New local terminal"))
         new_local_btn.add_css_class("flat")
         new_local_btn.connect("clicked", self._on_new_local_terminal_clicked, tabview)
-        tab_bar.set_start_action_widget(new_local_btn)
-        self._attach_tab_bar_double_click(tab_bar, tabview, new_local_btn)
+        # Maximize/restore this pane (same as Ctrl+Shift+X), left of "+".
+        # Shown only while there is a split; icon/tooltip follow the
+        # current state — see _update_maximize_buttons.
+        maximize_btn = Gtk.Button(icon_name="view-fullscreen-symbolic")
+        maximize_btn.add_css_class("flat")
+        maximize_btn.set_visible(False)
+        maximize_btn.connect("clicked", self._on_maximize_pane_clicked, tabview)
+        self._pane_maximize_buttons.append(maximize_btn)
+
+        start_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        start_actions.append(maximize_btn)
+        start_actions.append(new_local_btn)
+        tab_bar.set_start_action_widget(start_actions)
+        # Exclude the WHOLE start-action box (not just new_local_btn) from
+        # double-click-to-run-tab-action — it now also holds maximize_btn.
+        self._attach_tab_bar_double_click(tab_bar, tabview, start_actions)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.append(tab_bar)
@@ -1928,8 +1946,57 @@ class ThongSSHWindow(TerminalPaneWindow):
         return b0
 
     def _apply_pane_layout(self):
+        # A rebuilt layout starts un-maximized — the old Paned tree that
+        # held the hidden widgets is thrown away below.
+        self._restore_maximized_pane()
         new_root = self._build_pane_layout_widget(self.split_mode)
         self.terminal_overlay.set_child(new_root)
+
+    def _toggle_maximize_pane(self):
+        """Ctrl+Shift+X — the active pane fills the whole tab area, press
+        again to bring the split back. Only hides the sibling widgets on
+        the way up the Gtk.Paned tree (a Paned with one hidden child gives
+        the other all the space), so no tabs move and every divider keeps
+        its position. No-op without a split."""
+        if self._maximize_hidden:
+            self._restore_maximized_pane()
+            return
+        if self.split_mode is None:
+            return
+        widget = self._pane_box_by_tabview[self._get_active_tabview()]
+        parent = widget.get_parent()
+        while isinstance(parent, Gtk.Paned):
+            sibling = parent.get_end_child() if parent.get_start_child() is widget else parent.get_start_child()
+            if sibling is not None and sibling.get_visible():
+                sibling.set_visible(False)
+                self._maximize_hidden.append(sibling)
+            widget, parent = parent, parent.get_parent()
+        self._update_maximize_buttons()
+
+    def _restore_maximized_pane(self):
+        for widget in self._maximize_hidden:
+            widget.set_visible(True)
+        self._maximize_hidden = []
+        self._update_maximize_buttons()
+
+    def _on_maximize_pane_clicked(self, button, tabview):
+        """A pane's own maximize/restore button — acts on THAT pane, not
+        whichever one happened to be active before the click."""
+        self._set_active_pane(tabview)
+        self._toggle_maximize_pane()
+
+    def _update_maximize_buttons(self):
+        """Every pane's maximize button: hidden without a split, otherwise
+        "maximize" or "restore" depending on the current state. A pane
+        hidden by maximize can't show its button anyway, so one state for
+        all of them is enough."""
+        maximized = bool(self._maximize_hidden)
+        icon = "view-restore-symbolic" if maximized else "view-fullscreen-symbolic"
+        tooltip = _("Restore Panes") if maximized else _("Maximize Pane")
+        for button in self._pane_maximize_buttons:
+            button.set_visible(self.split_mode is not None)
+            button.set_icon_name(icon)
+            button.set_tooltip_text(tooltip)
 
     def _update_split_buttons_ui(self):
         """Highlights whichever split button matches the current mode."""
@@ -2027,6 +2094,9 @@ class ThongSSHWindow(TerminalPaneWindow):
 
         if neighbor is None:
             return
+        # The neighbor may be hidden by a maximized pane — show the split
+        # again first, so focus never lands in an invisible pane.
+        self._restore_maximized_pane()
         self._set_active_pane(neighbor)
         terminal = self.get_active_terminal()
         if terminal:
@@ -3393,6 +3463,9 @@ class ThongSSHWindow(TerminalPaneWindow):
             return True
         if self._shortcut_matches("shortcuts.close_div", is_ctrl, is_shift, letter, is_alt=is_alt):
             self._close_all_tabs_in_tabview(self._get_active_tabview())
+            return True
+        if self._shortcut_matches("shortcuts.toggle_maximize_pane", is_ctrl, is_shift, letter, is_alt=is_alt):
+            self._toggle_maximize_pane()
             return True
         if self._keyval_shortcut_matches("shortcuts.focus_pane_up", is_ctrl, is_alt, is_shift, keyval):
             self._move_pane_focus("up")
