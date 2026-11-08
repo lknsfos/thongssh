@@ -999,11 +999,16 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
         # convention these default to, so it has to be wired up explicitly
         # here — both configurable (Settings -> General -> Keyboard
         # Shortcuts), same as close_tab above.
+        # Act on the terminal that got the key, not self.get_active_terminal():
+        # this handler stays bound to the window that CREATED the terminal,
+        # and transfer_page() (detach/attach) never rebinds it — so after a
+        # detach, self is the main window and its "active terminal" is some
+        # other tab (copy did nothing, paste went into the wrong session).
         if self._shortcut_matches("shortcuts.copy", is_ctrl, is_shift, letter):
-            self.on_menu_copy(None, None)
+            controller.get_widget().copy_clipboard_format(Vte.Format.TEXT)
             return True
         if self._shortcut_matches("shortcuts.paste", is_ctrl, is_shift, letter):
-            self.on_menu_paste(None, None)
+            controller.get_widget().paste_clipboard()
             return True
 
         # Any other Ctrl+<letter>: only step in when the active layout's own
