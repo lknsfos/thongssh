@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ThongSSH 0.9.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:01+0300\n"
+"POT-Creation-Date: 2026-11-08 13:05+0200\n"
 "PO-Revision-Date: 2026-08-19 21:07+0300\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -30,8 +30,8 @@ msgstr "מחיקת שיחה זו"
 msgid "Attach terminal context (current selection, or last 20 lines of output)"
 msgstr "צירוף הקשר מהטרמינל (הבחירה הנוכחית, או 20 השורות האחרונות בפלט)"
 
-#: thongssh_gtk/ai_panel.py:200 thongssh_gtk/dialogs.py:3805
-#: thongssh_gtk/send_file.py:109 thongssh_gtk/window.py:2620
+#: thongssh_gtk/ai_panel.py:200 thongssh_gtk/dialogs.py:3806
+#: thongssh_gtk/send_file.py:109 thongssh_gtk/window.py:2690
 msgid "Send"
 msgstr "שליחה"
 
@@ -73,7 +73,7 @@ msgid "Thinking…"
 msgstr "חושב…"
 
 #: thongssh_gtk/ai_providers.py:78 thongssh_gtk/colors.py:68
-#: thongssh_gtk/dialogs.py:3113 thongssh_gtk/window.py:2273
+#: thongssh_gtk/dialogs.py:3114 thongssh_gtk/window.py:2343
 msgid "Custom"
 msgstr "מותאם אישית"
 
@@ -82,8 +82,8 @@ msgstr "מותאם אישית"
 msgid "Request header contains a non-ASCII character (double-check the API key was pasted correctly): {error}"
 msgstr "כותרת הבקשה מכילה תו שאינו ASCII (יש לוודא שמפתח ה-API הודבק כראוי): {error}"
 
-#: thongssh_gtk/cli_providers.py:81 thongssh_gtk/dialogs.py:3142
-#: thongssh_gtk/window.py:2282
+#: thongssh_gtk/cli_providers.py:81 thongssh_gtk/dialogs.py:3143
+#: thongssh_gtk/window.py:2352
 msgid "Custom CLI"
 msgstr "שורת פקודה מותאמת אישית"
 
@@ -123,7 +123,7 @@ msgstr "ברירת מחדל"
 msgid "Attach to Main Window"
 msgstr "צירוף לחלון הראשי"
 
-#: thongssh_gtk/detached_tab_window.py:104 thongssh_gtk/window.py:1611
+#: thongssh_gtk/detached_tab_window.py:104 thongssh_gtk/window.py:1615
 msgid "New local terminal"
 msgstr "טרמינל מקומי חדש"
 
@@ -204,11 +204,11 @@ msgstr "ייצוא מארחים"
 #: thongssh_gtk/dialogs.py:431 thongssh_gtk/dialogs.py:552
 #: thongssh_gtk/dialogs.py:887 thongssh_gtk/dialogs.py:1057
 #: thongssh_gtk/dialogs.py:1121 thongssh_gtk/dialogs.py:1185
-#: thongssh_gtk/dialogs.py:3216 thongssh_gtk/dialogs.py:3236
-#: thongssh_gtk/dialogs.py:3394 thongssh_gtk/host_keys.py:120
+#: thongssh_gtk/dialogs.py:3217 thongssh_gtk/dialogs.py:3237
+#: thongssh_gtk/dialogs.py:3395 thongssh_gtk/host_keys.py:120
 #: thongssh_gtk/send_file.py:157 thongssh_gtk/sftp_widget.py:1275
-#: thongssh_gtk/window.py:2096 thongssh_gtk/window.py:2202
-#: thongssh_gtk/window.py:2232 thongssh_gtk/window.py:4246
+#: thongssh_gtk/window.py:2166 thongssh_gtk/window.py:2272
+#: thongssh_gtk/window.py:2302 thongssh_gtk/window.py:4319
 msgid "Cancel"
 msgstr "ביטול"
 
@@ -219,8 +219,8 @@ msgstr "שמירה"
 
 #: thongssh_gtk/dialogs.py:170 thongssh_gtk/dialogs.py:242
 #: thongssh_gtk/dialogs.py:399 thongssh_gtk/dialogs.py:427
-#: thongssh_gtk/dialogs.py:4183 thongssh_gtk/tab_window_base.py:2483
-#: thongssh_gtk/tab_window_base.py:2619
+#: thongssh_gtk/dialogs.py:4193 thongssh_gtk/tab_window_base.py:2489
+#: thongssh_gtk/tab_window_base.py:2625
 msgid "OK"
 msgstr "אישור"
 
@@ -246,7 +246,7 @@ msgid "Tab Color"
 msgstr "צבע הלשונית"
 
 #: thongssh_gtk/dialogs.py:323 thongssh_gtk/dialogs.py:1116
-#: thongssh_gtk/dialogs.py:2836
+#: thongssh_gtk/dialogs.py:2837
 msgid "Apply"
 msgstr "החלה"
 
@@ -309,14 +309,14 @@ msgstr "פרוטוקול"
 
 #: thongssh_gtk/dialogs.py:567 thongssh_gtk/dialogs.py:1198
 #: thongssh_gtk/dialogs.py:2010 thongssh_gtk/dialogs.py:2116
-#: thongssh_gtk/dialogs.py:2439 thongssh_gtk/dialogs.py:2562
-#: thongssh_gtk/dialogs.py:2708 thongssh_gtk/sftp_widget.py:256
+#: thongssh_gtk/dialogs.py:2440 thongssh_gtk/dialogs.py:2563
+#: thongssh_gtk/dialogs.py:2709 thongssh_gtk/sftp_widget.py:256
 #: thongssh_gtk/sftp_widget.py:359
 msgid "Name"
 msgstr "שם"
 
 #: thongssh_gtk/dialogs.py:570 thongssh_gtk/tab_window_base.py:326
-#: thongssh_gtk/window.py:4296
+#: thongssh_gtk/window.py:4369
 msgid "Hostname/IP"
 msgstr "שם מארח/IP"
 
@@ -437,8 +437,8 @@ msgid "Sent once, in order, right after connecting — before any real login pro
 msgstr "נשלחות פעם אחת, לפי הסדר, מיד לאחר ההתחברות — לפני שמובטח שהנחיית התחברות אמיתית מוכנה, כך שגם הנחיית סיסמה או אישור מפתח מארח תקבל טקסט זה אם תופיע קודם. עובד הכי טוב עם התחברות מבוססת מפתח. משתנים זמינים: $name, $host, $user"
 
 #: thongssh_gtk/dialogs.py:735 thongssh_gtk/dialogs.py:779
-#: thongssh_gtk/dialogs.py:2015 thongssh_gtk/dialogs.py:2677
-#: thongssh_gtk/dialogs.py:2713
+#: thongssh_gtk/dialogs.py:2015 thongssh_gtk/dialogs.py:2678
+#: thongssh_gtk/dialogs.py:2714
 msgid "Command"
 msgstr "פקודה"
 
@@ -474,8 +474,8 @@ msgstr "פקודות"
 msgid "Select SSH Key"
 msgstr "בחירת מפתח SSH"
 
-#: thongssh_gtk/dialogs.py:886 thongssh_gtk/dialogs.py:3215
-#: thongssh_gtk/dialogs.py:3235 thongssh_gtk/dialogs.py:3393
+#: thongssh_gtk/dialogs.py:886 thongssh_gtk/dialogs.py:3216
+#: thongssh_gtk/dialogs.py:3236 thongssh_gtk/dialogs.py:3394
 #: thongssh_gtk/send_file.py:156
 msgid "Select"
 msgstr "בחירה"
@@ -537,7 +537,7 @@ msgstr "השאירו ריק ללא סיומת"
 msgid "Edit Quicky"
 msgstr "עריכת מהירון"
 
-#: thongssh_gtk/dialogs.py:1177 thongssh_gtk/window.py:2525
+#: thongssh_gtk/dialogs.py:1177 thongssh_gtk/window.py:2595
 msgid "Add Quicky"
 msgstr "הוספת מהירון"
 
@@ -545,7 +545,7 @@ msgstr "הוספת מהירון"
 msgid "Available variables: $name, $host, $user"
 msgstr "משתנים זמינים: $name, $host, $user"
 
-#: thongssh_gtk/dialogs.py:1273 thongssh_gtk/dialogs.py:2811
+#: thongssh_gtk/dialogs.py:1273 thongssh_gtk/dialogs.py:2812
 msgid "Terminal"
 msgstr "טרמינל"
 
@@ -741,13 +741,13 @@ msgstr "העברה למעלה (עדיפות גבוהה יותר)"
 msgid "Move down (lower priority)"
 msgstr "העברה למטה (עדיפות נמוכה יותר)"
 
-#: thongssh_gtk/dialogs.py:1673 thongssh_gtk/dialogs.py:2588
-#: thongssh_gtk/dialogs.py:2727
+#: thongssh_gtk/dialogs.py:1673 thongssh_gtk/dialogs.py:2589
+#: thongssh_gtk/dialogs.py:2728
 msgid "Remove"
 msgstr "הסרה"
 
 #: thongssh_gtk/dialogs.py:1723 thongssh_gtk/dialogs.py:1727
-#: thongssh_gtk/dialogs.py:2814
+#: thongssh_gtk/dialogs.py:2815
 msgid "Sync"
 msgstr "סנכרון"
 
@@ -776,13 +776,13 @@ msgid "What to Sync"
 msgstr "מה לסנכרן"
 
 #: thongssh_gtk/dialogs.py:1760 thongssh_gtk/dialogs.py:1832
-#: thongssh_gtk/dialogs.py:1900 thongssh_gtk/dialogs.py:2815
+#: thongssh_gtk/dialogs.py:1900 thongssh_gtk/dialogs.py:2816
 #: thongssh_gtk/window.py:476
 msgid "Hosts"
 msgstr "מארחים"
 
 #: thongssh_gtk/dialogs.py:1764 thongssh_gtk/dialogs.py:2044
-#: thongssh_gtk/dialogs.py:2386 thongssh_gtk/dialogs.py:2813
+#: thongssh_gtk/dialogs.py:2387 thongssh_gtk/dialogs.py:2814
 msgid "Quickies"
 msgstr "מהירונים"
 
@@ -791,12 +791,12 @@ msgid "AI Chats"
 msgstr "שיחות בינה מלאכותית"
 
 #: thongssh_gtk/dialogs.py:1772 thongssh_gtk/dialogs.py:1977
-#: thongssh_gtk/dialogs.py:2812
+#: thongssh_gtk/dialogs.py:2813
 msgid "User Commands"
 msgstr "פקודות משתמש"
 
 #: thongssh_gtk/dialogs.py:1776 thongssh_gtk/dialogs.py:2153
-#: thongssh_gtk/dialogs.py:2809
+#: thongssh_gtk/dialogs.py:2810
 msgid "General"
 msgstr "כללי"
 
@@ -824,11 +824,11 @@ msgstr "כפיית סנכרון עכשיו"
 msgid "Sync Now"
 msgstr "סנכרון עכשיו"
 
-#: thongssh_gtk/dialogs.py:1836 thongssh_gtk/dialogs.py:3329
+#: thongssh_gtk/dialogs.py:1836 thongssh_gtk/dialogs.py:3330
 msgid "Source"
 msgstr "מקור"
 
-#: thongssh_gtk/dialogs.py:1837 thongssh_gtk/dialogs.py:3331
+#: thongssh_gtk/dialogs.py:1837 thongssh_gtk/dialogs.py:3332
 msgid "Parses another SSH/terminal client's config file into a checkbox tree below — nothing is added to your host list until you pick what to import and press Import."
 msgstr "מנתח קובץ הגדרות של לקוח SSH/מסוף אחר לתוך עץ עם תיבות סימון למטה — שום דבר לא נוסף לרשימת המארחים שלך עד שבוחרים מה לייבא ולוחצים על ייבוא."
 
@@ -897,12 +897,12 @@ msgid "Below hosts"
 msgstr "מתחת למארחים"
 
 #: thongssh_gtk/dialogs.py:2065 thongssh_gtk/dialogs.py:2207
-#: thongssh_gtk/window.py:1776
+#: thongssh_gtk/window.py:1794
 msgid "Top"
 msgstr "למעלה"
 
 #: thongssh_gtk/dialogs.py:2065 thongssh_gtk/dialogs.py:2207
-#: thongssh_gtk/window.py:1776
+#: thongssh_gtk/window.py:1794
 msgid "Bottom"
 msgstr "למטה"
 
@@ -1024,7 +1024,7 @@ msgstr "הפעולה שתופעל בעת לחיצה כפולה על לשונית
 msgid "Find and Highlight"
 msgstr "הדגשה וחיפוש"
 
-#: thongssh_gtk/dialogs.py:2254 thongssh_gtk/tab_window_base.py:1276
+#: thongssh_gtk/dialogs.py:2254 thongssh_gtk/tab_window_base.py:1281
 msgid "Find bar opacity"
 msgstr "אטימות שורת החיפוש"
 
@@ -1032,7 +1032,7 @@ msgstr "אטימות שורת החיפוש"
 msgid "Default background opacity of the in-terminal find bar itself — its own slider starts here and can still be adjusted per-pane"
 msgstr "אטימות ברירת המחדל של הרקע של שורת החיפוש עצמה במסוף — המחוון שלה מתחיל מכאן, אך ניתן לכוונון לכל חלונית בנפרד"
 
-#: thongssh_gtk/dialogs.py:2265 thongssh_gtk/tab_window_base.py:1203
+#: thongssh_gtk/dialogs.py:2265 thongssh_gtk/tab_window_base.py:1208
 msgid "Highlight color"
 msgstr "צבע ההדגשה"
 
@@ -1052,7 +1052,7 @@ msgstr "הפעלת רישום ניפוי שגיאות"
 msgid "Print verbose debug messages to the console. Leave off unless troubleshooting an issue."
 msgstr "הדפסת הודעות ניפוי שגיאות מפורטות למסוף. יש להשאיר כבוי אלא אם כן פותרים בעיה."
 
-#: thongssh_gtk/dialogs.py:2295 thongssh_gtk/dialogs.py:2810
+#: thongssh_gtk/dialogs.py:2295 thongssh_gtk/dialogs.py:2811
 msgid "Shortcuts"
 msgstr "קיצורים"
 
@@ -1060,7 +1060,7 @@ msgstr "קיצורים"
 msgid "Click a shortcut, then press the new key combination — Escape cancels, leaving it unchanged."
 msgstr "יש ללחוץ על קיצור, ואז להקיש על צירוף המקשים החדש — Escape מבטל ומשאיר אותו ללא שינוי."
 
-#: thongssh_gtk/dialogs.py:2309 thongssh_gtk/window.py:3478
+#: thongssh_gtk/dialogs.py:2309 thongssh_gtk/window.py:3551
 msgid "Close Tab"
 msgstr "סגירת לשונית"
 
@@ -1077,7 +1077,7 @@ msgstr "חיפוש בטרמינל"
 msgid "Copy"
 msgstr "העתקה"
 
-#: thongssh_gtk/dialogs.py:2313 thongssh_gtk/dialogs.py:2402
+#: thongssh_gtk/dialogs.py:2313 thongssh_gtk/dialogs.py:2403
 #: thongssh_gtk/tab_window_base.py:768
 msgid "Paste"
 msgstr "הדבקה"
@@ -1170,375 +1170,379 @@ msgstr "העברת המיקוד ימינה"
 msgid "Close All Tabs in Pane"
 msgstr "סגירת כל הלשוניות בחלונית"
 
-#: thongssh_gtk/dialogs.py:2388
+#: thongssh_gtk/dialogs.py:2370
+msgid "Maximize/Restore Active Pane"
+msgstr "הגדלת/שחזור החלונית הפעילה"
+
+#: thongssh_gtk/dialogs.py:2389
 msgid "Quick-access bindings for the first 10 Quickies, by their position in the panel (slot 10 uses the \"0\" key) — Paste inserts without running (same as Send ▶), Run inserts and executes (same as Send and Run ⏩)."
 msgstr "קיצורי גישה מהירה ל-10 המהירונים הראשונים, לפי מיקומם בפאנל (המשבצת ה-10 משתמשת במקש \"0\") — הדבקה מכניסה בלי להריץ (כמו שליחה ▶), הרצה מכניסה ומריצה (כמו שליחה והרצה ⏩)."
 
-#: thongssh_gtk/dialogs.py:2404 thongssh_gtk/window.py:3685
+#: thongssh_gtk/dialogs.py:2405 thongssh_gtk/window.py:3758
 msgid "Run"
 msgstr "הרצה"
 
-#: thongssh_gtk/dialogs.py:2429 thongssh_gtk/dialogs.py:2816
+#: thongssh_gtk/dialogs.py:2430 thongssh_gtk/dialogs.py:2817
 msgid "SFTP"
 msgstr "SFTP"
 
-#: thongssh_gtk/dialogs.py:2432
+#: thongssh_gtk/dialogs.py:2433
 msgid "Local Panel"
 msgstr "פאנל מקומי"
 
-#: thongssh_gtk/dialogs.py:2435
+#: thongssh_gtk/dialogs.py:2436
 msgid "Default Local Path"
 msgstr "נתיב מקומי ברירת מחדל"
 
-#: thongssh_gtk/dialogs.py:2439 thongssh_gtk/sftp_widget.py:257
+#: thongssh_gtk/dialogs.py:2440 thongssh_gtk/sftp_widget.py:257
 #: thongssh_gtk/sftp_widget.py:359
 msgid "Size"
 msgstr "גודל"
 
-#: thongssh_gtk/dialogs.py:2439
+#: thongssh_gtk/dialogs.py:2440
 msgid "Date"
 msgstr "תאריך"
 
-#: thongssh_gtk/dialogs.py:2440 thongssh_gtk/dialogs.py:2454
+#: thongssh_gtk/dialogs.py:2441 thongssh_gtk/dialogs.py:2455
 msgid "Default Sort Column"
 msgstr "עמודת מיון ברירת מחדל"
 
-#: thongssh_gtk/dialogs.py:2445
+#: thongssh_gtk/dialogs.py:2446
 msgid "Ascending"
 msgstr "עולה"
 
-#: thongssh_gtk/dialogs.py:2445
+#: thongssh_gtk/dialogs.py:2446
 msgid "Descending"
 msgstr "יורד"
 
-#: thongssh_gtk/dialogs.py:2446 thongssh_gtk/dialogs.py:2459
+#: thongssh_gtk/dialogs.py:2447 thongssh_gtk/dialogs.py:2460
 msgid "Default Sort Direction"
 msgstr "כיוון מיון ברירת מחדל"
 
-#: thongssh_gtk/dialogs.py:2451
+#: thongssh_gtk/dialogs.py:2452
 msgid "Remote Panel"
 msgstr "פאנל מרוחק"
 
-#: thongssh_gtk/dialogs.py:2493
+#: thongssh_gtk/dialogs.py:2494
 msgid "Disable AI"
 msgstr "השבתת בינה מלאכותית"
 
-#: thongssh_gtk/dialogs.py:2494
+#: thongssh_gtk/dialogs.py:2495
 msgid "Turns the feature off entirely: no header-bar buttons, no local CLI tool detection, no keyring lookups, no requests of any kind."
 msgstr "מכבה את התכונה לגמרי: בלי כפתורים בשורת הכותרת, בלי איתור כלי שורת פקודה מקומיים, בלי חיפוש במחזיק המפתחות, ובלי שום בקשה מכל סוג."
 
-#: thongssh_gtk/dialogs.py:2501
+#: thongssh_gtk/dialogs.py:2502
 msgid "System Prompt"
 msgstr "פרומפט מערכת"
 
-#: thongssh_gtk/dialogs.py:2502
+#: thongssh_gtk/dialogs.py:2503
 msgid "Shared by every provider on the API and CLI Client tabs below — sent as the system/initial prompt for every conversation."
 msgstr "משותף לכל הספקים בלשוניות ה-API ולקוח שורת הפקודה שלמטה — נשלח כפרומפט המערכת/הפתיחה בכל שיחה."
 
-#: thongssh_gtk/dialogs.py:2506
+#: thongssh_gtk/dialogs.py:2507
 msgid "Initial prompt"
 msgstr "פרומפט פתיחה"
 
-#: thongssh_gtk/dialogs.py:2511
+#: thongssh_gtk/dialogs.py:2512
 msgid "Reset to default"
 msgstr "איפוס לברירת המחדל"
 
-#: thongssh_gtk/dialogs.py:2521
+#: thongssh_gtk/dialogs.py:2522
 msgid "Connection"
 msgstr "חיבור"
 
-#: thongssh_gtk/dialogs.py:2522
+#: thongssh_gtk/dialogs.py:2523
 msgid "Shared by every provider — raise it if requests to a slower/local model keep timing out."
 msgstr "משותף לכל הספקים — יש להגדיל אם בקשות למודל איטי/מקומי ממשיכות לפוג."
 
-#: thongssh_gtk/dialogs.py:2527
+#: thongssh_gtk/dialogs.py:2528
 msgid "Request timeout (seconds)"
 msgstr "זמן קצוב לבקשה (שניות)"
 
-#: thongssh_gtk/dialogs.py:2539 thongssh_gtk/dialogs.py:2758
+#: thongssh_gtk/dialogs.py:2540 thongssh_gtk/dialogs.py:2759
 msgid "API"
 msgstr "API"
 
-#: thongssh_gtk/dialogs.py:2550
+#: thongssh_gtk/dialogs.py:2551
 msgid "Custom Providers"
 msgstr "ספקים מותאמים אישית"
 
-#: thongssh_gtk/dialogs.py:2551
+#: thongssh_gtk/dialogs.py:2552
 msgid "Any OpenAI-compatible chat completions endpoint (self-hosted, OpenRouter, etc.)."
 msgstr "כל נקודת קצה תואמת OpenAI להשלמות צ'אט (מתארחת עצמאית, OpenRouter וכדומה)."
 
-#: thongssh_gtk/dialogs.py:2560 thongssh_gtk/dialogs.py:2564
+#: thongssh_gtk/dialogs.py:2561 thongssh_gtk/dialogs.py:2565
 msgid "New Provider"
 msgstr "ספק חדש"
 
-#: thongssh_gtk/dialogs.py:2567
+#: thongssh_gtk/dialogs.py:2568
 msgid "Base URL"
 msgstr "כתובת URL בסיסית"
 
-#: thongssh_gtk/dialogs.py:2571
+#: thongssh_gtk/dialogs.py:2572
 msgid "API Key (optional)"
 msgstr "מפתח API (אופציונלי)"
 
-#: thongssh_gtk/dialogs.py:2578 thongssh_gtk/dialogs.py:2635
-#: thongssh_gtk/dialogs.py:2682 thongssh_gtk/dialogs.py:2718
+#: thongssh_gtk/dialogs.py:2579 thongssh_gtk/dialogs.py:2636
+#: thongssh_gtk/dialogs.py:2683 thongssh_gtk/dialogs.py:2719
 msgid "Model"
 msgstr "מודל"
 
-#: thongssh_gtk/dialogs.py:2611
+#: thongssh_gtk/dialogs.py:2612
 msgid "Add Custom Provider"
 msgstr "הוספת ספק מותאם אישית"
 
-#: thongssh_gtk/dialogs.py:2619
+#: thongssh_gtk/dialogs.py:2620
 msgid "Providers"
 msgstr "ספקים"
 
-#: thongssh_gtk/dialogs.py:2620
+#: thongssh_gtk/dialogs.py:2621
 msgid "A header-bar button appears for each provider with a key saved here."
 msgstr "כפתור בשורת הכותרת מופיע עבור כל ספק שיש לו מפתח שמור כאן."
 
-#: thongssh_gtk/dialogs.py:2629
+#: thongssh_gtk/dialogs.py:2630
 msgid "API Key"
 msgstr "מפתח API"
 
-#: thongssh_gtk/dialogs.py:2648 thongssh_gtk/dialogs.py:2759
+#: thongssh_gtk/dialogs.py:2649 thongssh_gtk/dialogs.py:2760
 msgid "CLI Client"
 msgstr "לקוח שורת פקודה"
 
-#: thongssh_gtk/dialogs.py:2652
+#: thongssh_gtk/dialogs.py:2653
 msgid "Standard Tools"
 msgstr "כלים סטנדרטיים"
 
-#: thongssh_gtk/dialogs.py:2654
+#: thongssh_gtk/dialogs.py:2655
 #, python-brace-format
 msgid "Runs the command fresh for every message and reads its stdout as the reply — install the tool yourself first (npm, etc.). \"{message}\" and \"{system_prompt}\" are each substituted with their own argument (never through a shell, so both are always safe regardless of content) — use \"{system_prompt}\" if the tool has its own flag for one (e.g. Claude's --append-system-prompt), otherwise it's prepended into the message automatically."
 msgstr "מריץ את הפקודה מחדש עבור כל הודעה וקורא את פלט ה-stdout שלה כתשובה — יש להתקין את הכלי בעצמכם קודם (npm וכדומה). \"{message}\" ו-\"{system_prompt}\" מוחלפים כל אחד בארגומנט משלו (לעולם לא דרך shell, כך ששניהם בטוחים תמיד ללא תלות בתוכן) — יש להשתמש ב-\"{system_prompt}\" אם לכלי יש דגל משלו לכך (למשל --append-system-prompt של Claude), אחרת הוא מתווסף אוטומטית בתחילת ההודעה."
 
-#: thongssh_gtk/dialogs.py:2671
+#: thongssh_gtk/dialogs.py:2672
 msgid "AI is disabled"
 msgstr "בינה מלאכותית מושבתת"
 
-#: thongssh_gtk/dialogs.py:2673
+#: thongssh_gtk/dialogs.py:2674
 msgid "Found on PATH"
 msgstr "נמצא ב-PATH"
 
-#: thongssh_gtk/dialogs.py:2675
+#: thongssh_gtk/dialogs.py:2676
 msgid "Not found on PATH"
 msgstr "לא נמצא ב-PATH"
 
-#: thongssh_gtk/dialogs.py:2683 thongssh_gtk/dialogs.py:2719
+#: thongssh_gtk/dialogs.py:2684 thongssh_gtk/dialogs.py:2720
 msgid "Leave empty to use the tool's own default — no --model flag is sent at all."
 msgstr "יש להשאיר ריק כדי להשתמש בברירת המחדל של הכלי עצמו — לא נשלח דגל --model כלל."
 
-#: thongssh_gtk/dialogs.py:2696
+#: thongssh_gtk/dialogs.py:2697
 msgid "Custom Tools"
 msgstr "כלים מותאמים אישית"
 
-#: thongssh_gtk/dialogs.py:2697
+#: thongssh_gtk/dialogs.py:2698
 msgid "Any other locally-installed CLI (gemini-cli, aider, ...)."
 msgstr "כל כלי שורת פקודה מותקן מקומית אחר (gemini-cli, aider וכדומה)."
 
-#: thongssh_gtk/dialogs.py:2706 thongssh_gtk/dialogs.py:2710
+#: thongssh_gtk/dialogs.py:2707 thongssh_gtk/dialogs.py:2711
 msgid "New Tool"
 msgstr "כלי חדש"
 
-#: thongssh_gtk/dialogs.py:2748
+#: thongssh_gtk/dialogs.py:2749
 msgid "Add Custom Tool"
 msgstr "הוספת כלי מותאם אישית"
 
-#: thongssh_gtk/dialogs.py:2820 thongssh_gtk/window.py:119
+#: thongssh_gtk/dialogs.py:2821 thongssh_gtk/window.py:119
 msgid "AI"
 msgstr "בינה מלאכותית"
 
-#: thongssh_gtk/dialogs.py:2831 thongssh_gtk/dialogs.py:2832
-#: thongssh_gtk/dialogs.py:2835 thongssh_gtk/window.py:3497
+#: thongssh_gtk/dialogs.py:2832 thongssh_gtk/dialogs.py:2833
+#: thongssh_gtk/dialogs.py:2836 thongssh_gtk/window.py:3570
 msgid "Settings"
 msgstr "הגדרות"
 
-#: thongssh_gtk/dialogs.py:2840
+#: thongssh_gtk/dialogs.py:2841
 msgid "Reset"
 msgstr "איפוס"
 
-#: thongssh_gtk/dialogs.py:2858
+#: thongssh_gtk/dialogs.py:2859
 msgid "Choose from a list"
 msgstr "בחירה מרשימה"
 
-#: thongssh_gtk/dialogs.py:2887
+#: thongssh_gtk/dialogs.py:2888
 msgid "No models found."
 msgstr "לא נמצאו מודלים."
 
-#: thongssh_gtk/dialogs.py:2929
+#: thongssh_gtk/dialogs.py:2930
 msgid "Loading…"
 msgstr "בטעינה…"
 
-#: thongssh_gtk/dialogs.py:2938
+#: thongssh_gtk/dialogs.py:2939
 #, python-brace-format
 msgid "Could not fetch models: {error}"
 msgstr "לא ניתן היה לאחזר מודלים: {error}"
 
-#: thongssh_gtk/dialogs.py:2954
+#: thongssh_gtk/dialogs.py:2955
 msgid "Clear shortcut"
 msgstr "ניקוי הקיצור"
 
-#: thongssh_gtk/dialogs.py:3211
+#: thongssh_gtk/dialogs.py:3212
 msgid "Select Log Directory"
 msgstr "בחירת תיקיית יומנים"
 
-#: thongssh_gtk/dialogs.py:3231
+#: thongssh_gtk/dialogs.py:3232
 msgid "Select Sync Folder"
 msgstr "בחירת תיקיית סנכרון"
 
-#: thongssh_gtk/dialogs.py:3249
+#: thongssh_gtk/dialogs.py:3250
 msgid "Not synced yet"
 msgstr "עדיין לא סונכרן"
 
-#: thongssh_gtk/dialogs.py:3255
+#: thongssh_gtk/dialogs.py:3256
 #, python-brace-format
 msgid "Last attempt failed: {error}"
 msgstr "הניסיון האחרון נכשל: {error}"
 
-#: thongssh_gtk/dialogs.py:3258
+#: thongssh_gtk/dialogs.py:3259
 #, python-brace-format
 msgid "Last synced: {time}"
 msgstr "סונכרן לאחרונה: {time}"
 
-#: thongssh_gtk/dialogs.py:3260
+#: thongssh_gtk/dialogs.py:3261
 msgid "Never synced"
 msgstr "מעולם לא סונכרן"
 
-#: thongssh_gtk/dialogs.py:3285 thongssh_gtk/window.py:2128
+#: thongssh_gtk/dialogs.py:3286 thongssh_gtk/window.py:2198
 msgid "Syncing…"
 msgstr "מסנכרן…"
 
-#: thongssh_gtk/dialogs.py:3322
+#: thongssh_gtk/dialogs.py:3323
 msgid "Current Hosts"
 msgstr "מארחים נוכחיים"
 
-#: thongssh_gtk/dialogs.py:3324
+#: thongssh_gtk/dialogs.py:3325
 msgid "Loads your current host tree below — check what to include, then press Export to save it to a file in ThongSSH's own format."
 msgstr "טוען את עץ המארחים הנוכחי למטה — סמן מה לכלול, ואז לחץ על ייצוא כדי לשמור אותו לקובץ בפורמט הייחודי של ThongSSH."
 
-#: thongssh_gtk/dialogs.py:3362
+#: thongssh_gtk/dialogs.py:3363
 #, python-brace-format
 msgid "Loaded {hosts} hosts in {groups} groups from your current configuration."
 msgstr "נטענו {hosts} מארחים ב-{groups} קבוצות מההגדרות הנוכחיות שלך."
 
-#: thongssh_gtk/dialogs.py:3389
+#: thongssh_gtk/dialogs.py:3390
 msgid "Select Folder"
 msgstr "בחירת תיקייה"
 
-#: thongssh_gtk/dialogs.py:3389
+#: thongssh_gtk/dialogs.py:3390
 msgid "Select File"
 msgstr "בחירת קובץ"
 
-#: thongssh_gtk/dialogs.py:3412 thongssh_gtk/dialogs.py:3416
-#: thongssh_gtk/dialogs.py:3551 thongssh_gtk/dialogs.py:3956
+#: thongssh_gtk/dialogs.py:3413 thongssh_gtk/dialogs.py:3417
+#: thongssh_gtk/dialogs.py:3552 thongssh_gtk/dialogs.py:3957
 msgid "Unnamed"
 msgstr "ללא שם"
 
-#: thongssh_gtk/dialogs.py:3423
+#: thongssh_gtk/dialogs.py:3424
 msgid "Choose a file or folder first."
 msgstr "יש לבחור קובץ או תיקייה תחילה."
 
-#: thongssh_gtk/dialogs.py:3434
+#: thongssh_gtk/dialogs.py:3435
 #, python-brace-format
 msgid "Could not parse {path} as {format}: {error}"
 msgstr "לא ניתן היה לנתח את {path} כ-{format}: {error}"
 
-#: thongssh_gtk/dialogs.py:3445
+#: thongssh_gtk/dialogs.py:3446
 #, python-brace-format
 msgid "Parsed {hosts} hosts in {groups} groups ({skipped} entries skipped — unsupported or incomplete)."
 msgstr "נותחו {hosts} מארחים ב-{groups} קבוצות ({skipped} רשומות דולגו — לא נתמכות או לא שלמות)."
 
-#: thongssh_gtk/dialogs.py:3452
+#: thongssh_gtk/dialogs.py:3453
 #, python-brace-format
 msgid "Parsed {hosts} hosts in {groups} groups."
 msgstr "נותחו {hosts} מארחים ב-{groups} קבוצות."
 
-#: thongssh_gtk/dialogs.py:3564
+#: thongssh_gtk/dialogs.py:3565
 msgid "Nothing parsed yet — choose a source and press Parse."
 msgstr "עדיין לא נותח דבר — יש לבחור מקור וללחוץ על ניתוח."
 
-#: thongssh_gtk/dialogs.py:3568
+#: thongssh_gtk/dialogs.py:3569
 msgid "Nothing selected to import."
 msgstr "לא נבחר דבר לייבוא."
 
-#: thongssh_gtk/dialogs.py:3572
+#: thongssh_gtk/dialogs.py:3573
 #, python-brace-format
 msgid "Import {format} {date}"
 msgstr "ייבוא {format} {date}"
 
-#: thongssh_gtk/dialogs.py:3588
+#: thongssh_gtk/dialogs.py:3589
 #, python-brace-format
 msgid "Imported {count} hosts into \"{group}\"."
 msgstr "יובאו {count} מארחים אל \"{group}\"."
 
-#: thongssh_gtk/dialogs.py:3601
+#: thongssh_gtk/dialogs.py:3602
 msgid "Nothing to export yet."
 msgstr "אין עדיין מה לייצא."
 
-#: thongssh_gtk/dialogs.py:3605
+#: thongssh_gtk/dialogs.py:3606
 msgid "Nothing selected to export."
 msgstr "לא נבחר דבר לייצוא."
 
-#: thongssh_gtk/dialogs.py:3615
+#: thongssh_gtk/dialogs.py:3616
 #, python-brace-format
 msgid "Exported {hosts} hosts in {groups} groups to {path}."
 msgstr "יוצאו {hosts} מארחים ב-{groups} קבוצות אל {path}."
 
-#: thongssh_gtk/dialogs.py:3635
+#: thongssh_gtk/dialogs.py:3636
 msgid "New Command"
 msgstr "פקודה חדשה"
 
-#: thongssh_gtk/dialogs.py:3657
+#: thongssh_gtk/dialogs.py:3658
 msgid "New Quicky"
 msgstr "מהירון חדש"
 
-#: thongssh_gtk/dialogs.py:3792 thongssh_gtk/window.py:162
-#: thongssh_gtk/window.py:3484
+#: thongssh_gtk/dialogs.py:3793 thongssh_gtk/window.py:162
+#: thongssh_gtk/window.py:3557
 msgid "Batch Command"
 msgstr "פקודה קבוצתית"
 
-#: thongssh_gtk/dialogs.py:3855
+#: thongssh_gtk/dialogs.py:3856
 msgid "Command history"
 msgstr "היסטוריית פקודות"
 
-#: thongssh_gtk/dialogs.py:3866
+#: thongssh_gtk/dialogs.py:3867
 msgid "Enter to send, Shift+Enter for a new line, Up/Down for history"
 msgstr "Enter לשליחה, Shift+Enter לשורה חדשה, חצים למעלה/למטה להיסטוריה"
 
-#: thongssh_gtk/dialogs.py:3872
+#: thongssh_gtk/dialogs.py:3873
 msgid "Close window after send"
 msgstr "סגירת החלון לאחר השליחה"
 
-#: thongssh_gtk/dialogs.py:3883
+#: thongssh_gtk/dialogs.py:3884
 msgid "Select / Deselect All"
 msgstr "בחירת הכול / ביטול בחירת הכול"
 
-#: thongssh_gtk/dialogs.py:3892
+#: thongssh_gtk/dialogs.py:3893
 msgid "Divs"
 msgstr "מקטעים"
 
-#: thongssh_gtk/dialogs.py:3898
+#: thongssh_gtk/dialogs.py:3899
 msgid "All divs"
 msgstr "כל המקטעים"
 
-#: thongssh_gtk/dialogs.py:3911
+#: thongssh_gtk/dialogs.py:3912
 msgid "Split the view to filter by pane"
 msgstr "פיצול התצוגה כדי לסנן לפי חלונית"
 
-#: thongssh_gtk/dialogs.py:3964
+#: thongssh_gtk/dialogs.py:3965
 msgid "No open terminal sessions."
 msgstr "אין הפעלות טרמינל פתוחות."
 
-#: thongssh_gtk/dialogs.py:4103
+#: thongssh_gtk/dialogs.py:4109
 msgid "No history yet."
 msgstr "אין עדיין היסטוריה."
 
-#: thongssh_gtk/dialogs.py:4119
+#: thongssh_gtk/dialogs.py:4129
 msgid "Clear History"
 msgstr "ניקוי היסטוריה"
 
-#: thongssh_gtk/dialogs.py:4180
+#: thongssh_gtk/dialogs.py:4190
 msgid "Some terminals didn't receive the command"
 msgstr "חלק מהטרמינלים לא קיבלו את הפקודה"
 
@@ -1619,7 +1623,7 @@ msgid "Connecting..."
 msgstr "מתחבר..."
 
 #: thongssh_gtk/send_file.py:211 thongssh_gtk/sftp_widget.py:530
-#: thongssh_gtk/tab_window_base.py:2293
+#: thongssh_gtk/tab_window_base.py:2299
 msgid "Username Required"
 msgstr "נדרש שם משתמש"
 
@@ -1798,7 +1802,7 @@ msgstr "SFTP מושבת. יש להתקין את 'paramiko'."
 msgid "Error: host is not set in the config."
 msgstr "שגיאה: המארח אינו מוגדר בהגדרות."
 
-#: thongssh_gtk/sftp_widget.py:531 thongssh_gtk/tab_window_base.py:2294
+#: thongssh_gtk/sftp_widget.py:531 thongssh_gtk/tab_window_base.py:2300
 #, python-brace-format
 msgid "Enter username for {host_str}"
 msgstr "יש להזין שם משתמש עבור {host_str}"
@@ -1996,9 +2000,9 @@ msgid "Change Permissions..."
 msgstr "שינוי הרשאות..."
 
 #: thongssh_gtk/sftp_widget.py:1122 thongssh_gtk/sftp_widget.py:1275
-#: thongssh_gtk/window.py:3492 thongssh_gtk/window.py:3664
-#: thongssh_gtk/window.py:3672 thongssh_gtk/window.py:3681
-#: thongssh_gtk/window.py:3690 thongssh_gtk/window.py:4247
+#: thongssh_gtk/window.py:3565 thongssh_gtk/window.py:3737
+#: thongssh_gtk/window.py:3745 thongssh_gtk/window.py:3754
+#: thongssh_gtk/window.py:3763 thongssh_gtk/window.py:4320
 msgid "Delete"
 msgstr "מחיקה"
 
@@ -2048,7 +2052,7 @@ msgstr "יצירת התיקייה '{name}' נכשלה: {e}"
 msgid "Delete '{name}'?"
 msgstr "למחוק את '{name}'?"
 
-#: thongssh_gtk/sftp_widget.py:1265 thongssh_gtk/window.py:4232
+#: thongssh_gtk/sftp_widget.py:1265 thongssh_gtk/window.py:4305
 msgid "This action cannot be undone."
 msgstr "לא ניתן לבטל פעולה זו."
 
@@ -2108,11 +2112,11 @@ msgstr "ההרשאות של {path} שונו ל-{mode}"
 msgid "Failed to change permissions for {path}: {e}"
 msgstr "שינוי ההרשאות של {path} נכשל: {e}"
 
-#: thongssh_gtk/tab_window_base.py:325 thongssh_gtk/window.py:4295
+#: thongssh_gtk/tab_window_base.py:325 thongssh_gtk/window.py:4368
 msgid "Server name"
 msgstr "שם השרת"
 
-#: thongssh_gtk/tab_window_base.py:327 thongssh_gtk/window.py:4297
+#: thongssh_gtk/tab_window_base.py:327 thongssh_gtk/window.py:4370
 msgid "user@hostname"
 msgstr "user@hostname"
 
@@ -2132,7 +2136,7 @@ msgstr "צבע הלשונית…"
 msgid "Save log"
 msgstr "שמירת יומן"
 
-#: thongssh_gtk/tab_window_base.py:797 thongssh_gtk/window.py:3661
+#: thongssh_gtk/tab_window_base.py:797 thongssh_gtk/window.py:3734
 msgid "Connect SFTP"
 msgstr "התחברות ל-SFTP"
 
@@ -2140,56 +2144,56 @@ msgstr "התחברות ל-SFTP"
 msgid "Connect SSH"
 msgstr "התחברות ב-SSH"
 
-#: thongssh_gtk/tab_window_base.py:801 thongssh_gtk/window.py:3662
+#: thongssh_gtk/tab_window_base.py:801 thongssh_gtk/window.py:3735
 msgid "Copy to Clipboard"
 msgstr "העתקה ללוח"
 
-#: thongssh_gtk/tab_window_base.py:1176
+#: thongssh_gtk/tab_window_base.py:1181
 msgid "Previous match"
 msgstr "התאמה קודמת"
 
-#: thongssh_gtk/tab_window_base.py:1180
+#: thongssh_gtk/tab_window_base.py:1185
 msgid "Next match"
 msgstr "התאמה הבאה"
 
-#: thongssh_gtk/tab_window_base.py:1186
+#: thongssh_gtk/tab_window_base.py:1191
 msgid "Close"
 msgstr "סגירה"
 
-#: thongssh_gtk/tab_window_base.py:1199
+#: thongssh_gtk/tab_window_base.py:1204
 msgid "Highlight all"
 msgstr "הדגשת הכול"
 
-#: thongssh_gtk/tab_window_base.py:1250
+#: thongssh_gtk/tab_window_base.py:1255
 msgid "Case sensitive"
 msgstr "רגיש לרישיות"
 
-#: thongssh_gtk/tab_window_base.py:1254
+#: thongssh_gtk/tab_window_base.py:1259
 msgid "Regular expression"
 msgstr "ביטוי רגולרי"
 
-#: thongssh_gtk/tab_window_base.py:1258
+#: thongssh_gtk/tab_window_base.py:1263
 msgid "Wrap around"
 msgstr "גלישה מסביב"
 
-#: thongssh_gtk/tab_window_base.py:1481 thongssh_gtk/tab_window_base.py:1521
+#: thongssh_gtk/tab_window_base.py:1486 thongssh_gtk/tab_window_base.py:1526
 msgid "Invalid pattern"
 msgstr "תבנית שגויה"
 
-#: thongssh_gtk/tab_window_base.py:1483
+#: thongssh_gtk/tab_window_base.py:1488
 msgid "Not found"
 msgstr "לא נמצא"
 
-#: thongssh_gtk/tab_window_base.py:1486
+#: thongssh_gtk/tab_window_base.py:1491
 #, python-brace-format
 msgid "{current} of {total}"
 msgstr "{current} מתוך {total}"
 
-#: thongssh_gtk/tab_window_base.py:2480
+#: thongssh_gtk/tab_window_base.py:2486
 msgid "VTE Spawn Error"
 msgstr "שגיאת הפעלת VTE"
 
-#: thongssh_gtk/tab_window_base.py:2481
+#: thongssh_gtk/tab_window_base.py:2487
 #, python-brace-format
 msgid ""
 "Failed to start the terminal. Check the command and permissions.\n"
@@ -2200,11 +2204,11 @@ msgstr ""
 "\n"
 "פקודה: {cmd_str}"
 
-#: thongssh_gtk/tab_window_base.py:2616
+#: thongssh_gtk/tab_window_base.py:2622
 msgid "SSH Launch Error"
 msgstr "שגיאת הפעלת SSH"
 
-#: thongssh_gtk/tab_window_base.py:2617
+#: thongssh_gtk/tab_window_base.py:2623
 #, python-brace-format
 msgid ""
 "Failed to start the process. Make sure /usr/bin/ssh exists.\n"
@@ -2215,11 +2219,11 @@ msgstr ""
 "\n"
 "שגיאה: {error}"
 
-#: thongssh_gtk/tab_window_base.py:2643
+#: thongssh_gtk/tab_window_base.py:2649
 msgid "Disconnected"
 msgstr "מנותק"
 
-#: thongssh_gtk/tab_window_base.py:2680
+#: thongssh_gtk/tab_window_base.py:2686
 #, python-brace-format
 msgid ""
 "\n"
@@ -2318,48 +2322,56 @@ msgstr "IP/שם מארח (ת'–א')"
 msgid "Sort hosts"
 msgstr "מיון מארחים"
 
-#: thongssh_gtk/window.py:1774
+#: thongssh_gtk/window.py:1792
 msgid "Left"
 msgstr "שמאל"
 
-#: thongssh_gtk/window.py:1774
+#: thongssh_gtk/window.py:1792
 msgid "Right"
 msgstr "ימין"
 
-#: thongssh_gtk/window.py:1779
+#: thongssh_gtk/window.py:1797
 msgid "Top-Left"
 msgstr "למעלה-שמאל"
 
-#: thongssh_gtk/window.py:1779
+#: thongssh_gtk/window.py:1797
 msgid "Top-Right"
 msgstr "למעלה-ימין"
 
-#: thongssh_gtk/window.py:1780
+#: thongssh_gtk/window.py:1798
 msgid "Bottom-Left"
 msgstr "למטה-שמאל"
 
-#: thongssh_gtk/window.py:1780
+#: thongssh_gtk/window.py:1798
 msgid "Bottom-Right"
 msgstr "למטה-ימין"
 
-#: thongssh_gtk/window.py:1794
+#: thongssh_gtk/window.py:1812
 msgid "Main Window"
 msgstr "החלון הראשי"
 
-#: thongssh_gtk/window.py:1796
+#: thongssh_gtk/window.py:1814
 msgid "Detached"
 msgstr "מנותק"
 
-#: thongssh_gtk/window.py:1797
+#: thongssh_gtk/window.py:1815
 #, python-brace-format
 msgid "Detached: {title}"
 msgstr "מנותק: {title}"
 
-#: thongssh_gtk/window.py:2088
+#: thongssh_gtk/window.py:1995
+msgid "Restore Panes"
+msgstr "שחזור חלוניות"
+
+#: thongssh_gtk/window.py:1995
+msgid "Maximize Pane"
+msgstr "הגדלת חלונית"
+
+#: thongssh_gtk/window.py:2158
 msgid "Reset Sync State?"
 msgstr "לאפס את מצב הסנכרון?"
 
-#: thongssh_gtk/window.py:2090
+#: thongssh_gtk/window.py:2160
 msgid ""
 "The next sync will treat THIS machine's local hosts/settings/quickies as authoritative and push them into the current sync folder, instead of merging based on history.\n"
 "\n"
@@ -2369,48 +2381,48 @@ msgstr ""
 "\n"
 "יש לעשות זאת רק לאחר הפניית הסנכרון לתיקייה חדשה או ריקה שרוצים לאכלס — לא בגלל שסנכרון רגיל נכשל."
 
-#: thongssh_gtk/window.py:2097
+#: thongssh_gtk/window.py:2167
 msgid "Reset and Sync Now"
 msgstr "איפוס וסנכרון עכשיו"
 
-#: thongssh_gtk/window.py:2146
+#: thongssh_gtk/window.py:2216
 #, python-brace-format
 msgid "Sync now (last: {time})"
 msgstr "סנכרון עכשיו (אחרון: {time})"
 
-#: thongssh_gtk/window.py:2148
+#: thongssh_gtk/window.py:2218
 msgid "Sync paused — archive identity needs confirmation"
 msgstr "הסנכרון מושהה — יש לאשר את זהות הארכיון"
 
-#: thongssh_gtk/window.py:2152
+#: thongssh_gtk/window.py:2222
 #, python-brace-format
 msgid "Sync failed: {error}"
 msgstr "הסנכרון נכשל: {error}"
 
-#: thongssh_gtk/window.py:2191
+#: thongssh_gtk/window.py:2261
 msgid "Create a New Sync Archive?"
 msgstr "ליצור ארכיון סנכרון חדש?"
 
-#: thongssh_gtk/window.py:2193
+#: thongssh_gtk/window.py:2263
 msgid ""
 "No existing sync archive was found at this folder — neither this machine nor the folder itself has one yet.\n"
 "\n"
 "If this is genuinely a new or empty folder, continuing is safe: it seeds the archive from this machine's current hosts/settings. But if this folder is supposed to already have an archive (e.g. a cloud-synced folder that just hasn't finished downloading yet), continuing now would create a SEPARATE, competing archive instead of joining the real one — wait and try again instead."
 msgstr ""
 
-#: thongssh_gtk/window.py:2203
+#: thongssh_gtk/window.py:2273
 msgid "Create and Sync Now"
 msgstr "יצירה וסנכרון עכשיו"
 
-#: thongssh_gtk/window.py:2216
+#: thongssh_gtk/window.py:2286
 msgid "unknown"
 msgstr "לא ידוע"
 
-#: thongssh_gtk/window.py:2219
+#: thongssh_gtk/window.py:2289
 msgid "Connect to a Different Sync Archive?"
 msgstr "להתחבר לארכיון סנכרון אחר?"
 
-#: thongssh_gtk/window.py:2221
+#: thongssh_gtk/window.py:2291
 #, python-brace-format
 msgid ""
 "The sync folder now contains a different archive than the one this machine last used (id {sync_id}, last synced {when}, {hosts} hosts, {quickies} Quickies).\n"
@@ -2418,90 +2430,90 @@ msgid ""
 "This can happen on purpose (a new shared folder, a teammate's archive) or by mistake (the wrong folder was chosen). Continuing merges this machine's local hosts/settings into it — nothing is deleted on either side, but from then on this machine treats that archive as the one it syncs with."
 msgstr ""
 
-#: thongssh_gtk/window.py:2233
+#: thongssh_gtk/window.py:2303
 msgid "Connect and Sync Now"
 msgstr "התחברות וסנכרון עכשיו"
 
-#: thongssh_gtk/window.py:2516
+#: thongssh_gtk/window.py:2586
 msgid "Quickies search"
 msgstr "חיפוש מהירונים"
 
-#: thongssh_gtk/window.py:2609
+#: thongssh_gtk/window.py:2679
 msgid "Edit"
 msgstr "עריכה"
 
-#: thongssh_gtk/window.py:2616
+#: thongssh_gtk/window.py:2686
 msgid "Send and Run"
 msgstr "שליחה והרצה"
 
-#: thongssh_gtk/window.py:3479
+#: thongssh_gtk/window.py:3552
 msgid "Quit"
 msgstr "יציאה"
 
-#: thongssh_gtk/window.py:3489
+#: thongssh_gtk/window.py:3562
 msgid "Add Host..."
 msgstr "הוספת מארח..."
 
-#: thongssh_gtk/window.py:3490
+#: thongssh_gtk/window.py:3563
 msgid "Create Group..."
 msgstr "יצירת קבוצה..."
 
-#: thongssh_gtk/window.py:3491
+#: thongssh_gtk/window.py:3564
 msgid "Edit/Rename"
 msgstr "עריכה/שינוי שם"
 
-#: thongssh_gtk/window.py:3502
+#: thongssh_gtk/window.py:3575
 msgid "About"
 msgstr "אודות"
 
-#: thongssh_gtk/window.py:3658
+#: thongssh_gtk/window.py:3731
 msgid "Connect"
 msgstr "התחברות"
 
-#: thongssh_gtk/window.py:3659 thongssh_gtk/window.py:3670
-#: thongssh_gtk/window.py:3680 thongssh_gtk/window.py:3686
+#: thongssh_gtk/window.py:3732 thongssh_gtk/window.py:3743
+#: thongssh_gtk/window.py:3753 thongssh_gtk/window.py:3759
 msgid "Edit..."
 msgstr "עריכה..."
 
-#: thongssh_gtk/window.py:3660
+#: thongssh_gtk/window.py:3733
 msgid "Clone"
 msgstr "שיבוט"
 
-#: thongssh_gtk/window.py:3663 thongssh_gtk/window.py:3671
+#: thongssh_gtk/window.py:3736 thongssh_gtk/window.py:3744
 msgid "Export..."
 msgstr "ייצוא..."
 
-#: thongssh_gtk/window.py:3684
+#: thongssh_gtk/window.py:3757
 msgid "Insert into Terminal"
 msgstr "הכנסה לטרמינל"
 
-#: thongssh_gtk/window.py:3687
+#: thongssh_gtk/window.py:3760
 msgid "Send to Batch Command"
 msgstr "שליחה לפקודה קבוצתית"
 
-#: thongssh_gtk/window.py:3688
+#: thongssh_gtk/window.py:3761
 msgid "Move Up"
 msgstr "העברה למעלה"
 
-#: thongssh_gtk/window.py:3689
+#: thongssh_gtk/window.py:3762
 msgid "Move Down"
 msgstr "העברה למטה"
 
-#: thongssh_gtk/window.py:3927
+#: thongssh_gtk/window.py:4000
 msgid "SSH client with a tree-like host structure"
 msgstr "לקוח SSH עם מבנה מארחים דמוי עץ"
 
-#: thongssh_gtk/window.py:4231
+#: thongssh_gtk/window.py:4304
 #, python-brace-format
 msgid "Delete {node_type} '{name}'?"
 msgstr "למחוק {node_type} '{name}'?"
 
-#: thongssh_gtk/window.py:4235
+#: thongssh_gtk/window.py:4308
 #, python-brace-format
 msgid "Delete group '{name}' and ALL its contents?"
 msgstr "למחוק את הקבוצה '{name}' ואת כל תוכנה?"
 
-#: thongssh_gtk/window.py:4236
+#: thongssh_gtk/window.py:4309
 msgid ""
 "All hosts and subgroups inside will be recursively deleted.\n"
 "This action cannot be undone."
@@ -2509,12 +2521,12 @@ msgstr ""
 "כל המארחים ותת-הקבוצות בפנים יימחקו רקורסיבית.\n"
 "לא ניתן לבטל פעולה זו."
 
-#: thongssh_gtk/window.py:4238
+#: thongssh_gtk/window.py:4311
 #, python-brace-format
 msgid "Delete {count} selected items?"
 msgstr "למחוק {count} פריטים שנבחרו?"
 
-#: thongssh_gtk/window.py:4239
+#: thongssh_gtk/window.py:4312
 msgid ""
 "Any selected groups' contents will be recursively deleted too.\n"
 "This action cannot be undone."

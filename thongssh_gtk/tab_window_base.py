@@ -41,6 +41,13 @@ from .i18n import _
 _PCRE2_CASELESS = 0x00000008
 _PCRE2_MULTILINE = 0x00000400
 
+# Plain-text URLs Ctrl+click opens in the default browser. Trailing
+# punctuation is excluded so "see https://x.org." doesn't grab the dot.
+_URL_PATTERN = (
+    r"\b(?:https?|ftp|file)://[^\s<>\"'`]*[^\s<>\"'`.,;:!?)\]}]"
+    r"|\bmailto:[^\s<>\"'`]+"
+)
+
 
 def _tabview_has_page(tabview, page):
     """Whether `page` is currently one of `tabview`'s own pages — safe to
@@ -846,6 +853,61 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+
+    # --- Clickable links in the terminal ---
+
+    def _setup_terminal_links(self, terminal):
+        """Makes URLs in the terminal clickable: plain-text URLs via a
+        match regex, OSC 8 hyperlinks via allow_hyperlink. Ctrl+click
+        (Cmd+click on macOS) opens the link under the pointer."""
+        terminal.set_allow_hyperlink(True)
+        try:
+            regex = Vte.Regex.new_for_match(
+                _URL_PATTERN, -1, Vte.REGEX_FLAGS_DEFAULT | _PCRE2_MULTILINE)
+            tag = terminal.match_add_regex(regex, 0)
+            terminal.match_set_cursor_name(tag, "pointer")
+        except GLib.Error as e:
+            # Links are a convenience; a broken pattern must not stop the
+            # terminal from opening.
+            logging.warning(f"Could not register URL match regex: {e}")
+
+        gesture = Gtk.GestureClick.new()
+        gesture.set_button(Gdk.BUTTON_PRIMARY)
+        # Capture phase: run before VTE's own click handling, so a claimed
+        # Ctrl+click doesn't also start a selection.
+        gesture.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        gesture.connect("pressed", self._on_terminal_link_click)
+        terminal.add_controller(gesture)
+
+    def _link_at(self, terminal, x, y):
+        """The OSC 8 hyperlink or plain-text URL at (x, y), or None."""
+        uri = terminal.check_hyperlink_at(x, y)
+        if uri:
+            return uri
+        uri, _tag = terminal.check_match_at(x, y)
+        return uri
+
+    def _on_terminal_link_click(self, gesture, n_press, x, y):
+        mods = gesture.get_current_event_state()
+        if not mods & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.META_MASK):
+            return
+        uri = self._link_at(gesture.get_widget(), x, y)
+        if not uri:
+            return
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        # Gio directly, not Gtk.UriLauncher: on GNOME the latter goes
+        # through the OpenURI portal and fails with "The application
+        # launch failed" even for plain file:// URIs, while
+        # Gio.AppInfo.launch_default_for_uri opens them fine.
+        context = self.get_display().get_app_launch_context()
+        Gio.AppInfo.launch_default_for_uri_async(
+            uri, context, None, self._on_link_launched, uri)
+
+    def _on_link_launched(self, _source, result, uri):
+        try:
+            Gio.AppInfo.launch_default_for_uri_finish(result)
+        except GLib.Error as e:
+            logging.warning(f"Failed to open link {uri}: {e}")
 
     def _resolve_latin_letter(self, keyval, keycode):
         """The Latin a-z letter for this physical key, even when a non-Latin
@@ -2511,6 +2573,8 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                 scroll_controller = Gtk.EventControllerScroll.new(flags=Gtk.EventControllerScrollFlags.VERTICAL)
                 scroll_controller.connect("scroll", self.on_terminal_scroll)
                 terminal.add_controller(scroll_controller)
+
+                self._setup_terminal_links(terminal)
 
                 scrolled_term = Gtk.ScrolledWindow()
                 # ✨ This ensures the terminal gets the correct size allocation

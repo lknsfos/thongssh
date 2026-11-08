@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ThongSSH 0.9.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 17:01+0300\n"
+"POT-Creation-Date: 2026-11-08 13:05+0200\n"
 "PO-Revision-Date: 2026-08-19 21:07+0300\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -30,8 +30,8 @@ msgstr "删除此对话"
 msgid "Attach terminal context (current selection, or last 20 lines of output)"
 msgstr "附加终端上下文(当前选中内容,或最后 20 行输出)"
 
-#: thongssh_gtk/ai_panel.py:200 thongssh_gtk/dialogs.py:3805
-#: thongssh_gtk/send_file.py:109 thongssh_gtk/window.py:2620
+#: thongssh_gtk/ai_panel.py:200 thongssh_gtk/dialogs.py:3806
+#: thongssh_gtk/send_file.py:109 thongssh_gtk/window.py:2690
 msgid "Send"
 msgstr "发送"
 
@@ -73,7 +73,7 @@ msgid "Thinking…"
 msgstr "正在思考…"
 
 #: thongssh_gtk/ai_providers.py:78 thongssh_gtk/colors.py:68
-#: thongssh_gtk/dialogs.py:3113 thongssh_gtk/window.py:2273
+#: thongssh_gtk/dialogs.py:3114 thongssh_gtk/window.py:2343
 msgid "Custom"
 msgstr "自定义"
 
@@ -82,8 +82,8 @@ msgstr "自定义"
 msgid "Request header contains a non-ASCII character (double-check the API key was pasted correctly): {error}"
 msgstr "请求标头包含非 ASCII 字符(请检查 API 密钥是否粘贴正确):{error}"
 
-#: thongssh_gtk/cli_providers.py:81 thongssh_gtk/dialogs.py:3142
-#: thongssh_gtk/window.py:2282
+#: thongssh_gtk/cli_providers.py:81 thongssh_gtk/dialogs.py:3143
+#: thongssh_gtk/window.py:2352
 msgid "Custom CLI"
 msgstr "自定义命令行工具"
 
@@ -123,7 +123,7 @@ msgstr "默认"
 msgid "Attach to Main Window"
 msgstr "附加到主窗口"
 
-#: thongssh_gtk/detached_tab_window.py:104 thongssh_gtk/window.py:1611
+#: thongssh_gtk/detached_tab_window.py:104 thongssh_gtk/window.py:1615
 msgid "New local terminal"
 msgstr "新建本地终端"
 
@@ -204,11 +204,11 @@ msgstr "导出主机"
 #: thongssh_gtk/dialogs.py:431 thongssh_gtk/dialogs.py:552
 #: thongssh_gtk/dialogs.py:887 thongssh_gtk/dialogs.py:1057
 #: thongssh_gtk/dialogs.py:1121 thongssh_gtk/dialogs.py:1185
-#: thongssh_gtk/dialogs.py:3216 thongssh_gtk/dialogs.py:3236
-#: thongssh_gtk/dialogs.py:3394 thongssh_gtk/host_keys.py:120
+#: thongssh_gtk/dialogs.py:3217 thongssh_gtk/dialogs.py:3237
+#: thongssh_gtk/dialogs.py:3395 thongssh_gtk/host_keys.py:120
 #: thongssh_gtk/send_file.py:157 thongssh_gtk/sftp_widget.py:1275
-#: thongssh_gtk/window.py:2096 thongssh_gtk/window.py:2202
-#: thongssh_gtk/window.py:2232 thongssh_gtk/window.py:4246
+#: thongssh_gtk/window.py:2166 thongssh_gtk/window.py:2272
+#: thongssh_gtk/window.py:2302 thongssh_gtk/window.py:4319
 msgid "Cancel"
 msgstr "取消"
 
@@ -219,8 +219,8 @@ msgstr "保存"
 
 #: thongssh_gtk/dialogs.py:170 thongssh_gtk/dialogs.py:242
 #: thongssh_gtk/dialogs.py:399 thongssh_gtk/dialogs.py:427
-#: thongssh_gtk/dialogs.py:4183 thongssh_gtk/tab_window_base.py:2483
-#: thongssh_gtk/tab_window_base.py:2619
+#: thongssh_gtk/dialogs.py:4193 thongssh_gtk/tab_window_base.py:2489
+#: thongssh_gtk/tab_window_base.py:2625
 msgid "OK"
 msgstr "确定"
 
@@ -246,7 +246,7 @@ msgid "Tab Color"
 msgstr "标签页颜色"
 
 #: thongssh_gtk/dialogs.py:323 thongssh_gtk/dialogs.py:1116
-#: thongssh_gtk/dialogs.py:2836
+#: thongssh_gtk/dialogs.py:2837
 msgid "Apply"
 msgstr "应用"
 
@@ -309,14 +309,14 @@ msgstr "协议"
 
 #: thongssh_gtk/dialogs.py:567 thongssh_gtk/dialogs.py:1198
 #: thongssh_gtk/dialogs.py:2010 thongssh_gtk/dialogs.py:2116
-#: thongssh_gtk/dialogs.py:2439 thongssh_gtk/dialogs.py:2562
-#: thongssh_gtk/dialogs.py:2708 thongssh_gtk/sftp_widget.py:256
+#: thongssh_gtk/dialogs.py:2440 thongssh_gtk/dialogs.py:2563
+#: thongssh_gtk/dialogs.py:2709 thongssh_gtk/sftp_widget.py:256
 #: thongssh_gtk/sftp_widget.py:359
 msgid "Name"
 msgstr "名称"
 
 #: thongssh_gtk/dialogs.py:570 thongssh_gtk/tab_window_base.py:326
-#: thongssh_gtk/window.py:4296
+#: thongssh_gtk/window.py:4369
 msgid "Hostname/IP"
 msgstr "主机名/IP"
 
@@ -437,8 +437,8 @@ msgid "Sent once, in order, right after connecting — before any real login pro
 msgstr "连接后立即按顺序发送一次——无法保证此时真正的登录提示已经就绪,因此如果先出现密码或主机密钥确认提示,也会收到这段文本。在使用密钥登录时效果最佳。可用变量:$name、$host、$user"
 
 #: thongssh_gtk/dialogs.py:735 thongssh_gtk/dialogs.py:779
-#: thongssh_gtk/dialogs.py:2015 thongssh_gtk/dialogs.py:2677
-#: thongssh_gtk/dialogs.py:2713
+#: thongssh_gtk/dialogs.py:2015 thongssh_gtk/dialogs.py:2678
+#: thongssh_gtk/dialogs.py:2714
 msgid "Command"
 msgstr "命令"
 
@@ -474,8 +474,8 @@ msgstr "命令"
 msgid "Select SSH Key"
 msgstr "选择 SSH 密钥"
 
-#: thongssh_gtk/dialogs.py:886 thongssh_gtk/dialogs.py:3215
-#: thongssh_gtk/dialogs.py:3235 thongssh_gtk/dialogs.py:3393
+#: thongssh_gtk/dialogs.py:886 thongssh_gtk/dialogs.py:3216
+#: thongssh_gtk/dialogs.py:3236 thongssh_gtk/dialogs.py:3394
 #: thongssh_gtk/send_file.py:156
 msgid "Select"
 msgstr "选择"
@@ -537,7 +537,7 @@ msgstr "留空表示不添加后缀"
 msgid "Edit Quicky"
 msgstr "编辑锦囊"
 
-#: thongssh_gtk/dialogs.py:1177 thongssh_gtk/window.py:2525
+#: thongssh_gtk/dialogs.py:1177 thongssh_gtk/window.py:2595
 msgid "Add Quicky"
 msgstr "添加锦囊"
 
@@ -545,7 +545,7 @@ msgstr "添加锦囊"
 msgid "Available variables: $name, $host, $user"
 msgstr "可用变量:$name、$host、$user"
 
-#: thongssh_gtk/dialogs.py:1273 thongssh_gtk/dialogs.py:2811
+#: thongssh_gtk/dialogs.py:1273 thongssh_gtk/dialogs.py:2812
 msgid "Terminal"
 msgstr "终端"
 
@@ -741,13 +741,13 @@ msgstr "上移(提高优先级)"
 msgid "Move down (lower priority)"
 msgstr "下移(降低优先级)"
 
-#: thongssh_gtk/dialogs.py:1673 thongssh_gtk/dialogs.py:2588
-#: thongssh_gtk/dialogs.py:2727
+#: thongssh_gtk/dialogs.py:1673 thongssh_gtk/dialogs.py:2589
+#: thongssh_gtk/dialogs.py:2728
 msgid "Remove"
 msgstr "移除"
 
 #: thongssh_gtk/dialogs.py:1723 thongssh_gtk/dialogs.py:1727
-#: thongssh_gtk/dialogs.py:2814
+#: thongssh_gtk/dialogs.py:2815
 msgid "Sync"
 msgstr "同步"
 
@@ -776,13 +776,13 @@ msgid "What to Sync"
 msgstr "同步内容"
 
 #: thongssh_gtk/dialogs.py:1760 thongssh_gtk/dialogs.py:1832
-#: thongssh_gtk/dialogs.py:1900 thongssh_gtk/dialogs.py:2815
+#: thongssh_gtk/dialogs.py:1900 thongssh_gtk/dialogs.py:2816
 #: thongssh_gtk/window.py:476
 msgid "Hosts"
 msgstr "主机"
 
 #: thongssh_gtk/dialogs.py:1764 thongssh_gtk/dialogs.py:2044
-#: thongssh_gtk/dialogs.py:2386 thongssh_gtk/dialogs.py:2813
+#: thongssh_gtk/dialogs.py:2387 thongssh_gtk/dialogs.py:2814
 msgid "Quickies"
 msgstr "锦囊"
 
@@ -791,12 +791,12 @@ msgid "AI Chats"
 msgstr "AI 对话"
 
 #: thongssh_gtk/dialogs.py:1772 thongssh_gtk/dialogs.py:1977
-#: thongssh_gtk/dialogs.py:2812
+#: thongssh_gtk/dialogs.py:2813
 msgid "User Commands"
 msgstr "用户命令"
 
 #: thongssh_gtk/dialogs.py:1776 thongssh_gtk/dialogs.py:2153
-#: thongssh_gtk/dialogs.py:2809
+#: thongssh_gtk/dialogs.py:2810
 msgid "General"
 msgstr "常规"
 
@@ -824,11 +824,11 @@ msgstr "立即强制同步"
 msgid "Sync Now"
 msgstr "立即同步"
 
-#: thongssh_gtk/dialogs.py:1836 thongssh_gtk/dialogs.py:3329
+#: thongssh_gtk/dialogs.py:1836 thongssh_gtk/dialogs.py:3330
 msgid "Source"
 msgstr "来源"
 
-#: thongssh_gtk/dialogs.py:1837 thongssh_gtk/dialogs.py:3331
+#: thongssh_gtk/dialogs.py:1837 thongssh_gtk/dialogs.py:3332
 msgid "Parses another SSH/terminal client's config file into a checkbox tree below — nothing is added to your host list until you pick what to import and press Import."
 msgstr "将另一个 SSH/终端客户端的配置文件解析到下方带复选框的树中——在你选择要导入的内容并点击“导入”之前，不会向主机列表添加任何内容。"
 
@@ -897,12 +897,12 @@ msgid "Below hosts"
 msgstr "主机列表下方"
 
 #: thongssh_gtk/dialogs.py:2065 thongssh_gtk/dialogs.py:2207
-#: thongssh_gtk/window.py:1776
+#: thongssh_gtk/window.py:1794
 msgid "Top"
 msgstr "顶部"
 
 #: thongssh_gtk/dialogs.py:2065 thongssh_gtk/dialogs.py:2207
-#: thongssh_gtk/window.py:1776
+#: thongssh_gtk/window.py:1794
 msgid "Bottom"
 msgstr "底部"
 
@@ -1024,7 +1024,7 @@ msgstr "双击标签栏中的标签页时要执行的操作"
 msgid "Find and Highlight"
 msgstr "高亮并查找"
 
-#: thongssh_gtk/dialogs.py:2254 thongssh_gtk/tab_window_base.py:1276
+#: thongssh_gtk/dialogs.py:2254 thongssh_gtk/tab_window_base.py:1281
 msgid "Find bar opacity"
 msgstr "查找栏不透明度"
 
@@ -1032,7 +1032,7 @@ msgstr "查找栏不透明度"
 msgid "Default background opacity of the in-terminal find bar itself — its own slider starts here and can still be adjusted per-pane"
 msgstr "终端中查找栏自身背景的默认不透明度——它自己的滑块都从这个值开始,但可以按分屏单独调整"
 
-#: thongssh_gtk/dialogs.py:2265 thongssh_gtk/tab_window_base.py:1203
+#: thongssh_gtk/dialogs.py:2265 thongssh_gtk/tab_window_base.py:1208
 msgid "Highlight color"
 msgstr "高亮颜色"
 
@@ -1052,7 +1052,7 @@ msgstr "启用调试日志"
 msgid "Print verbose debug messages to the console. Leave off unless troubleshooting an issue."
 msgstr "在控制台打印详细调试信息。除非正在排查问题,否则请保持关闭。"
 
-#: thongssh_gtk/dialogs.py:2295 thongssh_gtk/dialogs.py:2810
+#: thongssh_gtk/dialogs.py:2295 thongssh_gtk/dialogs.py:2811
 msgid "Shortcuts"
 msgstr "快捷键"
 
@@ -1060,7 +1060,7 @@ msgstr "快捷键"
 msgid "Click a shortcut, then press the new key combination — Escape cancels, leaving it unchanged."
 msgstr "点击某个快捷键,然后按下新的组合键——按 Esc 可取消,快捷键将保持不变。"
 
-#: thongssh_gtk/dialogs.py:2309 thongssh_gtk/window.py:3478
+#: thongssh_gtk/dialogs.py:2309 thongssh_gtk/window.py:3551
 msgid "Close Tab"
 msgstr "关闭标签页"
 
@@ -1077,7 +1077,7 @@ msgstr "在终端中查找"
 msgid "Copy"
 msgstr "复制"
 
-#: thongssh_gtk/dialogs.py:2313 thongssh_gtk/dialogs.py:2402
+#: thongssh_gtk/dialogs.py:2313 thongssh_gtk/dialogs.py:2403
 #: thongssh_gtk/tab_window_base.py:768
 msgid "Paste"
 msgstr "粘贴"
@@ -1170,375 +1170,379 @@ msgstr "焦点移到右侧面板"
 msgid "Close All Tabs in Pane"
 msgstr "关闭该面板中的所有标签页"
 
-#: thongssh_gtk/dialogs.py:2388
+#: thongssh_gtk/dialogs.py:2370
+msgid "Maximize/Restore Active Pane"
+msgstr "最大化/还原当前窗格"
+
+#: thongssh_gtk/dialogs.py:2389
 msgid "Quick-access bindings for the first 10 Quickies, by their position in the panel (slot 10 uses the \"0\" key) — Paste inserts without running (same as Send ▶), Run inserts and executes (same as Send and Run ⏩)."
 msgstr "面板中前 10 个锦囊的快捷键绑定,按其在面板中的位置排列(第 10 项对应“0”键)——“粘贴”仅插入不执行(相当于“发送 ▶”),“运行”插入并执行(相当于“发送并运行 ⏩”)。"
 
-#: thongssh_gtk/dialogs.py:2404 thongssh_gtk/window.py:3685
+#: thongssh_gtk/dialogs.py:2405 thongssh_gtk/window.py:3758
 msgid "Run"
 msgstr "运行"
 
-#: thongssh_gtk/dialogs.py:2429 thongssh_gtk/dialogs.py:2816
+#: thongssh_gtk/dialogs.py:2430 thongssh_gtk/dialogs.py:2817
 msgid "SFTP"
 msgstr "SFTP"
 
-#: thongssh_gtk/dialogs.py:2432
+#: thongssh_gtk/dialogs.py:2433
 msgid "Local Panel"
 msgstr "本地面板"
 
-#: thongssh_gtk/dialogs.py:2435
+#: thongssh_gtk/dialogs.py:2436
 msgid "Default Local Path"
 msgstr "默认本地路径"
 
-#: thongssh_gtk/dialogs.py:2439 thongssh_gtk/sftp_widget.py:257
+#: thongssh_gtk/dialogs.py:2440 thongssh_gtk/sftp_widget.py:257
 #: thongssh_gtk/sftp_widget.py:359
 msgid "Size"
 msgstr "大小"
 
-#: thongssh_gtk/dialogs.py:2439
+#: thongssh_gtk/dialogs.py:2440
 msgid "Date"
 msgstr "日期"
 
-#: thongssh_gtk/dialogs.py:2440 thongssh_gtk/dialogs.py:2454
+#: thongssh_gtk/dialogs.py:2441 thongssh_gtk/dialogs.py:2455
 msgid "Default Sort Column"
 msgstr "默认排序列"
 
-#: thongssh_gtk/dialogs.py:2445
+#: thongssh_gtk/dialogs.py:2446
 msgid "Ascending"
 msgstr "升序"
 
-#: thongssh_gtk/dialogs.py:2445
+#: thongssh_gtk/dialogs.py:2446
 msgid "Descending"
 msgstr "降序"
 
-#: thongssh_gtk/dialogs.py:2446 thongssh_gtk/dialogs.py:2459
+#: thongssh_gtk/dialogs.py:2447 thongssh_gtk/dialogs.py:2460
 msgid "Default Sort Direction"
 msgstr "默认排序方向"
 
-#: thongssh_gtk/dialogs.py:2451
+#: thongssh_gtk/dialogs.py:2452
 msgid "Remote Panel"
 msgstr "远程面板"
 
-#: thongssh_gtk/dialogs.py:2493
+#: thongssh_gtk/dialogs.py:2494
 msgid "Disable AI"
 msgstr "禁用 AI"
 
-#: thongssh_gtk/dialogs.py:2494
+#: thongssh_gtk/dialogs.py:2495
 msgid "Turns the feature off entirely: no header-bar buttons, no local CLI tool detection, no keyring lookups, no requests of any kind."
 msgstr "彻底关闭此功能:不显示标题栏按钮、不检测本地命令行工具、不查询密钥环、也不发起任何请求。"
 
-#: thongssh_gtk/dialogs.py:2501
+#: thongssh_gtk/dialogs.py:2502
 msgid "System Prompt"
 msgstr "系统提示词"
 
-#: thongssh_gtk/dialogs.py:2502
+#: thongssh_gtk/dialogs.py:2503
 msgid "Shared by every provider on the API and CLI Client tabs below — sent as the system/initial prompt for every conversation."
 msgstr "下方“API”与“命令行客户端”标签页中的所有服务商共用此设置——将作为每次对话的系统/初始提示词发送。"
 
-#: thongssh_gtk/dialogs.py:2506
+#: thongssh_gtk/dialogs.py:2507
 msgid "Initial prompt"
 msgstr "初始提示词"
 
-#: thongssh_gtk/dialogs.py:2511
+#: thongssh_gtk/dialogs.py:2512
 msgid "Reset to default"
 msgstr "恢复默认"
 
-#: thongssh_gtk/dialogs.py:2521
+#: thongssh_gtk/dialogs.py:2522
 msgid "Connection"
 msgstr "连接"
 
-#: thongssh_gtk/dialogs.py:2522
+#: thongssh_gtk/dialogs.py:2523
 msgid "Shared by every provider — raise it if requests to a slower/local model keep timing out."
 msgstr "所有服务商共用此设置——如果请求较慢的本地模型经常超时,请调高此值。"
 
-#: thongssh_gtk/dialogs.py:2527
+#: thongssh_gtk/dialogs.py:2528
 msgid "Request timeout (seconds)"
 msgstr "请求超时时间(秒)"
 
-#: thongssh_gtk/dialogs.py:2539 thongssh_gtk/dialogs.py:2758
+#: thongssh_gtk/dialogs.py:2540 thongssh_gtk/dialogs.py:2759
 msgid "API"
 msgstr "API"
 
-#: thongssh_gtk/dialogs.py:2550
+#: thongssh_gtk/dialogs.py:2551
 msgid "Custom Providers"
 msgstr "自定义服务商"
 
-#: thongssh_gtk/dialogs.py:2551
+#: thongssh_gtk/dialogs.py:2552
 msgid "Any OpenAI-compatible chat completions endpoint (self-hosted, OpenRouter, etc.)."
 msgstr "任何兼容 OpenAI 的聊天补全接口(自托管、OpenRouter 等)。"
 
-#: thongssh_gtk/dialogs.py:2560 thongssh_gtk/dialogs.py:2564
+#: thongssh_gtk/dialogs.py:2561 thongssh_gtk/dialogs.py:2565
 msgid "New Provider"
 msgstr "新建服务商"
 
-#: thongssh_gtk/dialogs.py:2567
+#: thongssh_gtk/dialogs.py:2568
 msgid "Base URL"
 msgstr "基础 URL"
 
-#: thongssh_gtk/dialogs.py:2571
+#: thongssh_gtk/dialogs.py:2572
 msgid "API Key (optional)"
 msgstr "API 密钥(可选)"
 
-#: thongssh_gtk/dialogs.py:2578 thongssh_gtk/dialogs.py:2635
-#: thongssh_gtk/dialogs.py:2682 thongssh_gtk/dialogs.py:2718
+#: thongssh_gtk/dialogs.py:2579 thongssh_gtk/dialogs.py:2636
+#: thongssh_gtk/dialogs.py:2683 thongssh_gtk/dialogs.py:2719
 msgid "Model"
 msgstr "模型"
 
-#: thongssh_gtk/dialogs.py:2611
+#: thongssh_gtk/dialogs.py:2612
 msgid "Add Custom Provider"
 msgstr "添加自定义服务商"
 
-#: thongssh_gtk/dialogs.py:2619
+#: thongssh_gtk/dialogs.py:2620
 msgid "Providers"
 msgstr "服务商"
 
-#: thongssh_gtk/dialogs.py:2620
+#: thongssh_gtk/dialogs.py:2621
 msgid "A header-bar button appears for each provider with a key saved here."
 msgstr "每个在此保存了密钥的服务商都会在标题栏显示一个按钮。"
 
-#: thongssh_gtk/dialogs.py:2629
+#: thongssh_gtk/dialogs.py:2630
 msgid "API Key"
 msgstr "API 密钥"
 
-#: thongssh_gtk/dialogs.py:2648 thongssh_gtk/dialogs.py:2759
+#: thongssh_gtk/dialogs.py:2649 thongssh_gtk/dialogs.py:2760
 msgid "CLI Client"
 msgstr "命令行客户端"
 
-#: thongssh_gtk/dialogs.py:2652
+#: thongssh_gtk/dialogs.py:2653
 msgid "Standard Tools"
 msgstr "标准工具"
 
-#: thongssh_gtk/dialogs.py:2654
+#: thongssh_gtk/dialogs.py:2655
 #, python-brace-format
 msgid "Runs the command fresh for every message and reads its stdout as the reply — install the tool yourself first (npm, etc.). \"{message}\" and \"{system_prompt}\" are each substituted with their own argument (never through a shell, so both are always safe regardless of content) — use \"{system_prompt}\" if the tool has its own flag for one (e.g. Claude's --append-system-prompt), otherwise it's prepended into the message automatically."
 msgstr "每条消息都会重新运行该命令,并将其标准输出作为回复——请自行预先安装该工具(通过 npm 等方式)。“{message}”和“{system_prompt}”都会被作为独立参数替换(不经过 shell,因此无论内容是什么都是安全的)——如果该工具本身带有系统提示词参数(例如 Claude 的 --append-system-prompt),请使用“{system_prompt}”,否则系统提示词会自动前置到消息中。"
 
-#: thongssh_gtk/dialogs.py:2671
+#: thongssh_gtk/dialogs.py:2672
 msgid "AI is disabled"
 msgstr "AI 已禁用"
 
-#: thongssh_gtk/dialogs.py:2673
+#: thongssh_gtk/dialogs.py:2674
 msgid "Found on PATH"
 msgstr "已在 PATH 中找到"
 
-#: thongssh_gtk/dialogs.py:2675
+#: thongssh_gtk/dialogs.py:2676
 msgid "Not found on PATH"
 msgstr "未在 PATH 中找到"
 
-#: thongssh_gtk/dialogs.py:2683 thongssh_gtk/dialogs.py:2719
+#: thongssh_gtk/dialogs.py:2684 thongssh_gtk/dialogs.py:2720
 msgid "Leave empty to use the tool's own default — no --model flag is sent at all."
 msgstr "留空则使用该工具自身的默认设置——完全不发送 --model 参数。"
 
-#: thongssh_gtk/dialogs.py:2696
+#: thongssh_gtk/dialogs.py:2697
 msgid "Custom Tools"
 msgstr "自定义工具"
 
-#: thongssh_gtk/dialogs.py:2697
+#: thongssh_gtk/dialogs.py:2698
 msgid "Any other locally-installed CLI (gemini-cli, aider, ...)."
 msgstr "任何其他本地安装的命令行工具(gemini-cli、aider、...)。"
 
-#: thongssh_gtk/dialogs.py:2706 thongssh_gtk/dialogs.py:2710
+#: thongssh_gtk/dialogs.py:2707 thongssh_gtk/dialogs.py:2711
 msgid "New Tool"
 msgstr "新建工具"
 
-#: thongssh_gtk/dialogs.py:2748
+#: thongssh_gtk/dialogs.py:2749
 msgid "Add Custom Tool"
 msgstr "添加自定义工具"
 
-#: thongssh_gtk/dialogs.py:2820 thongssh_gtk/window.py:119
+#: thongssh_gtk/dialogs.py:2821 thongssh_gtk/window.py:119
 msgid "AI"
 msgstr "AI"
 
-#: thongssh_gtk/dialogs.py:2831 thongssh_gtk/dialogs.py:2832
-#: thongssh_gtk/dialogs.py:2835 thongssh_gtk/window.py:3497
+#: thongssh_gtk/dialogs.py:2832 thongssh_gtk/dialogs.py:2833
+#: thongssh_gtk/dialogs.py:2836 thongssh_gtk/window.py:3570
 msgid "Settings"
 msgstr "设置"
 
-#: thongssh_gtk/dialogs.py:2840
+#: thongssh_gtk/dialogs.py:2841
 msgid "Reset"
 msgstr "重置"
 
-#: thongssh_gtk/dialogs.py:2858
+#: thongssh_gtk/dialogs.py:2859
 msgid "Choose from a list"
 msgstr "从列表中选择"
 
-#: thongssh_gtk/dialogs.py:2887
+#: thongssh_gtk/dialogs.py:2888
 msgid "No models found."
 msgstr "未找到任何模型。"
 
-#: thongssh_gtk/dialogs.py:2929
+#: thongssh_gtk/dialogs.py:2930
 msgid "Loading…"
 msgstr "正在加载…"
 
-#: thongssh_gtk/dialogs.py:2938
+#: thongssh_gtk/dialogs.py:2939
 #, python-brace-format
 msgid "Could not fetch models: {error}"
 msgstr "无法获取模型列表:{error}"
 
-#: thongssh_gtk/dialogs.py:2954
+#: thongssh_gtk/dialogs.py:2955
 msgid "Clear shortcut"
 msgstr "清除快捷键"
 
-#: thongssh_gtk/dialogs.py:3211
+#: thongssh_gtk/dialogs.py:3212
 msgid "Select Log Directory"
 msgstr "选择日志目录"
 
-#: thongssh_gtk/dialogs.py:3231
+#: thongssh_gtk/dialogs.py:3232
 msgid "Select Sync Folder"
 msgstr "选择同步文件夹"
 
-#: thongssh_gtk/dialogs.py:3249
+#: thongssh_gtk/dialogs.py:3250
 msgid "Not synced yet"
 msgstr "尚未同步"
 
-#: thongssh_gtk/dialogs.py:3255
+#: thongssh_gtk/dialogs.py:3256
 #, python-brace-format
 msgid "Last attempt failed: {error}"
 msgstr "上次尝试失败:{error}"
 
-#: thongssh_gtk/dialogs.py:3258
+#: thongssh_gtk/dialogs.py:3259
 #, python-brace-format
 msgid "Last synced: {time}"
 msgstr "上次同步:{time}"
 
-#: thongssh_gtk/dialogs.py:3260
+#: thongssh_gtk/dialogs.py:3261
 msgid "Never synced"
 msgstr "从未同步"
 
-#: thongssh_gtk/dialogs.py:3285 thongssh_gtk/window.py:2128
+#: thongssh_gtk/dialogs.py:3286 thongssh_gtk/window.py:2198
 msgid "Syncing…"
 msgstr "正在同步…"
 
-#: thongssh_gtk/dialogs.py:3322
+#: thongssh_gtk/dialogs.py:3323
 msgid "Current Hosts"
 msgstr "当前主机"
 
-#: thongssh_gtk/dialogs.py:3324
+#: thongssh_gtk/dialogs.py:3325
 msgid "Loads your current host tree below — check what to include, then press Export to save it to a file in ThongSSH's own format."
 msgstr "在下方加载当前的主机树 — 勾选要包含的内容，然后点击“导出”以 ThongSSH 自有格式保存为文件。"
 
-#: thongssh_gtk/dialogs.py:3362
+#: thongssh_gtk/dialogs.py:3363
 #, python-brace-format
 msgid "Loaded {hosts} hosts in {groups} groups from your current configuration."
 msgstr "已从当前配置加载 {hosts} 台主机（{groups} 个分组）。"
 
-#: thongssh_gtk/dialogs.py:3389
+#: thongssh_gtk/dialogs.py:3390
 msgid "Select Folder"
 msgstr "选择文件夹"
 
-#: thongssh_gtk/dialogs.py:3389
+#: thongssh_gtk/dialogs.py:3390
 msgid "Select File"
 msgstr "选择文件"
 
-#: thongssh_gtk/dialogs.py:3412 thongssh_gtk/dialogs.py:3416
-#: thongssh_gtk/dialogs.py:3551 thongssh_gtk/dialogs.py:3956
+#: thongssh_gtk/dialogs.py:3413 thongssh_gtk/dialogs.py:3417
+#: thongssh_gtk/dialogs.py:3552 thongssh_gtk/dialogs.py:3957
 msgid "Unnamed"
 msgstr "未命名"
 
-#: thongssh_gtk/dialogs.py:3423
+#: thongssh_gtk/dialogs.py:3424
 msgid "Choose a file or folder first."
 msgstr "请先选择文件或文件夹。"
 
-#: thongssh_gtk/dialogs.py:3434
+#: thongssh_gtk/dialogs.py:3435
 #, python-brace-format
 msgid "Could not parse {path} as {format}: {error}"
 msgstr "无法将 {path} 解析为 {format}:{error}"
 
-#: thongssh_gtk/dialogs.py:3445
+#: thongssh_gtk/dialogs.py:3446
 #, python-brace-format
 msgid "Parsed {hosts} hosts in {groups} groups ({skipped} entries skipped — unsupported or incomplete)."
 msgstr "已在 {groups} 个分组中解析 {hosts} 台主机(跳过 {skipped} 条——不受支持或不完整)。"
 
-#: thongssh_gtk/dialogs.py:3452
+#: thongssh_gtk/dialogs.py:3453
 #, python-brace-format
 msgid "Parsed {hosts} hosts in {groups} groups."
 msgstr "已在 {groups} 个分组中解析 {hosts} 台主机。"
 
-#: thongssh_gtk/dialogs.py:3564
+#: thongssh_gtk/dialogs.py:3565
 msgid "Nothing parsed yet — choose a source and press Parse."
 msgstr "尚未解析任何内容——请选择来源并点击“解析”。"
 
-#: thongssh_gtk/dialogs.py:3568
+#: thongssh_gtk/dialogs.py:3569
 msgid "Nothing selected to import."
 msgstr "未选择任何要导入的内容。"
 
-#: thongssh_gtk/dialogs.py:3572
+#: thongssh_gtk/dialogs.py:3573
 #, python-brace-format
 msgid "Import {format} {date}"
 msgstr "导入 {format} {date}"
 
-#: thongssh_gtk/dialogs.py:3588
+#: thongssh_gtk/dialogs.py:3589
 #, python-brace-format
 msgid "Imported {count} hosts into \"{group}\"."
 msgstr "已将 {count} 台主机导入到\"{group}\"。"
 
-#: thongssh_gtk/dialogs.py:3601
+#: thongssh_gtk/dialogs.py:3602
 msgid "Nothing to export yet."
 msgstr "目前没有可导出的内容。"
 
-#: thongssh_gtk/dialogs.py:3605
+#: thongssh_gtk/dialogs.py:3606
 msgid "Nothing selected to export."
 msgstr "未选择要导出的内容。"
 
-#: thongssh_gtk/dialogs.py:3615
+#: thongssh_gtk/dialogs.py:3616
 #, python-brace-format
 msgid "Exported {hosts} hosts in {groups} groups to {path}."
 msgstr "已将 {hosts} 台主机（{groups} 个分组）导出到 {path}。"
 
-#: thongssh_gtk/dialogs.py:3635
+#: thongssh_gtk/dialogs.py:3636
 msgid "New Command"
 msgstr "新建命令"
 
-#: thongssh_gtk/dialogs.py:3657
+#: thongssh_gtk/dialogs.py:3658
 msgid "New Quicky"
 msgstr "新建锦囊"
 
-#: thongssh_gtk/dialogs.py:3792 thongssh_gtk/window.py:162
-#: thongssh_gtk/window.py:3484
+#: thongssh_gtk/dialogs.py:3793 thongssh_gtk/window.py:162
+#: thongssh_gtk/window.py:3557
 msgid "Batch Command"
 msgstr "批量命令"
 
-#: thongssh_gtk/dialogs.py:3855
+#: thongssh_gtk/dialogs.py:3856
 msgid "Command history"
 msgstr "命令历史记录"
 
-#: thongssh_gtk/dialogs.py:3866
+#: thongssh_gtk/dialogs.py:3867
 msgid "Enter to send, Shift+Enter for a new line, Up/Down for history"
 msgstr "Enter 发送，Shift+Enter 换行，上下方向键浏览历史记录"
 
-#: thongssh_gtk/dialogs.py:3872
+#: thongssh_gtk/dialogs.py:3873
 msgid "Close window after send"
 msgstr "发送后关闭窗口"
 
-#: thongssh_gtk/dialogs.py:3883
+#: thongssh_gtk/dialogs.py:3884
 msgid "Select / Deselect All"
 msgstr "全选/取消全选"
 
-#: thongssh_gtk/dialogs.py:3892
+#: thongssh_gtk/dialogs.py:3893
 msgid "Divs"
 msgstr "分屏"
 
-#: thongssh_gtk/dialogs.py:3898
+#: thongssh_gtk/dialogs.py:3899
 msgid "All divs"
 msgstr "所有分屏"
 
-#: thongssh_gtk/dialogs.py:3911
+#: thongssh_gtk/dialogs.py:3912
 msgid "Split the view to filter by pane"
 msgstr "拆分视图以按面板筛选"
 
-#: thongssh_gtk/dialogs.py:3964
+#: thongssh_gtk/dialogs.py:3965
 msgid "No open terminal sessions."
 msgstr "没有打开的终端会话。"
 
-#: thongssh_gtk/dialogs.py:4103
+#: thongssh_gtk/dialogs.py:4109
 msgid "No history yet."
 msgstr "暂无历史记录。"
 
-#: thongssh_gtk/dialogs.py:4119
+#: thongssh_gtk/dialogs.py:4129
 msgid "Clear History"
 msgstr "清除历史记录"
 
-#: thongssh_gtk/dialogs.py:4180
+#: thongssh_gtk/dialogs.py:4190
 msgid "Some terminals didn't receive the command"
 msgstr "部分终端未收到该命令"
 
@@ -1619,7 +1623,7 @@ msgid "Connecting..."
 msgstr "正在连接..."
 
 #: thongssh_gtk/send_file.py:211 thongssh_gtk/sftp_widget.py:530
-#: thongssh_gtk/tab_window_base.py:2293
+#: thongssh_gtk/tab_window_base.py:2299
 msgid "Username Required"
 msgstr "需要用户名"
 
@@ -1798,7 +1802,7 @@ msgstr "SFTP 已禁用,请安装“paramiko”。"
 msgid "Error: host is not set in the config."
 msgstr "错误:配置中未设置主机。"
 
-#: thongssh_gtk/sftp_widget.py:531 thongssh_gtk/tab_window_base.py:2294
+#: thongssh_gtk/sftp_widget.py:531 thongssh_gtk/tab_window_base.py:2300
 #, python-brace-format
 msgid "Enter username for {host_str}"
 msgstr "请输入 {host_str} 的用户名"
@@ -1996,9 +2000,9 @@ msgid "Change Permissions..."
 msgstr "更改权限..."
 
 #: thongssh_gtk/sftp_widget.py:1122 thongssh_gtk/sftp_widget.py:1275
-#: thongssh_gtk/window.py:3492 thongssh_gtk/window.py:3664
-#: thongssh_gtk/window.py:3672 thongssh_gtk/window.py:3681
-#: thongssh_gtk/window.py:3690 thongssh_gtk/window.py:4247
+#: thongssh_gtk/window.py:3565 thongssh_gtk/window.py:3737
+#: thongssh_gtk/window.py:3745 thongssh_gtk/window.py:3754
+#: thongssh_gtk/window.py:3763 thongssh_gtk/window.py:4320
 msgid "Delete"
 msgstr "删除"
 
@@ -2048,7 +2052,7 @@ msgstr "创建目录“{name}”失败:{e}"
 msgid "Delete '{name}'?"
 msgstr "删除“{name}”?"
 
-#: thongssh_gtk/sftp_widget.py:1265 thongssh_gtk/window.py:4232
+#: thongssh_gtk/sftp_widget.py:1265 thongssh_gtk/window.py:4305
 msgid "This action cannot be undone."
 msgstr "此操作无法撤销。"
 
@@ -2108,11 +2112,11 @@ msgstr "已将 {path} 的权限更改为 {mode}"
 msgid "Failed to change permissions for {path}: {e}"
 msgstr "更改 {path} 的权限失败:{e}"
 
-#: thongssh_gtk/tab_window_base.py:325 thongssh_gtk/window.py:4295
+#: thongssh_gtk/tab_window_base.py:325 thongssh_gtk/window.py:4368
 msgid "Server name"
 msgstr "服务器名称"
 
-#: thongssh_gtk/tab_window_base.py:327 thongssh_gtk/window.py:4297
+#: thongssh_gtk/tab_window_base.py:327 thongssh_gtk/window.py:4370
 msgid "user@hostname"
 msgstr "user@hostname"
 
@@ -2132,7 +2136,7 @@ msgstr "标签页颜色…"
 msgid "Save log"
 msgstr "保存日志"
 
-#: thongssh_gtk/tab_window_base.py:797 thongssh_gtk/window.py:3661
+#: thongssh_gtk/tab_window_base.py:797 thongssh_gtk/window.py:3734
 msgid "Connect SFTP"
 msgstr "连接 SFTP"
 
@@ -2140,56 +2144,56 @@ msgstr "连接 SFTP"
 msgid "Connect SSH"
 msgstr "连接 SSH"
 
-#: thongssh_gtk/tab_window_base.py:801 thongssh_gtk/window.py:3662
+#: thongssh_gtk/tab_window_base.py:801 thongssh_gtk/window.py:3735
 msgid "Copy to Clipboard"
 msgstr "复制到剪贴板"
 
-#: thongssh_gtk/tab_window_base.py:1176
+#: thongssh_gtk/tab_window_base.py:1181
 msgid "Previous match"
 msgstr "上一个匹配项"
 
-#: thongssh_gtk/tab_window_base.py:1180
+#: thongssh_gtk/tab_window_base.py:1185
 msgid "Next match"
 msgstr "下一个匹配项"
 
-#: thongssh_gtk/tab_window_base.py:1186
+#: thongssh_gtk/tab_window_base.py:1191
 msgid "Close"
 msgstr "关闭"
 
-#: thongssh_gtk/tab_window_base.py:1199
+#: thongssh_gtk/tab_window_base.py:1204
 msgid "Highlight all"
 msgstr "全部高亮"
 
-#: thongssh_gtk/tab_window_base.py:1250
+#: thongssh_gtk/tab_window_base.py:1255
 msgid "Case sensitive"
 msgstr "区分大小写"
 
-#: thongssh_gtk/tab_window_base.py:1254
+#: thongssh_gtk/tab_window_base.py:1259
 msgid "Regular expression"
 msgstr "正则表达式"
 
-#: thongssh_gtk/tab_window_base.py:1258
+#: thongssh_gtk/tab_window_base.py:1263
 msgid "Wrap around"
 msgstr "循环查找"
 
-#: thongssh_gtk/tab_window_base.py:1481 thongssh_gtk/tab_window_base.py:1521
+#: thongssh_gtk/tab_window_base.py:1486 thongssh_gtk/tab_window_base.py:1526
 msgid "Invalid pattern"
 msgstr "无效的模式"
 
-#: thongssh_gtk/tab_window_base.py:1483
+#: thongssh_gtk/tab_window_base.py:1488
 msgid "Not found"
 msgstr "未找到"
 
-#: thongssh_gtk/tab_window_base.py:1486
+#: thongssh_gtk/tab_window_base.py:1491
 #, python-brace-format
 msgid "{current} of {total}"
 msgstr "第 {current} 个,共 {total} 个"
 
-#: thongssh_gtk/tab_window_base.py:2480
+#: thongssh_gtk/tab_window_base.py:2486
 msgid "VTE Spawn Error"
 msgstr "VTE 启动错误"
 
-#: thongssh_gtk/tab_window_base.py:2481
+#: thongssh_gtk/tab_window_base.py:2487
 #, python-brace-format
 msgid ""
 "Failed to start the terminal. Check the command and permissions.\n"
@@ -2200,11 +2204,11 @@ msgstr ""
 "\n"
 "命令:{cmd_str}"
 
-#: thongssh_gtk/tab_window_base.py:2616
+#: thongssh_gtk/tab_window_base.py:2622
 msgid "SSH Launch Error"
 msgstr "SSH 启动错误"
 
-#: thongssh_gtk/tab_window_base.py:2617
+#: thongssh_gtk/tab_window_base.py:2623
 #, python-brace-format
 msgid ""
 "Failed to start the process. Make sure /usr/bin/ssh exists.\n"
@@ -2215,11 +2219,11 @@ msgstr ""
 "\n"
 "错误:{error}"
 
-#: thongssh_gtk/tab_window_base.py:2643
+#: thongssh_gtk/tab_window_base.py:2649
 msgid "Disconnected"
 msgstr "已断开"
 
-#: thongssh_gtk/tab_window_base.py:2680
+#: thongssh_gtk/tab_window_base.py:2686
 #, python-brace-format
 msgid ""
 "\n"
@@ -2318,48 +2322,56 @@ msgstr "IP/主机名(Z–A)"
 msgid "Sort hosts"
 msgstr "主机排序"
 
-#: thongssh_gtk/window.py:1774
+#: thongssh_gtk/window.py:1792
 msgid "Left"
 msgstr "左"
 
-#: thongssh_gtk/window.py:1774
+#: thongssh_gtk/window.py:1792
 msgid "Right"
 msgstr "右"
 
-#: thongssh_gtk/window.py:1779
+#: thongssh_gtk/window.py:1797
 msgid "Top-Left"
 msgstr "左上"
 
-#: thongssh_gtk/window.py:1779
+#: thongssh_gtk/window.py:1797
 msgid "Top-Right"
 msgstr "右上"
 
-#: thongssh_gtk/window.py:1780
+#: thongssh_gtk/window.py:1798
 msgid "Bottom-Left"
 msgstr "左下"
 
-#: thongssh_gtk/window.py:1780
+#: thongssh_gtk/window.py:1798
 msgid "Bottom-Right"
 msgstr "右下"
 
-#: thongssh_gtk/window.py:1794
+#: thongssh_gtk/window.py:1812
 msgid "Main Window"
 msgstr "主窗口"
 
-#: thongssh_gtk/window.py:1796
+#: thongssh_gtk/window.py:1814
 msgid "Detached"
 msgstr "已分离"
 
-#: thongssh_gtk/window.py:1797
+#: thongssh_gtk/window.py:1815
 #, python-brace-format
 msgid "Detached: {title}"
 msgstr "已分离:{title}"
 
-#: thongssh_gtk/window.py:2088
+#: thongssh_gtk/window.py:1995
+msgid "Restore Panes"
+msgstr "还原窗格"
+
+#: thongssh_gtk/window.py:1995
+msgid "Maximize Pane"
+msgstr "最大化窗格"
+
+#: thongssh_gtk/window.py:2158
 msgid "Reset Sync State?"
 msgstr "重置同步状态?"
 
-#: thongssh_gtk/window.py:2090
+#: thongssh_gtk/window.py:2160
 msgid ""
 "The next sync will treat THIS machine's local hosts/settings/quickies as authoritative and push them into the current sync folder, instead of merging based on history.\n"
 "\n"
@@ -2369,48 +2381,48 @@ msgstr ""
 "\n"
 "仅在你将同步指向一个想要初始化的全新或空文件夹时才这样做——而不是因为一次普通同步失败了。"
 
-#: thongssh_gtk/window.py:2097
+#: thongssh_gtk/window.py:2167
 msgid "Reset and Sync Now"
 msgstr "重置并立即同步"
 
-#: thongssh_gtk/window.py:2146
+#: thongssh_gtk/window.py:2216
 #, python-brace-format
 msgid "Sync now (last: {time})"
 msgstr "立即同步(上次:{time})"
 
-#: thongssh_gtk/window.py:2148
+#: thongssh_gtk/window.py:2218
 msgid "Sync paused — archive identity needs confirmation"
 msgstr "同步已暂停——需要确认存档身份"
 
-#: thongssh_gtk/window.py:2152
+#: thongssh_gtk/window.py:2222
 #, python-brace-format
 msgid "Sync failed: {error}"
 msgstr "同步失败:{error}"
 
-#: thongssh_gtk/window.py:2191
+#: thongssh_gtk/window.py:2261
 msgid "Create a New Sync Archive?"
 msgstr "要创建新的同步存档吗?"
 
-#: thongssh_gtk/window.py:2193
+#: thongssh_gtk/window.py:2263
 msgid ""
 "No existing sync archive was found at this folder — neither this machine nor the folder itself has one yet.\n"
 "\n"
 "If this is genuinely a new or empty folder, continuing is safe: it seeds the archive from this machine's current hosts/settings. But if this folder is supposed to already have an archive (e.g. a cloud-synced folder that just hasn't finished downloading yet), continuing now would create a SEPARATE, competing archive instead of joining the real one — wait and try again instead."
 msgstr ""
 
-#: thongssh_gtk/window.py:2203
+#: thongssh_gtk/window.py:2273
 msgid "Create and Sync Now"
 msgstr "创建并立即同步"
 
-#: thongssh_gtk/window.py:2216
+#: thongssh_gtk/window.py:2286
 msgid "unknown"
 msgstr "未知"
 
-#: thongssh_gtk/window.py:2219
+#: thongssh_gtk/window.py:2289
 msgid "Connect to a Different Sync Archive?"
 msgstr "要连接到另一个同步存档吗?"
 
-#: thongssh_gtk/window.py:2221
+#: thongssh_gtk/window.py:2291
 #, python-brace-format
 msgid ""
 "The sync folder now contains a different archive than the one this machine last used (id {sync_id}, last synced {when}, {hosts} hosts, {quickies} Quickies).\n"
@@ -2418,90 +2430,90 @@ msgid ""
 "This can happen on purpose (a new shared folder, a teammate's archive) or by mistake (the wrong folder was chosen). Continuing merges this machine's local hosts/settings into it — nothing is deleted on either side, but from then on this machine treats that archive as the one it syncs with."
 msgstr ""
 
-#: thongssh_gtk/window.py:2233
+#: thongssh_gtk/window.py:2303
 msgid "Connect and Sync Now"
 msgstr "连接并立即同步"
 
-#: thongssh_gtk/window.py:2516
+#: thongssh_gtk/window.py:2586
 msgid "Quickies search"
 msgstr "锦囊搜索"
 
-#: thongssh_gtk/window.py:2609
+#: thongssh_gtk/window.py:2679
 msgid "Edit"
 msgstr "编辑"
 
-#: thongssh_gtk/window.py:2616
+#: thongssh_gtk/window.py:2686
 msgid "Send and Run"
 msgstr "发送并运行"
 
-#: thongssh_gtk/window.py:3479
+#: thongssh_gtk/window.py:3552
 msgid "Quit"
 msgstr "退出"
 
-#: thongssh_gtk/window.py:3489
+#: thongssh_gtk/window.py:3562
 msgid "Add Host..."
 msgstr "添加主机..."
 
-#: thongssh_gtk/window.py:3490
+#: thongssh_gtk/window.py:3563
 msgid "Create Group..."
 msgstr "创建组..."
 
-#: thongssh_gtk/window.py:3491
+#: thongssh_gtk/window.py:3564
 msgid "Edit/Rename"
 msgstr "编辑/重命名"
 
-#: thongssh_gtk/window.py:3502
+#: thongssh_gtk/window.py:3575
 msgid "About"
 msgstr "关于"
 
-#: thongssh_gtk/window.py:3658
+#: thongssh_gtk/window.py:3731
 msgid "Connect"
 msgstr "连接"
 
-#: thongssh_gtk/window.py:3659 thongssh_gtk/window.py:3670
-#: thongssh_gtk/window.py:3680 thongssh_gtk/window.py:3686
+#: thongssh_gtk/window.py:3732 thongssh_gtk/window.py:3743
+#: thongssh_gtk/window.py:3753 thongssh_gtk/window.py:3759
 msgid "Edit..."
 msgstr "编辑..."
 
-#: thongssh_gtk/window.py:3660
+#: thongssh_gtk/window.py:3733
 msgid "Clone"
 msgstr "克隆"
 
-#: thongssh_gtk/window.py:3663 thongssh_gtk/window.py:3671
+#: thongssh_gtk/window.py:3736 thongssh_gtk/window.py:3744
 msgid "Export..."
 msgstr "导出…"
 
-#: thongssh_gtk/window.py:3684
+#: thongssh_gtk/window.py:3757
 msgid "Insert into Terminal"
 msgstr "插入到终端"
 
-#: thongssh_gtk/window.py:3687
+#: thongssh_gtk/window.py:3760
 msgid "Send to Batch Command"
 msgstr "发送到批量命令"
 
-#: thongssh_gtk/window.py:3688
+#: thongssh_gtk/window.py:3761
 msgid "Move Up"
 msgstr "上移"
 
-#: thongssh_gtk/window.py:3689
+#: thongssh_gtk/window.py:3762
 msgid "Move Down"
 msgstr "下移"
 
-#: thongssh_gtk/window.py:3927
+#: thongssh_gtk/window.py:4000
 msgid "SSH client with a tree-like host structure"
 msgstr "具有树状主机结构的 SSH 客户端"
 
-#: thongssh_gtk/window.py:4231
+#: thongssh_gtk/window.py:4304
 #, python-brace-format
 msgid "Delete {node_type} '{name}'?"
 msgstr "删除{node_type}“{name}”?"
 
-#: thongssh_gtk/window.py:4235
+#: thongssh_gtk/window.py:4308
 #, python-brace-format
 msgid "Delete group '{name}' and ALL its contents?"
 msgstr "删除组“{name}”及其全部内容?"
 
-#: thongssh_gtk/window.py:4236
+#: thongssh_gtk/window.py:4309
 msgid ""
 "All hosts and subgroups inside will be recursively deleted.\n"
 "This action cannot be undone."
@@ -2509,12 +2521,12 @@ msgstr ""
 "其中的所有主机和子组都将被递归删除。\n"
 "此操作无法撤销。"
 
-#: thongssh_gtk/window.py:4238
+#: thongssh_gtk/window.py:4311
 #, python-brace-format
 msgid "Delete {count} selected items?"
 msgstr "删除已选择的 {count} 个项目？"
 
-#: thongssh_gtk/window.py:4239
+#: thongssh_gtk/window.py:4312
 msgid ""
 "Any selected groups' contents will be recursively deleted too.\n"
 "This action cannot be undone."
