@@ -2458,6 +2458,21 @@ class TerminalPaneWindow(Adw.ApplicationWindow):
                 except Exception as e:
                     logging.warning(f"Error parsing extra options: {e}")
 
+            # Local port forwarding (-L local_port:host:remote_port) — one
+            # per enabled row from HostDialog's "Port Forwarding" group. A
+            # row with a non-numeric/empty port is skipped rather than
+            # passed to ssh, which would just reject the whole command.
+            for forward in (config.get('port_forwards') or []):
+                if not forward.get('enabled', True):
+                    continue
+                local_port = str(forward.get('local_port') or '').strip()
+                remote_port = str(forward.get('remote_port') or '').strip()
+                if not local_port.isdigit() or not remote_port.isdigit():
+                    logging.warning(f"Skipping invalid port forward: {forward}")
+                    continue
+                target_host = (forward.get('host') or '').strip() or 'localhost'
+                cmd.extend(["-L", f"{local_port}:{target_host}:{remote_port}"])
+
             cmd.append(host_str)
 
         elif protocol == "telnet":

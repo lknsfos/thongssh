@@ -472,11 +472,34 @@ class ThongSSHWindow(TerminalPaneWindow):
         # Renderers
         renderer_pixbuf = Gtk.CellRendererPixbuf()
         renderer_text = Gtk.CellRendererText()
+        # Ellipsize long names instead of letting the column demand
+        # whatever width its widest-ever-rendered row needs. Confirmed
+        # live: GtkTreeView only measures a row's cells once that row is
+        # actually realized — a long name sitting inside a COLLAPSED group
+        # is never measured at all until the group is expanded, so the
+        # column's (default GROW_ONLY) width was never informed about it
+        # at startup even though _compute_default_left_panel_width already
+        # scans every row's text regardless of expand state — that scan
+        # only picks the PANED's initial pixel position, a completely
+        # separate, one-time decision from GTK's own lazy, dynamic column-
+        # width cache. Expanding a group with one much-longer name than
+        # anything rendered so far (e.g. "sat-svc01 (ipa) - copy" next to a
+        # dozen plain "sat-gwNNN" entries) made the column suddenly want
+        # far more width than the Paned had ever allocated it, which
+        # doesn't grow to match — the TreeView just rendered clipped
+        # within its existing space instead. FIXED sizing + expand=True
+        # makes the column simply fill whatever width the TreeView itself
+        # has (which only ever changes by the user dragging the Paned
+        # divider), with ellipsize handling anything that doesn't fit —
+        # the same category of bug can't recur regardless of name length.
+        renderer_text.set_property("ellipsize", Pango.EllipsizeMode.END)
         renderer_tab_color = Gtk.CellRendererPixbuf()
         column = Gtk.TreeViewColumn(_("Hosts"))
         column.pack_start(renderer_pixbuf, False)
         column.pack_start(renderer_text, True)
         column.pack_start(renderer_tab_color, False)
+        column.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
+        column.set_expand(True)
 
         column.add_attribute(renderer_pixbuf, "icon-name", COL_ICON)
 
@@ -1538,23 +1561,40 @@ class ThongSSHWindow(TerminalPaneWindow):
 
     def _compute_default_left_panel_width(self):
         """Default sidebar width: just enough to fit the longest host/group
-        name without truncation, plus a fixed allowance for the icon column
-        and tree expander indentation. Only used when no width was dragged
-        (and thus cached) in a previous session."""
-        max_text_width = 0
+        name without truncation, plus an allowance for the icon column and
+        tree expander indentation. Only used when no width was dragged
+        (and thus cached) in a previous session.
 
-        def walk(tree_iter):
-            nonlocal max_text_width
+        Walks main_tree_store (the real Gtk.TreeStore, not the TreeView's
+        own display state) regardless of each group's expanded/collapsed
+        state — a GtkTreeStore holds every row's data either way, "expanded"
+        is purely a view-level toggle — so a currently-collapsed group's
+        children ARE already included here. What used to be missing is
+        DEPTH: each nesting level needs its own expander-arrow indent on
+        top of the icon column, and a flat allowance sized for shallow
+        entries silently came up short for a host several levels deep with
+        a moderately long name — its real on-screen row needs text width +
+        depth * indent, not just text width + a constant. That gap between
+        "what this computed" and "what the row actually renders at" is
+        exactly what let expanding a deep group push the actual rendered
+        width past whatever the panel had ever been sized for."""
+        indent_per_level = 20  # GTK's own expander-arrow indent is close to this per level
+        max_effective_width = 0
+
+        def walk(tree_iter, depth=0):
+            nonlocal max_effective_width
             while tree_iter is not None:
                 name = self.main_tree_store.get_value(tree_iter, COL_NAME)
                 layout = self.tree_view.create_pango_layout(name)
-                max_text_width = max(max_text_width, layout.get_pixel_size()[0])
-                walk(self.main_tree_store.iter_children(tree_iter))
+                text_width = layout.get_pixel_size()[0]
+                max_effective_width = max(max_effective_width, text_width + depth * indent_per_level)
+                walk(self.main_tree_store.iter_children(tree_iter), depth + 1)
                 tree_iter = self.main_tree_store.iter_next(tree_iter)
 
         walk(self.main_tree_store.get_iter_first())
-        # Icon column + expander indent + row/window padding allowance.
-        return max(200, min(600, max_text_width + 80))
+        # Icon column + row/window padding allowance (depth's own share of
+        # the indentation is already folded into max_effective_width above).
+        return max(200, min(600, max_effective_width + 80))
 
     # --- Split-pane layout (up to 4 independent tab panes) ---
     #

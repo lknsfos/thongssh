@@ -534,6 +534,14 @@ class HostDialog(ResponseDialog):
         self.keyring = KeyringManager()
         self.is_edit_mode = (host_data_to_edit is not None)
 
+        # Natural height, not a fixed pixel number — "Basic Settings"
+        # (above the tab switcher) should always show in full when the
+        # screen allows it, never scrolled on its own; only the tabbed
+        # area below should ever scroll (see self.tabs_stack's own
+        # vhomogeneous/ScrolledWindow setup further down for how that's
+        # actually bounded). A small screen that can't even fit Basic
+        # Settings falls back to Adw.PreferencesPage's own built-in
+        # scrolling for it too — nothing special needed for that case.
         self.set_default_size(550, -1)
 
         header_bar = Adw.HeaderBar()
@@ -690,6 +698,73 @@ class HostDialog(ResponseDialog):
         row_options.set_activatable_widget(self.entry_options)
         self.group_ssh_opts.add(row_options)
 
+        # Local port forwarding (ssh -L) — a repeatable list, same
+        # dynamic-rows-plus-pinned-"Add" shape as post_connect_commands/
+        # regexp_commands below, not single Adw.SwitchRow children of
+        # group_ssh_opts above: each row needs 3 entries (local port, host,
+        # remote port) plus its own enabled checkbox, which doesn't fit
+        # that shape.
+        self.group_port_forwards = Adw.PreferencesGroup(
+            title=_("Port Forwarding"),
+            description=_("Local port forwarding (ssh -L), opened automatically on connect — "
+                           "traffic to localhost:LOCAL on this machine is tunneled through the "
+                           "SSH connection to HOST:REMOTE as seen from the server. Leave Host "
+                           "empty for localhost."),
+        )
+        page_options.add(self.group_port_forwards)
+
+        self._port_forward_rows = []  # [{"row_widget", "enabled_check", "local_entry", "host_entry", "remote_entry"}, ...]
+        self._port_forward_add_row = None
+
+        def add_port_forward_row(local_port="", host="", remote_port="", enabled=True):
+            enabled_check = Gtk.CheckButton(active=enabled, valign=Gtk.Align.CENTER)
+            enabled_check.set_tooltip_text(_("Enabled"))
+            local_entry = Gtk.Entry(placeholder_text=_("Local port"), valign=Gtk.Align.CENTER, width_chars=8)
+            local_entry.set_text(local_port)
+            host_entry = Gtk.Entry(placeholder_text="localhost", hexpand=True, valign=Gtk.Align.CENTER)
+            host_entry.set_text(host)
+            remote_entry = Gtk.Entry(placeholder_text=_("Remote port"), valign=Gtk.Align.CENTER, width_chars=8)
+            remote_entry.set_text(remote_port)
+            remove_button = Gtk.Button(icon_name="user-trash-symbolic", css_classes=["flat"], valign=Gtk.Align.CENTER)
+
+            row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6,
+                               margin_top=8, margin_bottom=8, margin_start=12, margin_end=12)
+            row_box.append(enabled_check)
+            row_box.append(local_entry)
+            row_box.append(Gtk.Label(label=":"))
+            row_box.append(host_entry)
+            row_box.append(Gtk.Label(label=":"))
+            row_box.append(remote_entry)
+            row_box.append(remove_button)
+
+            row_state = {"row_widget": row_box, "enabled_check": enabled_check,
+                         "local_entry": local_entry, "host_entry": host_entry, "remote_entry": remote_entry}
+
+            def on_remove(_btn, state=row_state):
+                self.group_port_forwards.remove(state["row_widget"])
+                self._port_forward_rows.remove(state)
+            remove_button.connect("clicked", on_remove)
+
+            self._port_forward_rows.append(row_state)
+            self.group_port_forwards.add(row_box)
+            # Keep "Add Port Forward" pinned below every real row.
+            if self._port_forward_add_row is not None:
+                self.group_port_forwards.remove(self._port_forward_add_row)
+                self.group_port_forwards.add(self._port_forward_add_row)
+
+        for forward in (self.host_config.get("port_forwards") or []):
+            add_port_forward_row(
+                str(forward.get("local_port") or ""), forward.get("host") or "",
+                str(forward.get("remote_port") or ""), forward.get("enabled", True),
+            )
+
+        add_port_forward_action_row = Adw.ActionRow(title=_("Add Port Forward"))
+        add_port_forward_action_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
+        add_port_forward_action_row.set_activatable(True)
+        add_port_forward_action_row.connect("activated", lambda row: add_port_forward_row())
+        self.group_port_forwards.add(add_port_forward_action_row)
+        self._port_forward_add_row = add_port_forward_action_row
+
         self.group_telnet_opts = Adw.PreferencesGroup(title=_("Telnet Options"))
         page_options.add(self.group_telnet_opts)
 
@@ -825,7 +900,41 @@ class HostDialog(ResponseDialog):
         switcher_box = Gtk.Box(halign=Gtk.Align.CENTER, margin_top=6, margin_bottom=6)
         switcher_box.append(view_switcher)
 
-        self.tabs_stack.set_vexpand(True)
+        # vhomogeneous=False: by default Adw.ViewStack sizes its height to
+        # the TALLEST of all its pages at once, not just the visible one —
+        # with that on, switching to "Authentication" (short) still kept
+        # the window as tall as "Options" (long, with Post-connection/
+        # Regexp/Port Forwarding rows piling up). Off, the stack's own
+        # natural height follows whichever page is actually showing.
+        self.tabs_stack.set_vhomogeneous(False)
+
+        # The tab area is the one part of this dialog meant to scroll —
+        # "Basic Settings" above it stays full-size. propagate_natural_
+        # height lets it shrink-wrap short pages (no scrollbar, no wasted
+        # space) and only clamps/scrolls once a page's own natural height
+        # passes max_content_height — same pattern as BatchCommandDialog's
+        # command_view scroller.
+        tabs_scroller = Gtk.ScrolledWindow()
+        tabs_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        tabs_scroller.set_propagate_natural_height(True)
+        tabs_scroller.set_max_content_height(420)
+        tabs_scroller.set_vexpand(True)
+        tabs_scroller.set_child(self.tabs_stack)
+
+        # Pin page_basic's MINIMUM height to its own natural height — with
+        # vexpand=False alone, it still has "slack" (natural well above its
+        # own true minimum, since Adw.PreferencesPage is itself a scrollable
+        # container that could shrink a lot further on paper), and when the
+        # window's total natural height exceeds the screen and main_box has
+        # to shrink SOMETHING, Gtk.Box distributes that deficit using each
+        # child's own slack — not by protecting non-expanding children —
+        # so page_basic, not tabs_scroller, was the one actually losing
+        # height and scrolling on a real screen (confirmed live: switching
+        # to a tall tab like "Options" made Basic Settings itself scroll).
+        # Removing page_basic's slack entirely forces every bit of any
+        # deficit onto tabs_scroller instead, exactly where it's wanted.
+        basic_min_height = page_basic.measure(Gtk.Orientation.VERTICAL, -1)[1]
+        page_basic.set_size_request(-1, basic_min_height)
 
         # --- Field Population and Validation ---
         if self.is_edit_mode:
@@ -842,7 +951,7 @@ class HostDialog(ResponseDialog):
         main_box.append(header_bar)
         main_box.append(page_basic) # Adw.PreferencesPage is already scrollable
         main_box.append(switcher_box)
-        main_box.append(self.tabs_stack)
+        main_box.append(tabs_scroller)
         self.set_content(main_box)
 
     def on_username_entry_changed(self, entry, *args):
@@ -1019,6 +1128,16 @@ class HostDialog(ResponseDialog):
                     "repeat": s["repeat_check"].get_active(),
                 }
                 for s in self._regexp_rows if s["pattern_entry"].get_text().strip()
+            ],
+            "port_forwards": [
+                {
+                    "local_port": s["local_entry"].get_text().strip(),
+                    "host": s["host_entry"].get_text().strip(),
+                    "remote_port": s["remote_entry"].get_text().strip(),
+                    "enabled": s["enabled_check"].get_active(),
+                }
+                for s in self._port_forward_rows
+                if s["local_entry"].get_text().strip() and s["remote_entry"].get_text().strip()
             ],
         }
 

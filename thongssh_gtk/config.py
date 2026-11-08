@@ -63,6 +63,7 @@ HOST_CONFIG_TEMPLATE = {
     "tab_color": None,
     "post_connect_commands": [],  # list[str] — sent in order, once, right after connecting
     "regexp_commands": [],  # list[{"pattern": str, "command": str, "repeat": bool}] — sent once the first time new output matches; "repeat" (default False, missing == False for configs saved before this existed) re-arms it to fire every time the pattern reappears instead
+    "port_forwards": [],  # list[{"local_port": str, "host": str, "remote_port": str, "enabled": bool}] — local port forwards (ssh -L local_port:host:remote_port), host "" means localhost; only "enabled" ones are actually passed to ssh, see tab_window_base.py's command-building
 }
 
 
