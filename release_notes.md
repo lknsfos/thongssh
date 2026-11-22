@@ -1,5 +1,14 @@
 # Release Notes
 
+### 🆕 What's New in 0.11.2
+
+A big pass on the SFTP file browser: multi-file transfers, a visible queue, and much smarter handling of files/folders that already exist on the download side:
+
+* **New: multi-select files for upload/download** — Ctrl/Click or Shift/Click to select several files at once in either pane, then Upload/Download (or the right-click "Transfer" menu, or drag-and-drop) sends all of them. Every file list also always shows a ".." entry at the top to jump to the parent directory, pinned there no matter which column or direction it's sorted by.
+* **New: a "Transfers" panel** — one compact line per transfer (current progress, or "queued") sits above the log, each with its own cancel button — including the one actively in progress, which aborts cleanly instead of running to completion.
+* **New: conflict handling when a download already exists locally** — a folder that's already there gets merged into instead of refusing the whole transfer; a conflicting file prompts to Replace, Skip, Replace only if newer, or Replace if different, with an "Apply to all remaining files" checkbox so it only asks once per batch.
+* **Fixed: downloading a folder onto an existing local one downloaded nothing at all** — even an empty destination folder was enough to make the whole transfer bail out with "File already exists" before looking at a single file inside it.
+
 ### 🆕 What's New in 0.11.1
 
 Clickable links in the terminal, a pane maximize shortcut, and a copy/paste fix for detached windows — three community contributions from [@worroc](https://github.com/worroc):

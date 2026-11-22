@@ -3,7 +3,8 @@
 
 import gi
 gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk, Gdk, GLib, Gio
+gi.require_version('Adw', '1')
+from gi.repository import Gtk, Gdk, GLib, Gio, Pango, Adw
 from gi.repository import GObject # Import GObject for custom sort functions
 import os
 from pathlib import Path
@@ -79,6 +80,23 @@ class SftpWidget(Gtk.Box):
         self._sftp_lock = threading.RLock() # Serialises all sftp_client calls across threads
         self.connection_check_timer_id = None # To store the ID of the connection check timer
 
+        # --- Transfer queue (upload/download) ---
+        # One background worker thread processes self.transfer_queue
+        # strictly in order (FIFO) — replacing the old "spawn a thread per
+        # file" approach, which gave no visibility into what was pending
+        # and no way to cancel a not-yet-started transfer. Items are plain
+        # dicts, mutated only while holding _transfer_queue_lock; "active"
+        # item's bytes_done/bytes_total are updated directly from the
+        # worker thread (simple int writes, safe enough under the GIL) and
+        # polled by a periodic timer rather than pushing a GLib.idle_add
+        # per paramiko progress callback tick, which can fire many times a
+        # second for a large file.
+        self.transfer_queue = []
+        self._transfer_queue_lock = threading.Lock()
+        self._transfer_worker_running = False
+        self._next_transfer_id = 1
+        self._transfer_ui_dirty = False  # sidesteps piling up redundant idle_add calls
+
         self.temp_dir = tempfile.mkdtemp(prefix="thongssh_sftp_")
         self.file_monitors = {} # {local_temp_path: (monitor, remote_path)}
         self._log_message(f"Created temporary directory for remote editing: {self.temp_dir}")
@@ -148,7 +166,13 @@ class SftpWidget(Gtk.Box):
         content_box.append(hpaned)
         content_box.append(button_row)
 
-        # 5. The log panel at the bottom.
+        # 5. The transfer status + queue panel — the current upload/
+        #    download's filename and byte progress, plus the list of
+        #    not-yet-started transfers behind it (each removable before
+        #    its own turn comes up). See _build_transfer_panel.
+        transfer_frame = self._build_transfer_panel()
+
+        # 6. The log panel at the bottom.
         log_frame = Gtk.Frame(vexpand=True)
         log_scrolled = Gtk.ScrolledWindow()
         log_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
@@ -156,19 +180,30 @@ class SftpWidget(Gtk.Box):
         log_scrolled.set_child(self.log_view)
         log_frame.set_child(log_scrolled)
 
-        # 6. A vertical paned between the main content and the log panel —
-        #    drag its handle to resize the log panel's height.
+        bottom_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, vexpand=True, hexpand=True)
+        bottom_box.append(transfer_frame)
+        bottom_box.append(log_frame)
+
+        # 7. A vertical paned between the main content and the bottom
+        #    (transfers + log) area — drag its handle to resize the log
+        #    panel's height; the transfer panel itself sizes to its own
+        #    content (see _build_transfer_panel's own height cap).
         vpaned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL, vexpand=True, hexpand=True, wide_handle=True)
         vpaned.set_start_child(content_box)
         vpaned.set_resize_start_child(True)
         vpaned.set_shrink_start_child(False)
-        vpaned.set_end_child(log_frame)
+        vpaned.set_end_child(bottom_box)
         vpaned.set_resize_end_child(True)
         vpaned.set_shrink_end_child(True)
 
-        # Start with roughly the old fixed 100px log height, still adjustable afterwards.
+        # Start with roughly the old fixed 100px log height, plus enough
+        # extra for the Transfers panel above it (frame header + its own
+        # capped content), still adjustable afterwards by dragging the
+        # handle. The 100px alone predates the Transfers panel and, once
+        # it was added below the divider, left the log squeezed to
+        # ~nothing on a fresh window.
         vpaned.connect("realize", lambda w: GLib.idle_add(
-            lambda: w.set_position(max(w.get_height() - 100, 100)) if w.get_height() > 0 else None))
+            lambda: w.set_position(max(w.get_height() - 240, 100)) if w.get_height() > 0 else None))
 
         self.append(vpaned)
 
@@ -177,6 +212,10 @@ class SftpWidget(Gtk.Box):
         self._connect_sftp()
         GLib.timeout_add(100, self._process_ui_queue)
         self.connection_check_timer_id = GLib.timeout_add_seconds(15, self._check_connection_and_reconnect) # Check connection every 15 seconds
+        # Polls the active transfer's live byte/file counters instead of
+        # pushing a GLib.idle_add from inside the paramiko progress
+        # callback itself, which can fire many times a second.
+        GLib.timeout_add(200, self._tick_transfer_progress)
         self.connect("unrealize", self.on_widget_destroy)
 
     def reconnect(self):
@@ -218,6 +257,262 @@ class SftpWidget(Gtk.Box):
 
         return True # Keep the timer running
 
+    def _install_dotdot_first_sort_funcs(self, sortable_model):
+        """".." (always inserted first in each directory listing — see
+        _load_local_directory/_load_remote_directory) must stay on top
+        regardless of which column is sorted or which direction, which
+        Gtk.TreeModelSort's default per-column value comparison has no
+        concept of — every sortable column gets its own func here instead,
+        each counter-inverting its ".." vs.-other result for DESCENDING so
+        the net effect is "always first" either way.
+
+        Confirmed live (twice) that this needs the CURRENT direction
+        cached externally, in a plain mutable container updated via the
+        "sort-column-changed" signal — model.get_sort_column_id() reports
+        it correctly from any other call site, but reliably returns
+        direction=None when called FROM WITHIN a running sort_func itself
+        (GTK/PyGObject can't answer "what's the active sort state" while
+        a sort using that very state is still being computed). Without
+        this, two different naive approaches were each tried and
+        empirically confirmed wrong: reading get_sort_column_id() directly
+        inside the sort_func (direction was always None, so the ".."
+        counter-invert silently never triggered), and skipping direction-
+        awareness entirely on the theory that GTK's own reversal would
+        handle it by symmetry (it does NOT — GTK sorts once in the
+        comparator's own ascending sense and then reverses the whole
+        resulting sequence for DESCENDING, which reverses the position of
+        a deliberately-pinned-first row right along with everything else
+        unless the comparator itself already counteracts that)."""
+        current_direction = [Gtk.SortType.ASCENDING]
+
+        def on_sort_column_changed(model):
+            _col, direction = model.get_sort_column_id()
+            if direction is not None:
+                current_direction[0] = direction
+
+        sortable_model.connect("sort-column-changed", on_sort_column_changed)
+
+        def make_sort_func(data_col):
+            def sort_func(model, iter1, iter2, _user_data):
+                name1 = model.get_value(iter1, COL_NAME)
+                name2 = model.get_value(iter2, COL_NAME)
+                is_dotdot1 = name1 == ".."
+                is_dotdot2 = name2 == ".."
+                if is_dotdot1 or is_dotdot2:
+                    if is_dotdot1 and is_dotdot2:
+                        return 0
+                    base = -1 if is_dotdot1 else 1
+                    return -base if current_direction[0] == Gtk.SortType.DESCENDING else base
+                val1 = model.get_value(iter1, data_col)
+                val2 = model.get_value(iter2, data_col)
+                if val1 < val2: return -1
+                if val1 > val2: return 1
+                return 0
+            return sort_func
+
+        for data_col in (COL_NAME, COL_SIZE_BYTES, COL_MODIFIED_TS):
+            sortable_model.set_sort_func(data_col, make_sort_func(data_col), None)
+
+    def _build_transfer_panel(self):
+        """The "Transfers" div: one compact line per transfer (active or
+        queued) — name, status, remove/cancel button — in a capped,
+        scrollable list. Rebuilt on demand by _refresh_transfer_ui
+        whenever the queue changes — see _enqueue_transfer/_transfer_worker_loop.
+        Deliberately a single flat list rather than a separate "current
+        transfer" block on top of the queue below it: that duplicated the
+        active item (once as its own label+progress bar, again as a queue
+        row) and ate enough vertical space to push the log panel out of
+        view."""
+        frame = Gtk.Frame(label=_("Transfers"))
+        self.transfer_queue_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2,
+                                           margin_top=4, margin_bottom=4, margin_start=6, margin_end=6)
+        queue_scroller = Gtk.ScrolledWindow()
+        queue_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        # Shrink-wraps an empty/short queue instead of always reserving a
+        # fixed block of space, same propagate_natural_height + capped-
+        # max pattern used for BatchCommandDialog's command box and
+        # HostDialog's tab area. Capped lower than before now that each
+        # row is one line instead of a whole label+progress-bar block.
+        queue_scroller.set_propagate_natural_height(True)
+        queue_scroller.set_max_content_height(90)
+        queue_scroller.set_child(self.transfer_queue_box)
+        frame.set_child(queue_scroller)
+
+        self._refresh_transfer_ui()
+        return frame
+
+    def _enqueue_transfer(self, direction, local_path, remote_path, is_dir):
+        """Adds one upload/download to the transfer queue and makes sure
+        the single background worker thread is running to process it (and
+        whatever's already ahead of it). direction is "upload" or
+        "download"; local_path/remote_path are always both set (basename
+        matches on either side) regardless of direction, since that's what
+        the existing recursive transfer logic already expects."""
+        item = {
+            "id": self._next_transfer_id,
+            "direction": direction,
+            "local_path": local_path,
+            "remote_path": remote_path,
+            "is_dir": is_dir,
+            "basename": os.path.basename(local_path if direction == "upload" else remote_path),
+            "status": "queued",  # queued -> active -> (removed once done/error)
+            "cancel_requested": False,
+            "conflict_choice": None,  # set once "apply to all" is checked on a conflict dialog
+            "bytes_done": 0,
+            "bytes_total": 0,
+            "files_done": 0,
+            "files_total": 0,
+        }
+        self._next_transfer_id += 1
+        with self._transfer_queue_lock:
+            self.transfer_queue.append(item)
+        self._request_transfer_ui_refresh()
+        self._ensure_transfer_worker_running()
+        return item
+
+    def _ensure_transfer_worker_running(self):
+        with self._transfer_queue_lock:
+            if self._transfer_worker_running:
+                return
+            self._transfer_worker_running = True
+        thread = threading.Thread(target=self._transfer_worker_loop, daemon=True)
+        thread.start()
+
+    def _transfer_worker_loop(self):
+        """Processes self.transfer_queue strictly in FIFO order, one item
+        at a time — exits (clearing _transfer_worker_running) once nothing
+        is left queued; _enqueue_transfer restarts it as needed."""
+        while True:
+            with self._transfer_queue_lock:
+                item = next((i for i in self.transfer_queue if i["status"] == "queued"), None)
+                if item is None:
+                    self._transfer_worker_running = False
+                    return
+                item["status"] = "active"
+            self._request_transfer_ui_refresh()
+            try:
+                if item["direction"] == "upload":
+                    self._run_upload_item(item)
+                else:
+                    self._run_download_item(item)
+            except Exception as e:
+                if item["cancel_requested"]:
+                    self._log_message(_("Transfer cancelled: {basename}").format(basename=item["basename"]))
+                else:
+                    self._log_message(_("Transfer failed for {name}: {e}").format(name=item["basename"], e=e), is_error=True)
+            with self._transfer_queue_lock:
+                if item in self.transfer_queue:
+                    self.transfer_queue.remove(item)
+            self._request_transfer_ui_refresh()
+
+    def _cancel_queued_transfer(self, item):
+        """The trash button on each queue row (both pending and active
+        items are listed — see _refresh_transfer_ui). A not-yet-started
+        item is just removed outright. An active one can't be removed out
+        from under the worker thread that's using it, so instead this
+        flags it cancel_requested=True; the in-flight paramiko
+        get()/put() callback (and the directory-walk loops) check that
+        flag and abort, and the worker loop removes it from the queue
+        once _run_upload_item/_run_download_item returns, same as any
+        other finished transfer."""
+        with self._transfer_queue_lock:
+            if item not in self.transfer_queue:
+                return
+            if item["status"] == "queued":
+                self.transfer_queue.remove(item)
+            else:
+                item["cancel_requested"] = True
+        self._request_transfer_ui_refresh()
+
+    def _request_transfer_ui_refresh(self):
+        """Coalesces refresh requests from the worker thread — avoids
+        piling up redundant GLib.idle_add calls if several queue-state
+        changes happen in a short span (e.g. a batch of files enqueued at
+        once)."""
+        if self._transfer_ui_dirty:
+            return
+        self._transfer_ui_dirty = True
+        GLib.idle_add(self._do_refresh_transfer_ui)
+
+    def _do_refresh_transfer_ui(self):
+        self._transfer_ui_dirty = False
+        self._refresh_transfer_ui()
+        return False
+
+    def _tick_transfer_progress(self):
+        """Periodic redraw of the active transfer's progress bar — the
+        paramiko callback just writes two plain ints onto the queue item;
+        this is what actually turns that into a UI update, at a fixed,
+        cheap cadence instead of on every single callback tick."""
+        with self._transfer_queue_lock:
+            has_active = any(i["status"] == "active" for i in self.transfer_queue)
+        if has_active:
+            self._refresh_transfer_ui()
+        return True
+
+    def _status_text_for_item(self, item):
+        """One short status string for a transfer's row — no progress bar
+        widget per row, just text, since that's cheaper to redraw at the
+        _tick_transfer_progress cadence and keeps every row to one line."""
+        if item["status"] == "queued":
+            return _("Queued")
+        if item["is_dir"]:
+            total = item["files_total"]
+            done = item["files_done"]
+            if total:
+                return _("{done}/{total} files").format(done=done, total=total)
+            # Downloading a directory never gets a total upfront — that
+            # would need a full recursive remote listing before starting
+            # just to count files, a second whole network round trip —
+            # so it's a running count instead.
+            return _("{done} files so far…").format(done=done)
+        total = item["bytes_total"]
+        done = item["bytes_done"]
+        if not total:
+            return ""
+        percent = int(done * 100 / total)
+        return f"{percent}% · {self._format_size(done)}/{self._format_size(total)}"
+
+    def _refresh_transfer_ui(self):
+        """Rebuilds the queue list from self.transfer_queue's current
+        state — one compact line per transfer, active first. Called on
+        the main thread only (GLib.idle_add via _request_transfer_ui_refresh,
+        or directly from __init__ while the panel is still empty)."""
+        with self._transfer_queue_lock:
+            snapshot = list(self.transfer_queue)
+
+        active = next((i for i in snapshot if i["status"] == "active"), None)
+        queued = [i for i in snapshot if i["status"] == "queued"]
+        queue_rows = ([active] if active else []) + queued
+
+        child = self.transfer_queue_box.get_first_child()
+        while child is not None:
+            next_child = child.get_next_sibling()
+            self.transfer_queue_box.remove(child)
+            child = next_child
+
+        if not queue_rows:
+            placeholder = Gtk.Label(label=_("No pending transfers."), xalign=0, css_classes=["dim-label"])
+            self.transfer_queue_box.append(placeholder)
+        else:
+            for item in queue_rows:
+                is_active = item["status"] == "active"
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                arrow = "→" if item["direction"] == "upload" else "←"
+                name = GLib.markup_escape_text(item["basename"])
+                label = Gtk.Label(use_markup=True,
+                                   label=f"<b>{arrow} {name}</b>" if is_active else f"{arrow} {name}",
+                                   xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END)
+                row.append(label)
+                status_label = Gtk.Label(label=self._status_text_for_item(item), xalign=1,
+                                          css_classes=["dim-label"], valign=Gtk.Align.CENTER)
+                row.append(status_label)
+                remove_button = Gtk.Button(icon_name="user-trash-symbolic", css_classes=["flat"], valign=Gtk.Align.CENTER)
+                remove_button.set_tooltip_text(_("Cancel transfer") if is_active else _("Remove from queue"))
+                remove_button.connect("clicked", lambda _btn, it=item: self._cancel_queued_transfer(it))
+                row.append(remove_button)
+                self.transfer_queue_box.append(row)
+
     def _create_local_panel(self):
         """Builds the entire local file manager widget."""
         frame = Gtk.Frame(label=_("Local"))
@@ -247,7 +542,21 @@ class SftpWidget(Gtk.Box):
 
         self.local_store = Gtk.ListStore(str, str, str, GObject.TYPE_INT64, str, int, str, GObject.TYPE_INT64, bool, str)
         self.local_sortable_model = Gtk.TreeModelSort(model=self.local_store)
+        self._install_dotdot_first_sort_funcs(self.local_sortable_model)
         self.local_view = Gtk.TreeView(model=self.local_sortable_model)
+        # Ctrl/Shift-click to select several files at once, for multi-file
+        # upload/download (on_upload_clicked/on_download_clicked already
+        # loop over every selected row). Gtk.TreeSelection.get_selected()
+        # hard-asserts once the mode is MULTIPLE, even with just one row
+        # selected — every single-item call site goes through
+        # _get_selected_single() instead now (same lesson as the host
+        # tree's own multi-select work).
+        self.local_view.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
+        # Without an explicit search column, GTK's built-in type-ahead
+        # search auto-picks the first string column it finds — which is
+        # COL_ICON (icon names like "folder-symbolic"), not COL_NAME, so
+        # typing opened a search box that could never match anything.
+        self.local_view.set_search_column(COL_NAME)
         self.local_view.connect("row-activated", self.on_local_row_activated)
 
         scrolled_window.set_child(self.local_view)
@@ -342,7 +651,10 @@ class SftpWidget(Gtk.Box):
 
         self.remote_store = Gtk.ListStore(str, str, str, GObject.TYPE_INT64, str, int, str, GObject.TYPE_INT64, bool, str)
         self.remote_sortable_model = Gtk.TreeModelSort(model=self.remote_store)
+        self._install_dotdot_first_sort_funcs(self.remote_sortable_model)
         self.remote_view = Gtk.TreeView(model=self.remote_sortable_model)
+        self.remote_view.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
+        self.remote_view.set_search_column(COL_NAME)
         self.remote_view.connect("row-activated", self.on_remote_row_activated)
         scrolled_window.set_child(self.remote_view)
 
@@ -399,11 +711,29 @@ class SftpWidget(Gtk.Box):
 
         return frame
 
+    def _make_dotdot_row(self, path):
+        """The always-first ".." row for going up a directory — same 10-
+        column shape as a real row (COL_IS_DIR=True, COL_FULL_PATH=the
+        PARENT directory), so double-click/Enter navigates into it via the
+        exact same existing "it's a directory" code path as any other row,
+        no special-casing needed there. Returns None at an actual
+        filesystem root (parent == path itself), where there's nowhere
+        further up to go — matching on_local_up_clicked/on_remote_up_
+        clicked's own "avoid getting stuck" guard."""
+        parent_path = os.path.dirname(path.rstrip('/') or '/') or '/'
+        if parent_path == path:
+            return None
+        return ["go-up-symbolic", "..", "", -1, "", 0, "", 0, True, parent_path]
+
     def _load_local_directory(self, path):
         """Populates the local file view with the contents of the given path."""
         self.local_store.clear()
         self.current_local_path = path
         self.local_path_entry.set_text(path)
+
+        dotdot_row = self._make_dotdot_row(path)
+        if dotdot_row is not None:
+            self.local_store.append(dotdot_row)
 
         try:
             for filename in os.listdir(path):
@@ -497,8 +827,12 @@ class SftpWidget(Gtk.Box):
                         int(attr.st_mtime), False, os.path.join(path, attr.filename)
                     ])
 
+                dotdot_row = self._make_dotdot_row(path)
+
                 def update_ui():
                     self.remote_store.clear()
+                    if dotdot_row is not None:
+                        self.remote_store.append(dotdot_row)
                     for row in rows_to_add:
                         self.remote_store.append(row)
                     self.current_remote_path = path
@@ -691,37 +1025,52 @@ class SftpWidget(Gtk.Box):
             self.is_reconnecting = False # Reset the flag on total failure
 
     def on_upload_clicked(self, button):
-        """Handles the click on the Upload (>) button."""
-        selection = self.local_view.get_selection()
-        model, paths = selection.get_selected_rows()
+        """Handles the click on the Upload (>) button — enqueues every
+        selected local file/dir (skipping ".." if it's somehow part of the
+        selection) rather than starting a transfer immediately; the
+        background queue worker (_transfer_worker_loop) picks them up one
+        at a time, in order."""
+        model, paths = self.local_view.get_selection().get_selected_rows()
         if not paths:
             self._log_message(_("No local files selected for upload."), is_error=True)
             return
 
         for path in paths:
             tree_iter = model.get_iter(path)
+            if model.get_value(tree_iter, COL_NAME) == "..":
+                continue
             local_path = model.get_value(tree_iter, COL_FULL_PATH)
             is_dir = model.get_value(tree_iter, COL_IS_DIR)
-            remote_dest_dir = self.current_remote_path
+            self._enqueue_transfer("upload", local_path, self.current_remote_path, is_dir)
 
-            # Start worker thread WITHOUT logging to avoid any potential GTK conflicts
-            thread = threading.Thread(target=self._upload_worker, args=(local_path, remote_dest_dir, is_dir))
-            thread.daemon = True
-            thread.start()
-
-    def _upload_worker(self, local_path, remote_dest_dir, is_dir):
-        """Uploads a file or directory recursively (runs in a thread)."""
+    def _run_upload_item(self, item):
+        """Uploads one queued file or directory, recursively (runs on the
+        transfer worker thread). item's bytes_done/bytes_total (files_done/
+        files_total for a directory) are updated directly here — plain int
+        writes, polled by _tick_transfer_progress rather than pushed per
+        paramiko progress-callback tick, which can fire many times a
+        second for a large file."""
         if not self.sftp_client: return
-        basename = os.path.basename(local_path)
-        remote_path = os.path.join(remote_dest_dir, basename).replace('\\', '/')
+        local_path = item["local_path"]
+        is_dir = item["is_dir"]
+        basename = item["basename"]
+        remote_path = os.path.join(item["remote_path"], basename).replace('\\', '/')
 
         with self._sftp_lock:
             try:
                 if not is_dir: # It's a file
                     try:
                         local_size = os.path.getsize(local_path)
+                        item["bytes_total"] = local_size
                         start_time = time.time()
-                        self.sftp_client.put(local_path, remote_path)
+
+                        def progress(bytes_done, bytes_total):
+                            if item["cancel_requested"]:
+                                raise IOError("transfer cancelled")
+                            item["bytes_done"] = bytes_done
+                            item["bytes_total"] = bytes_total
+
+                        self.sftp_client.put(local_path, remote_path, callback=progress)
                         elapsed = time.time() - start_time
                         speed = local_size / elapsed if elapsed > 0 else 0
                         def log_success():
@@ -732,15 +1081,28 @@ class SftpWidget(Gtk.Box):
                             return False
                         GLib.idle_add(log_success)
                     except Exception as e:
+                        cancelled = item["cancel_requested"]
                         def log_error():
-                            self._log_message(_("Upload failed for {basename}: {e}").format(basename=basename, e=e), is_error=True, _from_idle=True)
+                            if cancelled:
+                                self._log_message(_("Transfer cancelled: {basename}").format(basename=basename), _from_idle=True)
+                            else:
+                                self._log_message(_("Upload failed for {basename}: {e}").format(basename=basename, e=e), is_error=True, _from_idle=True)
                             return False
                         GLib.idle_add(log_error)
                         return
                 else: # It's a directory
                     self._log_message(_("Uploading directory {local} to {remote}...").format(local=local_path, remote=remote_path))
+                    # A cheap upfront pass just to count files, for a
+                    # meaningful "N/M files" progress readout — the actual
+                    # upload walk right below is separate since mkdir needs
+                    # to happen per-subdirectory as it's reached, not ahead.
+                    item["files_total"] = sum(len(filenames) for _d, _sd, filenames in os.walk(local_path))
                     self.sftp_client.mkdir(remote_path)
+                    cancelled = False
                     for dirpath, subdirs, filenames in os.walk(local_path):
+                        if item["cancel_requested"]:
+                            cancelled = True
+                            break
                         relative_path = os.path.relpath(dirpath, local_path)
                         remote_dir = remote_path if relative_path == '.' else os.path.join(remote_path, relative_path).replace('\\', '/')
                         for sub_dir in subdirs:
@@ -749,39 +1111,131 @@ class SftpWidget(Gtk.Box):
                             except Exception:
                                 pass
                         for filename in filenames:
+                            if item["cancel_requested"]:
+                                cancelled = True
+                                break
                             local_file = os.path.join(dirpath, filename)
                             remote_file = os.path.join(remote_dir, filename).replace('\\', '/')
                             self.sftp_client.put(local_file, remote_file)
-                    self._log_message(_("Directory upload successful: {basename}").format(basename=basename))
+                            item["files_done"] += 1
+                        if cancelled:
+                            break
+                    if cancelled:
+                        self._log_message(_("Transfer cancelled: {basename}").format(basename=basename))
+                    else:
+                        self._log_message(_("Directory upload successful: {basename}").format(basename=basename))
 
                 GLib.idle_add(lambda: self._load_remote_directory_threaded(self.current_remote_path) or False)
 
             except Exception as e:
-                self._log_message(_("Upload failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
+                if item["cancel_requested"]:
+                    self._log_message(_("Transfer cancelled: {basename}").format(basename=basename))
+                else:
+                    self._log_message(_("Upload failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
 
     def on_download_clicked(self, button):
-        """Handles the click on the Download (<) button."""
-        selection = self.remote_view.get_selection()
-        model, paths = selection.get_selected_rows()
+        """Handles the click on the Download (<) button — enqueues every
+        selected remote file/dir (skipping ".." if somehow selected); see
+        on_upload_clicked's own docstring for the shared queueing design."""
+        model, paths = self.remote_view.get_selection().get_selected_rows()
         if not paths:
             self._log_message(_("No remote files selected for download."), is_error=True)
             return
 
         for path in paths:
             tree_iter = model.get_iter(path)
+            if model.get_value(tree_iter, COL_NAME) == "..":
+                continue
             remote_path = model.get_value(tree_iter, COL_FULL_PATH)
             is_dir = model.get_value(tree_iter, COL_IS_DIR)
-            local_dest_dir = self.current_local_path
+            self._enqueue_transfer("download", self.current_local_path, remote_path, is_dir)
 
-            # Start worker thread WITHOUT logging to avoid any potential GTK conflicts
-            thread = threading.Thread(target=self._download_worker, args=(remote_path, local_dest_dir, is_dir))
-            thread.daemon = True
-            thread.start()
+    def _resolve_file_conflict_sync(self, local_path, remote_attrs):
+        """Blocks the calling transfer-worker thread until the user
+        answers the "file already exists" dialog, shown on the main
+        thread via GLib.idle_add. Only files prompt here — a same-named
+        local directory is always merged into automatically (see
+        _run_download_item), matching the usual expectation that
+        directories merge while individual file conflicts need a
+        decision. Returns {"action": "skip"|"replace"|"newer"|"different",
+        "apply_to_all": bool}."""
+        event = threading.Event()
+        result = {"action": "skip", "apply_to_all": False}
 
-    def _download_worker(self, remote_path, local_dest_dir, is_dir, _visited_paths=None):
-        """Downloads a file or directory recursively (runs in a thread).
-        Uses RLock so recursive directory calls re-enter without deadlocking."""
+        def show():
+            self._show_conflict_dialog(local_path, remote_attrs, event, result)
+            return False
+        GLib.idle_add(show)
+        event.wait()
+        return result
+
+    def _show_conflict_dialog(self, local_path, remote_attrs, event, result):
+        """Builds and presents the conflict dialog (main thread only);
+        fills in `result` and sets `event` once the user responds, which
+        is what unblocks _resolve_file_conflict_sync's caller."""
+        try:
+            local_stat = os.stat(local_path)
+            local_size = local_stat.st_size
+            local_mtime = local_stat.st_mtime
+        except OSError:
+            local_size = 0
+            local_mtime = 0
+
+        body = _(
+            "A local file already exists at:\n{path}\n\n"
+            "Remote: {remote_size}, modified {remote_date}\n"
+            "Local: {local_size}, modified {local_date}"
+        ).format(
+            path=local_path,
+            remote_size=self._format_size(remote_attrs.st_size),
+            remote_date=self._format_date(remote_attrs.st_mtime),
+            local_size=self._format_size(local_size),
+            local_date=self._format_date(local_mtime),
+        )
+
+        dialog = Adw.MessageDialog(transient_for=self.get_root(), heading=_("File already exists"), body=body)
+        apply_all_check = Gtk.CheckButton(label=_("Apply to all remaining files"))
+        dialog.set_extra_child(apply_all_check)
+
+        dialog.add_response("skip", _("Skip"))
+        dialog.add_response("newer", _("Replace only if newer"))
+        dialog.add_response("different", _("Replace if different"))
+        dialog.add_response("replace", _("Replace"))
+        dialog.set_response_appearance("replace", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("skip")
+        dialog.set_close_response("skip")
+
+        def on_response(_dlg, response_id):
+            result["action"] = response_id
+            result["apply_to_all"] = apply_all_check.get_active()
+            event.set()
+
+        dialog.connect("response", on_response)
+        dialog.present()
+
+    def _run_download_item(self, item, _visited_paths=None, _top_item=None):
+        """Downloads one queued file or directory, recursively (runs on
+        the transfer worker thread). Uses RLock so recursive directory
+        calls re-enter without deadlocking. item is reused across the
+        whole recursive call tree for a directory download, so files_done
+        keeps accumulating across nested subdirectories — files_total stays
+        unknown (0) for a directory in this case (a full recursive remote
+        listing just to pre-count files isn't worth a second full round
+        trip of network calls); the UI shows the running count instead of
+        a fraction when that's the case, see _refresh_transfer_ui.
+
+        _top_item is the ORIGINAL queue item (not the per-call `item`,
+        which is a fresh dict() copy at every recursion level — see the
+        child_item construction below) — cancel_requested is only ever
+        set on that original, so every recursion level must check it
+        there, not on its own local `item`."""
+        if _top_item is None:
+            _top_item = item
         if not self.sftp_client: return
+        if _top_item["cancel_requested"]: return
+        remote_path = item["remote_path"]
+        local_dest_dir = item["local_path"]
+        is_dir = item["is_dir"]
 
         if _visited_paths is None:
             _visited_paths = set()
@@ -800,19 +1254,63 @@ class SftpWidget(Gtk.Box):
         basename = os.path.basename(remote_path)
         local_path = os.path.join(local_dest_dir, basename)
 
-        if os.path.exists(local_path):
-            self._log_message(_("Warning: File already exists: {path}. Will skip.").format(path=local_path), is_error=True)
-            self.ui_queue.put(lambda: self._load_local_directory(self.current_local_path))
-            return
-
         with self._sftp_lock:
             try:
                 if not is_dir:
                     try:
                         file_attrs = self.sftp_client.stat(remote_path)
+                    except Exception as e:
+                        self._log_message(_("Download failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
+                        return
+
+                    if os.path.exists(local_path):
+                        action = _top_item.get("conflict_choice")
+                        if action is None:
+                            decision = self._resolve_file_conflict_sync(local_path, file_attrs)
+                            action = decision["action"]
+                            if decision["apply_to_all"]:
+                                _top_item["conflict_choice"] = action
+                        if action == "skip":
+                            self._log_message(_("Skipping existing file: {path}").format(path=local_path))
+                            item["files_done"] += 1
+                            return
+                        if action == "newer":
+                            try:
+                                local_newer_or_equal = os.path.getmtime(local_path) >= file_attrs.st_mtime
+                            except OSError:
+                                local_newer_or_equal = False
+                            if local_newer_or_equal:
+                                self._log_message(_("Skipping up-to-date file: {path}").format(path=local_path))
+                                item["files_done"] += 1
+                                return
+                        elif action == "different":
+                            try:
+                                local_stat = os.stat(local_path)
+                                identical = (local_stat.st_size == file_attrs.st_size
+                                             and int(local_stat.st_mtime) == int(file_attrs.st_mtime))
+                            except OSError:
+                                identical = False
+                            if identical:
+                                self._log_message(_("Skipping identical file: {path}").format(path=local_path))
+                                item["files_done"] += 1
+                                return
+                        # action == "replace" (or "newer"/"different" that
+                        # decided the remote one wins): fall through and
+                        # overwrite local_path below, same as a plain
+                        # non-conflicting download.
+
+                    try:
                         total_size = file_attrs.st_size
+                        item["bytes_total"] = total_size
                         start_time = time.time()
-                        self.sftp_client.get(remote_path, local_path)
+
+                        def progress(bytes_done, bytes_total):
+                            if _top_item["cancel_requested"]:
+                                raise IOError("transfer cancelled")
+                            item["bytes_done"] = bytes_done
+                            item["bytes_total"] = bytes_total
+
+                        self.sftp_client.get(remote_path, local_path, callback=progress)
                         elapsed = time.time() - start_time
                         speed = total_size / elapsed if elapsed > 0 else 0
                         def log_success():
@@ -823,8 +1321,12 @@ class SftpWidget(Gtk.Box):
                             return False
                         GLib.idle_add(log_success)
                     except Exception as e:
+                        cancelled = _top_item["cancel_requested"]
                         def log_error():
-                            self._log_message(_("Download failed for {basename}: {e}").format(basename=basename, e=e), is_error=True, _from_idle=True)
+                            if cancelled:
+                                self._log_message(_("Transfer cancelled: {basename}").format(basename=basename), _from_idle=True)
+                            else:
+                                self._log_message(_("Download failed for {basename}: {e}").format(basename=basename, e=e), is_error=True, _from_idle=True)
                             return False
                         GLib.idle_add(log_error)
                         if os.path.exists(local_path):
@@ -833,7 +1335,13 @@ class SftpWidget(Gtk.Box):
                             except Exception:
                                 pass
                         return
+                    item["files_done"] += 1
                 else:
+                    # A same-named local directory is always merged into,
+                    # never prompted about — os.makedirs(exist_ok=True)
+                    # below is already a no-op if it's there, and entries
+                    # inside are then handled file-by-file (or dir-by-dir,
+                    # recursively) by the normal conflict logic above.
                     self._log_message(_("Downloading directory {remote} to {local}...").format(remote=remote_path, local=local_path))
                     os.makedirs(local_path, exist_ok=True)
                     try:
@@ -842,9 +1350,9 @@ class SftpWidget(Gtk.Box):
                         self._log_message(_("Cannot list directory {path}: {e}").format(path=remote_path, e=e), is_error=True)
                         return
                     item_list = []
-                    for item in items:
-                        item_path = os.path.join(remote_path, item.filename).replace('\\', '/')
-                        is_link = stat.S_ISLNK(item.st_mode)
+                    for entry in items:
+                        item_path = os.path.join(remote_path, entry.filename).replace('\\', '/')
+                        is_link = stat.S_ISLNK(entry.st_mode)
                         if is_link:
                             try:
                                 target_attr = self.sftp_client.stat(item_path)
@@ -853,26 +1361,45 @@ class SftpWidget(Gtk.Box):
                                 self._log_message(_("Skipping broken symlink: {path}").format(path=item_path), is_error=True)
                                 continue
                         else:
-                            item_is_dir = stat.S_ISDIR(item.st_mode)
+                            item_is_dir = stat.S_ISDIR(entry.st_mode)
                         item_list.append((item_path, item_is_dir))
 
                 # Recurse outside the lock so child calls can re-acquire (RLock allows it)
                 if is_dir:
                     for item_path, item_is_dir in item_list:
-                        self._download_worker(item_path, local_path, item_is_dir, _visited_paths)
-                    self._log_message(_("Directory download successful: {basename}").format(basename=basename))
+                        if _top_item["cancel_requested"]:
+                            break
+                        child_item = dict(item, remote_path=item_path, local_path=local_path, is_dir=item_is_dir)
+                        self._run_download_item(child_item, _visited_paths, _top_item)
+                        item["files_done"] = child_item["files_done"]
+                    if _top_item["cancel_requested"]:
+                        self._log_message(_("Transfer cancelled: {basename}").format(basename=basename))
+                    else:
+                        self._log_message(_("Directory download successful: {basename}").format(basename=basename))
 
-                GLib.idle_add(lambda: self._load_local_directory(self.current_local_path) or False)
+                if item is _top_item:
+                    # Only reload once per queued transfer, not once per
+                    # file/subdirectory — _run_download_item recurses once
+                    # per item in the whole tree, so without this check a
+                    # directory of a few hundred files queued a few
+                    # hundred full directory-listing reloads onto the main
+                    # loop, which is what made the UI unusable mid-transfer.
+                    GLib.idle_add(lambda: self._load_local_directory(self.current_local_path) or False)
 
             except Exception as e:
-                self._log_message(_("Download failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
+                if _top_item["cancel_requested"]:
+                    self._log_message(_("Transfer cancelled: {basename}").format(basename=basename))
+                else:
+                    self._log_message(_("Download failed for {basename}: {e}").format(basename=basename, e=e), is_error=True)
 
     def _format_size(self, size_bytes):
-        """Formats a size in bytes to a human-readable string."""
+        """Formats a size in bytes to a human-readable string. Accepts a
+        float too (transfer speed is bytes/sec, a division result)."""
+        size_bytes = int(size_bytes)
         if size_bytes == 0:
             return "0 B"
         size_name = ("B", "KiB", "MiB", "GiB", "TiB")
-        i = int(size_bytes.bit_length() / 10)
+        i = min(int(size_bytes.bit_length() / 10), len(size_name) - 1)
         p = 1024 ** i
         s = round(size_bytes / p, 1)
         return f"{s} {size_name[i]}"
@@ -988,11 +1515,7 @@ class SftpWidget(Gtk.Box):
         # We are interested in actual content changes, not just closing.
         if event_type == Gio.FileMonitorEvent.CHANGES_DONE_HINT:
             self._log_message(_("Detected changes in {basename}. Uploading back to server...").format(basename=os.path.basename(local_path)))
-            # Start the upload in a background thread to avoid blocking the UI
-            # We can reuse the existing upload worker.
-            thread = threading.Thread(target=self._upload_worker, args=(local_path, os.path.dirname(remote_path), False))
-            thread.daemon = True
-            thread.start()
+            self._enqueue_transfer("upload", local_path, os.path.dirname(remote_path), False)
 
     def on_local_view_key_pressed(self, controller, keyval, keycode, modifier):
         """Handles key presses on the local file list, specifically Backspace and Delete."""
@@ -1128,6 +1651,19 @@ class SftpWidget(Gtk.Box):
         self.popover_file = Gtk.PopoverMenu.new_from_model(menu)
         self.popover_file.set_parent(self) # The popover is a child of the whole widget
 
+    def _get_selected_single(self, view):
+        """Multi-select-safe single-row lookup — Gtk.TreeSelection.
+        get_selected() hard-asserts once the mode is MULTIPLE (needed for
+        multi-file upload/download), even with just one row selected.
+        Returns (model, first_iter_or_None) for Rename/Delete/Change
+        Permissions, none of which have a bulk-multi-selection meaning —
+        on_view_right_click already only enables them when exactly one
+        real row is selected, so in practice this never resolves more
+        than one candidate anyway."""
+        selection = view.get_selection()
+        model, paths = selection.get_selected_rows()
+        return model, (model.get_iter(paths[0]) if paths else None)
+
     def on_view_right_click(self, gesture, n_press, x, y, view):
         """Shows the context menu for a file/directory, or for empty space
         (in which case only 'New Folder' is offered, for the current directory)."""
@@ -1145,19 +1681,32 @@ class SftpWidget(Gtk.Box):
                 if action: action.set_enabled(False)
         else:
             path, col, _, _ = path_info
-            # It's crucial to select the row *before* showing the menu.
-            view.get_selection().select_path(path)
+            selection = view.get_selection()
+            # Right-clicking a row that's already part of a multi-
+            # selection keeps that whole selection (so "ctrl-click 3
+            # files, then right-click one" still shows Transfer able to
+            # act on all 3) — right-clicking a row NOT in the current
+            # selection replaces it with just that row, same as before
+            # multi-select existed (same lesson as the host tree's own
+            # on_tree_right_click fix).
+            if not selection.path_is_selected(path):
+                selection.unselect_all()
+                selection.select_path(path)
             model = view.get_model()
+            selected_paths = selection.get_selected_rows()[1]
+            non_dotdot_paths = [p for p in selected_paths if model.get_value(model.get_iter(p), COL_NAME) != ".."]
+            single_non_dotdot = len(selected_paths) == 1 and len(non_dotdot_paths) == 1
 
-            for name in ("rename-file", "delete-file", "transfer-file"):
+            transfer_action = self.sftp_action_group.lookup_action("transfer-file")
+            if transfer_action: transfer_action.set_enabled(len(non_dotdot_paths) > 0)
+
+            # Rename/Delete/Change Permissions only ever make sense for
+            # exactly one real (non-"..") selected row — unlike Transfer,
+            # none of them have any bulk-multi-selection behavior to fall
+            # back to today.
+            for name in ("rename-file", "delete-file", "chmod-file"):
                 action = self.sftp_action_group.lookup_action(name)
-                if action: action.set_enabled(True)
-
-            chmod_action = self.sftp_action_group.lookup_action("chmod-file")
-            if model.get_value(model.get_iter(path), COL_NAME) == "..":
-                if chmod_action: chmod_action.set_enabled(False)
-            else:
-                if chmod_action: chmod_action.set_enabled(True)
+                if action: action.set_enabled(single_non_dotdot)
 
         translated_x, translated_y = view.translate_coordinates(self, x, y)
 
@@ -1171,12 +1720,12 @@ class SftpWidget(Gtk.Box):
     def on_rename_activated(self, action, param):
         """Handles the 'Rename' action from the context menu."""
         if not self.last_clicked_view: return
-        selection = self.last_clicked_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_single(self.last_clicked_view)
         if not tree_iter: return
 
         old_full_path = model.get_value(tree_iter, COL_FULL_PATH)
         old_name = model.get_value(tree_iter, COL_NAME)
+        if old_name == "..": return
 
         dialog = InputDialog(self.get_root(), title=_("Rename"), message=_("New name for '{old_name}':").format(old_name=old_name), default_text=old_name)
         dialog.run_async(lambda new_name: self._execute_rename(old_full_path, new_name))
@@ -1243,9 +1792,9 @@ class SftpWidget(Gtk.Box):
     def on_delete_activated(self, action, param):
         """Handles the 'Delete' action from the context menu."""
         if not self.last_clicked_view: return
-        selection = self.last_clicked_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_single(self.last_clicked_view)
         if not tree_iter: return
+        if model.get_value(tree_iter, COL_NAME) == "..": return
 
         full_path = model.get_value(tree_iter, COL_FULL_PATH)
         is_dir = model.get_value(tree_iter, COL_IS_DIR)
@@ -1365,12 +1914,14 @@ class SftpWidget(Gtk.Box):
         
         path = paths[0]
         tree_iter = model.get_iter(path)
-        
+
         # Get file info
         full_path = model.get_value(tree_iter, COL_FULL_PATH)
         is_dir = model.get_value(tree_iter, COL_IS_DIR)
         filename = model.get_value(tree_iter, COL_NAME)
-        
+        if filename == "..":
+            return None
+
         # Store drag data - encode as a special string format
         # Format: "local|/path/to/file|1" or "remote|/path/to/file|0"
         location = "local" if source.is_local else "remote"
@@ -1427,22 +1978,16 @@ class SftpWidget(Gtk.Box):
             self._log_message(_("Cannot drop on the same panel"), is_error=True)
             return False
         
-        # Determine destination directory and start transfer
+        # Determine destination directory and enqueue the transfer
         if source_is_local:
             # Dragging from local to remote (upload)
-            dest_dir = self.current_remote_path
             self._log_message(_("Drag and drop: uploading {path}...").format(path=source_path))
-            thread = threading.Thread(target=self._upload_worker, args=(source_path, dest_dir, is_dir))
-            thread.daemon = True
-            thread.start()
+            self._enqueue_transfer("upload", source_path, self.current_remote_path, is_dir)
         else:
             # Dragging from remote to local (download)
-            dest_dir = self.current_local_path
             self._log_message(_("Drag and drop: downloading {path}...").format(path=source_path))
-            thread = threading.Thread(target=self._download_worker, args=(source_path, dest_dir, is_dir))
-            thread.daemon = True
-            thread.start()
-        
+            self._enqueue_transfer("download", self.current_local_path, source_path, is_dir)
+
         return True
 
 
@@ -1458,9 +2003,9 @@ class SftpWidget(Gtk.Box):
         """Handles the 'Change Permissions' action."""
         if not self.last_clicked_view: return
 
-        selection = self.last_clicked_view.get_selection()
-        model, tree_iter = selection.get_selected()
+        model, tree_iter = self._get_selected_single(self.last_clicked_view)
         if not tree_iter: return
+        if model.get_value(tree_iter, COL_NAME) == "..": return
 
         full_path = model.get_value(tree_iter, COL_FULL_PATH)
         current_mode = model.get_value(tree_iter, COL_PERMS_MODE)
